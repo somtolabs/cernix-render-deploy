@@ -22,9 +22,9 @@ The first role-system phase adds the Super Admin foundation only. The implementa
 
 ## Python Intelligence Module
 
-CERNIX includes an optional Python-powered intelligence module at `python_services/risk_analyzer/`. Laravel remains the main web application; the Python module only analyzes exported verification/audit/payment-style logs and produces a JSON risk report for admin review.
+CERNIX includes an optional Python-powered intelligence module at `python_services/risk_analyzer/`. Laravel remains the main web application; the Python module analyzes exported verification/audit/payment-style logs, detects suspicious scan patterns, scores student/examiner/device/IP risk, and produces admin-readable JSON/HTML reports.
 
-The module does not handle authentication, payment verification, QR generation, QR scanning, cryptographic secrets, or token lifecycle logic. It works from JSON input, so it can be used offline or integrated later after Laravel exports safe operational fields.
+The module does not handle authentication, payment verification, QR generation, QR scanning, cryptographic secrets, token lifecycle logic, or production secrets. It is optional, offline-friendly, and works from safe JSON exports.
 
 Run the sample analyzer with:
 

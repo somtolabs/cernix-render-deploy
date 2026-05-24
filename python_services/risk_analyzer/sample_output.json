@@ -1,24 +1,33 @@
 {
-  "generated_at": "2026-05-24T05:40:08.289776+00:00",
+  "generated_at": "2026-05-24T06:01:29.014920+00:00",
   "total_scans": 8,
   "approved_count": 1,
   "rejected_count": 4,
   "duplicate_count": 3,
+  "approval_rate": 12.5,
+  "duplicate_rate": 37.5,
+  "rejection_rate": 50.0,
+  "risk_distribution": {
+    "low": 0,
+    "medium": 3,
+    "high": 2
+  },
   "high_risk_students": [
     {
       "matric_no": "230408010",
-      "student_id": "230408010",
+      "student_name": "Amara Blessing Nwankwo",
       "department": "Data Science",
       "level": "300",
-      "score": 90,
+      "score": 100,
       "risk_level": "high",
       "reasons": [
-        "more than two rejected scans",
-        "student appears from multiple device fingerprints",
-        "student appears from multiple IP addresses",
-        "payment status is not verified",
-        "QR status is outside expected UNUSED/USED states"
+        "student has three or more rejected scans",
+        "student appears from more than two IP addresses",
+        "payment status is missing or not verified",
+        "QR/token status is suspicious",
+        "scan happened outside expected exam time"
       ],
+      "recommendation": "Review this student's access activity before issuing a replacement pass.",
       "scan_count": 3,
       "rejected_count": 3,
       "device_count": 2,
@@ -26,14 +35,15 @@
     },
     {
       "matric_no": "220404008",
-      "student_id": "220404008",
+      "student_name": "Chukwuemeka Daniel Nwosu",
       "department": "Computer Science",
       "level": "400",
-      "score": 30,
-      "risk_level": "low",
+      "score": 35,
+      "risk_level": "medium",
       "reasons": [
-        "same token appears in duplicate scan activity"
+        "same token has duplicate scan activity"
       ],
+      "recommendation": "Monitor this student's next scan and confirm payment/access state.",
       "scan_count": 2,
       "rejected_count": 0,
       "device_count": 1,
@@ -44,55 +54,147 @@
     {
       "examiner_id": "3",
       "examiner_name": "Examiner Two",
-      "score": 35,
-      "risk_level": "medium",
-      "reasons": [
-        "unusually high rejected scan volume"
-      ],
-      "scan_count": 6,
+      "total_scans": 6,
+      "approved_count": 0,
       "rejected_count": 4,
       "duplicate_count": 2,
-      "max_two_minute_burst": 5
+      "suspicious_score": 65,
+      "risk_level": "high",
+      "reasons": [
+        "unusually high rejected scan volume",
+        "examiner appears across many devices or IP addresses",
+        "examiner has scans outside expected exam time windows"
+      ],
+      "recommendation": "Confirm device assignment and check whether scanner access was shared.",
+      "max_two_minute_burst": 4,
+      "device_count": 2,
+      "ip_count": 3
     }
   ],
   "suspicious_devices": [
     {
-      "device_fp": "device-shared",
-      "score": 55,
+      "identifier": "device-shared",
+      "type": "device",
+      "total_scans": 5,
+      "unique_students": 4,
+      "unique_examiners": 1,
+      "duplicate_count": 2,
+      "rejected_count": 3,
+      "score": 50,
       "risk_level": "medium",
       "reasons": [
-        "appears across many students",
-        "has too many rejected or duplicate scans"
+        "identifier appears across many students",
+        "repeated failed attempts from this identifier"
       ],
-      "student_count": 4,
-      "scan_count": 5,
-      "rejected_or_duplicate_count": 5
+      "recommendation": "Confirm whether this scanner device was shared or reused across halls."
     }
   ],
   "suspicious_ips": [
     {
-      "ip_address": "10.10.0.50",
-      "score": 55,
+      "identifier": "10.10.0.50",
+      "type": "ip",
+      "total_scans": 4,
+      "unique_students": 4,
+      "unique_examiners": 1,
+      "duplicate_count": 2,
+      "rejected_count": 2,
+      "score": 50,
       "risk_level": "medium",
       "reasons": [
-        "appears across many students",
-        "has too many rejected or duplicate scans"
+        "identifier appears across many students",
+        "repeated failed attempts from this identifier"
       ],
-      "student_count": 4,
-      "scan_count": 4,
-      "rejected_or_duplicate_count": 4
+      "recommendation": "Review network/source IP context for repeated failed scan attempts."
     }
   ],
+  "daily_summary": {
+    "total_scans": 8,
+    "approved_count": 1,
+    "rejected_count": 4,
+    "duplicate_count": 3,
+    "approval_rate": 12.5,
+    "duplicate_rate": 37.5,
+    "rejection_rate": 50.0,
+    "most_active_department": {
+      "label": "Computer Science",
+      "count": 3
+    },
+    "most_active_level": {
+      "label": "300",
+      "count": 4
+    },
+    "top_examiner_by_scans": {
+      "examiner_id": "3",
+      "examiner_name": "Examiner Two",
+      "scan_count": 6
+    },
+    "highest_risk_student": {
+      "matric_no": "230408010",
+      "student_name": "Amara Blessing Nwankwo",
+      "department": "Data Science",
+      "level": "300",
+      "score": 100,
+      "risk_level": "high",
+      "reasons": [
+        "student has three or more rejected scans",
+        "student appears from more than two IP addresses",
+        "payment status is missing or not verified",
+        "QR/token status is suspicious",
+        "scan happened outside expected exam time"
+      ],
+      "recommendation": "Review this student's access activity before issuing a replacement pass.",
+      "scan_count": 3,
+      "rejected_count": 3,
+      "device_count": 2,
+      "ip_count": 3
+    },
+    "highest_risk_examiner": {
+      "examiner_id": "3",
+      "examiner_name": "Examiner Two",
+      "total_scans": 6,
+      "approved_count": 0,
+      "rejected_count": 4,
+      "duplicate_count": 2,
+      "suspicious_score": 65,
+      "risk_level": "high",
+      "reasons": [
+        "unusually high rejected scan volume",
+        "examiner appears across many devices or IP addresses",
+        "examiner has scans outside expected exam time windows"
+      ],
+      "recommendation": "Confirm device assignment and check whether scanner access was shared.",
+      "max_two_minute_burst": 4,
+      "device_count": 2,
+      "ip_count": 3
+    },
+    "suspicious_device_count": 1,
+    "suspicious_ip_count": 1,
+    "key_observations": [
+      "Duplicate attempts were concentrated in Computer Science (2 duplicate scans).",
+      "Device device-shared appeared across 4 students.",
+      "Examiner 3 has a suspicious score of 65.",
+      "2 medium/high risk student record(s) require review.",
+      "IP 10.10.0.50 generated 2 rejected scans."
+    ],
+    "recommendations": [
+      "Review high and medium risk findings before exam-day reporting is finalized.",
+      "Compare flagged scans with physical hall attendance and examiner assignment.",
+      "Verify student payment/access records for flagged students.",
+      "Review examiner activity logs and scanner-device assignment.",
+      "Check repeated device/IP patterns for shared-device or proxy behavior."
+    ]
+  },
   "risk_summary": {
-    "low": 1,
+    "low": 0,
     "medium": 3,
-    "high": 1,
+    "high": 2,
     "overall_level": "high"
   },
   "recommendations": [
-    "Prioritize high-risk findings for manual admin review.",
-    "Review high-risk students before issuing replacement or reprint access passes.",
-    "Inspect suspicious examiner activity against hall assignment and scan timing.",
-    "Check repeated device fingerprints or IP addresses for shared-phone or proxy patterns."
+    "Review high and medium risk findings before exam-day reporting is finalized.",
+    "Compare flagged scans with physical hall attendance and examiner assignment.",
+    "Verify student payment/access records for flagged students.",
+    "Review examiner activity logs and scanner-device assignment.",
+    "Check repeated device/IP patterns for shared-device or proxy behavior."
   ]
 }

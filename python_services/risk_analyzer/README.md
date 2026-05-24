@@ -1,109 +1,203 @@
-# CERNIX Risk Analyzer
+# CERNIX Intelligence Module
 
-The CERNIX Risk Analyzer is a lightweight Python intelligence module for offline audit and verification risk analysis. Laravel remains the main CERNIX web system.
+The CERNIX Intelligence Module is a lightweight Python layer for offline audit intelligence and risk reporting. Laravel remains the main CERNIX application.
 
-This module does not handle authentication, payment verification, QR generation, QR verification, cryptographic secrets, or token lifecycle logic. It analyzes exported operational logs only.
+Python is used only for:
+
+- risk scoring
+- suspicious scan pattern detection
+- examiner behavior analysis
+- student access anomaly detection
+- device/IP pattern analysis
+- payment/demo-mode risk notes
+- daily summary reporting
+- admin-readable JSON and HTML reports
+
+It does not handle authentication, payment verification, QR generation, QR scanning, cryptographic secrets, or token lifecycle logic.
+
+## Files
+
+- `analyze.py` - command-line entry point
+- `models.py` - normalized scan record model
+- `rules.py` - rule-based scoring and anomaly detection
+- `report.py` - JSON/HTML report assembly
+- `utils.py` - safe parsing, masking, and file helpers
+- `sample_input.json` - fake sample scan data
+- `sample_output.json` - generated sample JSON report
+- `sample_report.html` - generated sample HTML report
+
+## Requirements
+
+No external Python dependencies are required.
+
+```bash
+python --version
+```
+
+Python 3.10+ is recommended.
 
 ## Usage
 
-From the Laravel project root:
+Default sample run:
 
 ```bash
 python python_services/risk_analyzer/analyze.py
 ```
 
-With explicit input and output files:
+Explicit JSON input/output:
 
 ```bash
-python python_services/risk_analyzer/analyze.py scan_logs.json risk_report.json
+python python_services/risk_analyzer/analyze.py input.json output.json
 ```
 
-If no arguments are provided, the script reads:
+Explicit HTML report:
 
-- `sample_input.json`
+```bash
+python python_services/risk_analyzer/analyze.py input.json output.json --html report.html
+```
 
-and writes:
+## Input Format
 
-- `sample_output.json`
+The input can be either:
 
-## Input
+- a JSON array of scan records
+- an object with a `scan_logs` array
 
-Input may be either a JSON array of scan log objects or an object with a `scan_logs` array.
-
-Expected fields include:
+Supported fields:
 
 - `student_id`
 - `matric_no`
+- `student_name`
+- `department`
+- `level`
 - `examiner_id`
 - `examiner_name`
 - `decision`
 - `token_id`
+- `token_status`
+- `qr_status`
 - `device_fp`
 - `ip_address`
 - `timestamp`
 - `payment_status`
 - `rrr_number`
-- `qr_status`
-- `department`
-- `level`
+- `amount_confirmed`
+- `session`
+- `course_code`
+- `course_title`
+- `expected_start`
+- `expected_end`
 
-Missing fields are handled safely.
+Missing fields are handled safely. One incomplete record should not crash the report.
 
-## Output
+Do not include:
 
-The analyzer writes a JSON report containing:
+- encrypted QR payloads
+- HMAC signatures
+- AES keys
+- HMAC secrets
+- raw QR payloads
+- real passwords
+- real Remita keys
+- real database URLs
+
+RRR values are masked in reports:
+
+- `TEST-DEMO` becomes `TEST-****`
+- `123456789012` becomes `********9012`
+
+## Output Format
+
+The JSON report includes:
 
 - `total_scans`
 - `approved_count`
 - `rejected_count`
 - `duplicate_count`
+- `approval_rate`
+- `duplicate_rate`
+- `rejection_rate`
+- `risk_distribution`
 - `high_risk_students`
 - `suspicious_examiners`
 - `suspicious_devices`
 - `suspicious_ips`
-- `risk_summary`
+- `daily_summary`
 - `recommendations`
 
-## Risk Rules
+The HTML report includes:
 
-Student risk:
+1. CERNIX Intelligence Report
+2. Summary metrics
+3. Risk distribution
+4. High-risk students
+5. Suspicious examiners
+6. Suspicious devices/IPs
+7. Recommendations
+8. Generated timestamp
 
-- `+30` if the same token has duplicate scans.
-- `+25` if a student has more than two rejected scans.
-- `+20` if the same student appears from multiple device fingerprints.
-- `+15` if the same student appears from multiple IP addresses.
-- `+20` if payment status is not verified.
-- `+10` if QR status is not `UNUSED` or `USED`.
+## Risk Scoring
 
-Examiner risk:
+Student rules:
 
-- Flags unusually high rejected scan volume.
-- Flags too many scans within a short time window.
-- Flags repeated duplicate scan attempts.
+- `+35` if the same token has duplicate scans
+- `+30` if student has three or more rejected scans
+- `+25` if student appears on more than two device fingerprints
+- `+20` if student appears from more than two IP addresses
+- `+20` if payment status is missing or not verified
+- `+15` if QR/token status is suspicious
+- `+15` if scan happened outside expected exam time
+- `+10` if repeated scans happen within a very short interval
 
-Device/IP risk:
+Examiner rules flag:
 
-- Flags one device fingerprint across many students.
-- Flags one IP address with too many rejected or duplicate scans.
+- unusually high rejected scans
+- unusually high duplicate scans
+- too many scans in a short time window
+- very high scan volume compared to other examiners
+- unusual device/IP spread
+- scans outside expected exam windows
+
+Device/IP rules flag:
+
+- one device used for many students
+- one IP producing many rejected scans
+- one device producing many duplicate scans
+- one IP/device linked to multiple examiners
+- repeated failed attempts from the same identifier
 
 Risk levels:
 
-- `0-30` = low
-- `31-60` = medium
-- `61+` = high
+- `0-30` = Low
+- `31-60` = Medium
+- `61+` = High
 
-## Laravel Integration Plan
+## Laravel Integration Modes
 
-Option A:
+Mode 1: Offline analysis
 
-1. Laravel exports scan logs to JSON.
+1. Laravel exports logs as JSON.
 2. Python analyzes the JSON.
-3. Laravel imports or displays the generated `risk_report.json`.
+3. Admin reads or downloads the report.
 
-Option B later:
+Mode 2: Scheduled analysis
 
-1. This module becomes a FastAPI microservice.
-2. Laravel sends safe exported logs to `/analyze`.
-3. Python returns a risk report JSON response.
+1. Laravel scheduled command exports logs daily.
+2. Python runs daily.
+3. Output is saved in `storage/app/risk-analysis/`.
 
-The first version is offline and deployment-friendly.
+Mode 3: Future microservice
+
+1. Python becomes a FastAPI service later.
+2. Laravel sends safe log data to the Python endpoint.
+3. Python returns risk report JSON.
+
+Current implementation supports Mode 1 and can consume the safe JSON generated by:
+
+```bash
+php artisan cernix:export-risk-data
+```
+
+## Security And Privacy
+
+This module is intentionally offline-first and safe for deployment. It does not require external APIs, cloud AI services, database credentials, or production secrets. Use fake/sample data for demos and export only admin-visible operational fields from Laravel.

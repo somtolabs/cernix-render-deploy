@@ -25,6 +25,7 @@ class ExportRiskData extends Command
             ->orderByDesc('verification_logs.timestamp')
             ->select([
                 'students.matric_no',
+                'students.full_name as student_name',
                 'students.level',
                 'departments.dept_name as department',
                 'verification_logs.examiner_id',
@@ -34,26 +35,33 @@ class ExportRiskData extends Command
                 'verification_logs.device_fp',
                 'verification_logs.ip_address',
                 'verification_logs.timestamp',
+                'qr_tokens.status as token_status',
                 'qr_tokens.status as qr_status',
                 'payment_records.rrr_number',
+                'payment_records.amount_confirmed',
                 'payment_records.verified_at',
             ])
             ->get()
             ->map(fn ($row) => [
                 'student_id' => $row->matric_no,
                 'matric_no' => $row->matric_no,
+                'student_name' => $row->student_name,
                 'department' => $row->department,
                 'level' => $row->level,
                 'examiner_id' => $row->examiner_id,
                 'examiner_name' => $row->examiner_name,
                 'decision' => $row->decision,
                 'token_id' => $row->token_id,
+                'token_status' => $row->token_status,
+                'qr_status' => $row->qr_status,
                 'device_fp' => $row->device_fp,
                 'ip_address' => $row->ip_address,
                 'timestamp' => $row->timestamp,
                 'payment_status' => $row->verified_at ? 'verified' : 'unverified',
                 'rrr_number' => $this->maskRrr($row->rrr_number),
-                'qr_status' => $row->qr_status,
+                'amount_confirmed' => $row->amount_confirmed === null ? null : (float) $row->amount_confirmed,
+                'course_code' => null,
+                'course_title' => null,
             ])
             ->values()
             ->all();

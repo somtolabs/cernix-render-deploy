@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CERNIX Intelligence Report</title>
+  <style>
+    :root { color-scheme: light; --ink:#111827; --muted:#667085; --line:#e5e7eb; --navy:#0f2347; --soft:#f8fafc; }
+    body { margin:0; font-family: Arial, Helvetica, sans-serif; background:#f4f6f8; color:var(--ink); }
+    main { max-width: 1040px; margin: 0 auto; padding: 32px 18px; }
+    header { background:white; border:1px solid var(--line); border-radius:16px; padding:22px; margin-bottom:18px; }
+    h1 { margin:0; color:var(--navy); font-size:28px; }
+    h2 { margin:0 0 12px; color:var(--navy); font-size:18px; }
+    p { color:var(--muted); line-height:1.5; }
+    .grid { display:grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap:12px; margin-top:18px; }
+    .metric, section { background:white; border:1px solid var(--line); border-radius:14px; padding:16px; }
+    .metric span { display:block; color:var(--muted); font-size:12px; font-weight:700; text-transform:uppercase; }
+    .metric b { display:block; margin-top:8px; font-size:24px; color:var(--navy); }
+    section { margin-top:16px; }
+    table { width:100%; border-collapse:collapse; font-size:14px; }
+    th, td { text-align:left; border-bottom:1px solid var(--line); padding:9px 8px; vertical-align:top; }
+    th { color:var(--muted); font-size:12px; text-transform:uppercase; }
+    .pill { display:inline-block; border-radius:999px; padding:3px 8px; font-size:12px; font-weight:700; background:#eef2ff; color:#1e3a8a; }
+    ul { margin:8px 0 0 18px; padding:0; }
+    li { margin:6px 0; }
+    .empty { color:var(--muted); background:var(--soft); border-radius:10px; padding:12px; }
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>CERNIX Intelligence Report</h1>
+    <p>Rule-based scan, examiner, device, IP, and payment/demo-mode risk analysis. Generated 2026-05-24T06:01:29.014920+00:00.</p>
+    <div class="grid"><div class="metric"><span>Total scans</span><b>8</b></div><div class="metric"><span>Approved</span><b>1</b></div><div class="metric"><span>Rejected</span><b>4</b></div><div class="metric"><span>Duplicate</span><b>3</b></div><div class="metric"><span>Approval rate</span><b>12.5%</b></div><div class="metric"><span>Overall risk</span><b>High</b></div></div>
+  </header>
+  <section>
+    <h2>Risk Distribution</h2>
+    <div class="grid"><div class="metric"><span>Low</span><b>0</b></div><div class="metric"><span>Medium</span><b>3</b></div><div class="metric"><span>High</span><b>2</b></div></div>
+  </section>
+  <section>
+    <h2>High-Risk Students</h2>
+    <table><thead><tr><th>Student</th><th>Class</th><th>Risk</th><th>Reasons</th><th>Recommendation</th></tr></thead><tbody><tr><td>230408010<br><small>Amara Blessing Nwankwo</small></td><td>Data Science<br><small>300</small></td><td><span class="pill">high</span><br>100</td><td>student has three or more rejected scans; student appears from more than two IP addresses; payment status is missing or not verified; QR/token status is suspicious; scan happened outside expected exam time</td><td>Review this student&#x27;s access activity before issuing a replacement pass.</td></tr><tr><td>220404008<br><small>Chukwuemeka Daniel Nwosu</small></td><td>Computer Science<br><small>400</small></td><td><span class="pill">medium</span><br>35</td><td>same token has duplicate scan activity</td><td>Monitor this student&#x27;s next scan and confirm payment/access state.</td></tr></tbody></table>
+  </section>
+  <section>
+    <h2>Suspicious Examiners</h2>
+    <table><thead><tr><th>Examiner</th><th>Scans</th><th>A/R/D</th><th>Risk</th><th>Reasons</th><th>Recommendation</th></tr></thead><tbody><tr><td>3<br><small>Examiner Two</small></td><td>6</td><td>0/4/2</td><td><span class="pill">high</span><br>65</td><td>unusually high rejected scan volume; examiner appears across many devices or IP addresses; examiner has scans outside expected exam time windows</td><td>Confirm device assignment and check whether scanner access was shared.</td></tr></tbody></table>
+  </section>
+  <section>
+    <h2>Suspicious Devices/IPs</h2>
+    <table><thead><tr><th>Type</th><th>Identifier</th><th>Scans</th><th>Students</th><th>Examiners</th><th>Risk</th><th>Recommendation</th></tr></thead><tbody><tr><td>device</td><td>device-shared</td><td>5</td><td>4</td><td>1</td><td><span class="pill">medium</span></td><td>Confirm whether this scanner device was shared or reused across halls.</td></tr><tr><td>ip</td><td>10.10.0.50</td><td>4</td><td>4</td><td>1</td><td><span class="pill">medium</span></td><td>Review network/source IP context for repeated failed scan attempts.</td></tr></tbody></table>
+  </section>
+  <section>
+    <h2>Recommendations</h2>
+    <ul><li>Review high and medium risk findings before exam-day reporting is finalized.</li><li>Compare flagged scans with physical hall attendance and examiner assignment.</li><li>Verify student payment/access records for flagged students.</li><li>Review examiner activity logs and scanner-device assignment.</li><li>Check repeated device/IP patterns for shared-device or proxy behavior.</li></ul>
+  </section>
+</main>
+</body>
+</html>
