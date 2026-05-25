@@ -315,7 +315,6 @@
         <section class="details-grid" aria-label="Access details">
             <div class="detail-item is-wide"><span>Session</span><b>{{ $sessionValue }}</b></div>
             <div class="detail-item is-wide"><span>Payment</span><b>{{ $paymentValue }}</b></div>
-            <div class="detail-item"><span>RRR</span><b class="mono">{{ $payment->rrr_number ?? 'Not available' }}</b></div>
             <div class="detail-item"><span>Verified</span><b>{{ $verifiedAt }}</b></div>
             <div class="detail-item"><span>Pass Status</span><b>{{ $passStatus }}</b></div>
             <div class="detail-item"><span>Issued</span><b>{{ $issuedAt }}</b></div>

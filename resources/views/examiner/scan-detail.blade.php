@@ -86,7 +86,7 @@
             <div class="scan-panel-body">
                 <div class="scan-row"><span class="scan-label">Pass Status</span><span class="scan-value">{{ match(strtoupper((string) ($scan->token_status ?? ''))) { 'UNUSED' => 'Ready', 'USED' => 'Already scanned', 'REVOKED' => 'Unavailable', default => $scan->token_status ?? 'Not available' } }}</span></div>
                 @if($payment)
-                    <div class="scan-row"><span class="scan-label">Remita RRR</span><span class="scan-value mono">{{ $payment->rrr_number }}</span></div>
+                    <div class="scan-row"><span class="scan-label">Payment</span><span class="scan-value">Verified</span></div>
                     <div class="scan-row"><span class="scan-label">Verified</span><span class="scan-value mono">{{ \Illuminate\Support\Carbon::parse($payment->verified_at)->format('d M Y, H:i') }}</span></div>
                 @else
                     <div class="scan-row"><span class="scan-label">Payment</span><span class="scan-value">Not available</span></div>

@@ -8,11 +8,6 @@
     $paymentPayload = $payment ? json_decode((string) $payment->remita_response, true) : [];
     $paymentStatus = $payment ? ($paymentPayload['status'] ?? 'Verified') : 'Not recorded yet';
     $paymentSource = $payment ? ($paymentPayload['source'] ?? (str_starts_with(strtoupper((string) $payment->rrr_number), 'TEST-') ? 'Demo' : 'Remita')) : 'Not recorded yet';
-    $maskedRrr = $payment?->rrr_number
-        ? (str_starts_with(strtoupper((string) $payment->rrr_number), 'TEST-')
-            ? 'TEST-****'
-            : str_repeat('*', max(strlen((string) $payment->rrr_number) - 4, 0)) . substr((string) $payment->rrr_number, -4))
-        : 'Not recorded yet';
     $passStatus = match (strtoupper((string) ($token->status ?? ''))) {
         'UNUSED' => 'Ready',
         'USED' => 'Already scanned',
@@ -70,7 +65,7 @@
                 <div class="admin-info-row"><span class="admin-label">Faculty</span><span class="admin-value">{{ $student->faculty ?? 'Not available' }}</span></div>
                 <div class="admin-info-row"><span class="admin-label">Department</span><span class="admin-value">{{ $student->dept_name ?? 'Not recorded yet' }}</span></div>
                 <div class="admin-info-row"><span class="admin-label">Level</span><span class="admin-value">{{ $student->level ?? 'Not recorded yet' }}</span></div>
-                <div class="admin-info-row"><span class="admin-label">Active Session</span><span class="admin-value">{{ $student->semester ?? 'Session' }} - {{ $student->academic_year ?? 'Not available' }}</span></div>
+                <div class="admin-info-row"><span class="admin-label">Session</span><span class="admin-value">{{ $student->semester ?? 'Session' }} - {{ $student->academic_year ?? 'Not available' }}</span></div>
                 <div class="admin-info-row"><span class="admin-label">Registered</span><span class="admin-value">{{ $student->created_at ?? 'Not recorded yet' }}</span></div>
             </div>
         </div>
@@ -117,7 +112,6 @@
         <div class="admin-section-body">
             <div class="admin-info-list">
                 <div class="admin-info-row"><span class="admin-label">Provider / Source</span><span class="admin-value">{{ Str::headline((string) $paymentSource) }}</span></div>
-                <div class="admin-info-row"><span class="admin-label">Reference</span><span class="admin-value mono">{{ $maskedRrr }}</span></div>
                 <div class="admin-info-row"><span class="admin-label">Status</span><span class="admin-value">{{ $paymentStatus }}</span></div>
                 <div class="admin-info-row"><span class="admin-label">Amount Declared</span><span class="admin-value">{{ $payment ? '₦' . number_format((float) $payment->amount_declared, 2) : 'Not recorded yet' }}</span></div>
                 <div class="admin-info-row"><span class="admin-label">Amount Confirmed</span><span class="admin-value">{{ $payment ? '₦' . number_format((float) $payment->amount_confirmed, 2) : 'Not recorded yet' }}</span></div>

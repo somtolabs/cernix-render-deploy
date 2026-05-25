@@ -366,7 +366,7 @@ test.describe('CERNIX aggressive QA suite', () => {
 
     await screenshot(page, 'admin-intelligence');
 
-    expect(text).toMatch(/Risk Intelligence|Total Scans|Approved|Rejected|Duplicate/i);
+    expect(text).toMatch(/Risk Intelligence|Total Scans|Approved|Rejected|Repeated|Duplicate/i);
     expect(text).toMatch(/Live System Summary|Enhanced Analysis|Live Summary|Python Enhanced|Live database summary|Python-enhanced report/i);
 
     for (const secret of ['encrypted_payload', 'hmac_signature', 'aes_key', 'hmac_secret', 'APP_KEY', 'REMITA_SECRET_KEY']) {

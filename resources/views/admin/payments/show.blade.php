@@ -13,7 +13,7 @@
     }
 @endphp
 <div class="admin-page-head">
-    <div><div class="cx-eyebrow">Payment Trace</div><h1 class="mono">{{ $payment->rrr_number }}</h1><p>Payment record, linked student, exam pass status, and scan summary.</p></div>
+    <div><div class="cx-eyebrow">Payment Trace</div><h1>{{ $payment->full_name ?? 'Payment Detail' }}</h1><p>Linked student, verified amount, exam pass status, and scan summary.</p></div>
     <a class="admin-action ghost" href="{{ route('admin.payments') }}">Back to Payments</a>
 </div>
 
@@ -46,5 +46,4 @@
     <div class="metric-cell"><span class="metric-label">Review Scans</span><span class="metric-value">{{ ($scanSummary['DUPLICATE'] ?? 0) + ($scanSummary['REJECTED'] ?? 0) }}</span></div>
 </section>
 
-@include('admin.partials.notes', ['entityType' => 'payment', 'entityId' => $payment->rrr_number, 'notes' => $notes ?? collect()])
 @endsection

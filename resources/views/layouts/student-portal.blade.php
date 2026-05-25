@@ -5,7 +5,7 @@
     $nav = [
         ['key' => 'overview', 'label' => 'Overview', 'route' => 'student.dashboard'],
         ['key' => 'profile', 'label' => 'Profile', 'route' => 'student.profile'],
-        ['key' => 'exam-access-id', 'label' => 'QR Generator / Exam Access ID', 'route' => 'student.exam-access-id'],
+        ['key' => 'exam-access-id', 'label' => 'Exam Pass', 'route' => 'student.exam-access-id'],
         ['key' => 'timetable', 'label' => 'Timetable', 'route' => 'student.timetable'],
         ['key' => 'payment', 'label' => 'Payment', 'route' => 'student.payment'],
         ['key' => 'notifications', 'label' => 'Notifications', 'route' => 'student.notifications', 'badge' => $notificationUnreadCount ?? 0],

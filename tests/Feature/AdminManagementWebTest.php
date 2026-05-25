@@ -164,9 +164,8 @@ class AdminManagementWebTest extends TestCase
             ->assertSee($student['full_name'])
             ->assertSee($student['matric_no'])
             ->assertSee('repeated scan attempt')
-            ->assertSee('What happened')
-            ->assertSee('Recommended action')
             ->assertSee('View Student')
+            ->assertSee('View more')
             ->assertDontSee('QR token')
             ->assertDontSee('Token Reference')
             ->assertDontSee('127.0.0.1')
@@ -262,6 +261,63 @@ class AdminManagementWebTest extends TestCase
             ->assertSee('Repeated scan needs review')
             ->assertDontSee('Token Reference')
             ->assertDontSee('127.0.0.1');
+    }
+
+    public function test_admin_settings_does_not_show_placeholder_cards_for_admin(): void
+    {
+        $admin = DB::table('examiners')->where('username', 'admin1')->first();
+
+        $this->withSession($this->adminSession($admin))
+            ->get(route('admin.settings'))
+            ->assertOk()
+            ->assertSee('No editable settings are available for this role.')
+            ->assertDontSee('Scanner Settings')
+            ->assertDontSee('QR / Verification Rules')
+            ->assertDontSee('Role / Access Overview')
+            ->assertDontSee('Maintenance / Cache Info')
+            ->assertDontSee('Active Session');
+    }
+
+    public function test_admin_intelligence_is_compact_and_has_no_report_status(): void
+    {
+        $admin = DB::table('examiners')->where('username', 'admin1')->first();
+        $student = $this->createStudentRecord();
+        $this->addDuplicateScanAttempts($student['token_id'], $student['examiner_id']);
+
+        $this->withSession($this->adminSession($admin))
+            ->get(route('admin.intelligence'))
+            ->assertOk()
+            ->assertSee('Repeated')
+            ->assertSee('View Student')
+            ->assertSee('View more')
+            ->assertDontSee('Report Status')
+            ->assertDontSee('JSON Path')
+            ->assertDontSee('HTML Report Path')
+            ->assertDontSee('storage/app/risk-analysis')
+            ->assertDontSee('php artisan');
+    }
+
+    public function test_user_facing_pages_hide_raw_rrr_after_registration(): void
+    {
+        $admin = DB::table('examiners')->where('username', 'admin1')->first();
+        $student = $this->createStudentRecord();
+
+        $pages = [
+            route('admin.dashboard'),
+            route('admin.students'),
+            route('admin.students.show', ['student' => $student['matric_no']]),
+            route('admin.payments'),
+            route('admin.payments.student.show', ['student' => $student['matric_no']]),
+            route('admin.scan-logs'),
+        ];
+
+        foreach ($pages as $url) {
+            $this->withSession($this->adminSession($admin))
+                ->get($url)
+                ->assertOk()
+                ->assertDontSee('TEST-ADMIN-VIEW')
+                ->assertDontSee('RRR');
+        }
     }
 
     private function adminSession(object $account): array

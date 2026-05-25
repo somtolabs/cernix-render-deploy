@@ -61,6 +61,7 @@ Route::post('/admin/examiners', [AdminWebController::class, 'examinerStore'])->n
 Route::patch('/admin/examiners/{examiner}/toggle', [AdminWebController::class, 'examinerToggle'])->name('admin.examiners.toggle');
 Route::get('/admin/examiners/{examiner}', [AdminWebController::class, 'examinerShow'])->name('admin.examiners.show');
 Route::get('/admin/payments', [AdminWebController::class, 'payments'])->name('admin.payments');
+Route::get('/admin/payments/student/{student}', [AdminWebController::class, 'paymentShowByStudent'])->where('student', '.*')->name('admin.payments.student.show');
 Route::get('/admin/payments/{rrr}', [AdminWebController::class, 'paymentShow'])->where('rrr', '.*')->name('admin.payments.show');
 Route::get('/admin/timetable', [AdminWebController::class, 'timetable'])->name('admin.timetable');
 Route::post('/admin/timetable', [AdminWebController::class, 'timetableStore'])->name('admin.timetable.store');

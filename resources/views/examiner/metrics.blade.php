@@ -34,7 +34,7 @@
         <h2 style="margin:0 0 12px;font-size:20px">Current Context</h2>
         <div class="metric-strip">
             <div><span>Total Scans Today</span><b>{{ $system['total_scans_today'] }}</b></div>
-            <div><span>Active Session</span><b>{{ $system['active_session']->session_name ?? 'Not set' }}</b></div>
+            <div><span>Session</span><b>{{ $system['active_session']->session_name ?? 'Not set' }}</b></div>
             <div><span>Exams Today</span><b>{{ $system['exams_today'] }}</b></div>
             <div><span>Last Scan</span><b style="font-size:14px">{{ $metrics['last_scan_time'] ? \Illuminate\Support\Carbon::parse($metrics['last_scan_time'])->format('d M Y, H:i') : 'None' }}</b></div>
         </div>

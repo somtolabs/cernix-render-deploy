@@ -14,7 +14,7 @@
         ['label' => 'Settings', 'route' => route('admin.settings')],
         ['label' => 'User Management', 'route' => route('admin.examiners')],
         ['label' => 'School Fee Mapping', 'route' => route('admin.settings') . '#fee-mapping'],
-        ['label' => 'Active Session', 'route' => route('admin.settings') . '#active-session'],
+        ['label' => 'Session', 'route' => route('admin.settings') . '#active-session'],
         ['label' => 'Audit Trail', 'route' => route('admin.activity')],
         ['label' => 'Verification Logs', 'route' => route('admin.scan-logs')],
     ];
@@ -68,6 +68,10 @@
     .dash-actions { display:grid; gap:8px; }
     .dash-actions a { min-height:42px; display:flex; align-items:center; justify-content:space-between; gap:12px; padding:0 12px; border:1px solid var(--line); border-radius:14px; background:#fff; color:var(--ink); text-decoration:none; font-size:13px; font-weight:900; transition:transform .16s ease, border-color .16s ease, box-shadow .16s ease; }
     .dash-actions a:hover { transform:translateY(-1px); border-color:var(--line-2); box-shadow:var(--shadow-sm); }
+    .dash-action-bar { display:flex; flex-wrap:wrap; gap:8px; margin:0 0 16px; }
+    .dash-action-bar a { min-height:38px; display:inline-flex; align-items:center; padding:0 12px; border:1px solid var(--line); border-radius:999px; background:#fff; color:var(--ink); text-decoration:none; font-size:12px; font-weight:900; }
+    .dash-review-strip { display:flex; flex-wrap:wrap; gap:8px; margin:0 0 16px; }
+    .dash-review-strip span { display:inline-flex; gap:6px; align-items:center; min-height:34px; padding:0 10px; border:1px solid var(--line); border-radius:999px; background:#fff; font-size:12px; font-weight:900; }
     .dash-pill { display:inline-flex; align-items:center; width:fit-content; padding:4px 8px; border-radius:999px; background:rgba(15,32,80,.06); color:var(--ink-2); font-size:10px; font-weight:900; text-transform:uppercase; letter-spacing:.08em; }
     @media (min-width:900px) {
         .dash-strip { grid-template-columns:repeat({{ $isSuperAdmin ? 6 : 4 }},minmax(0,1fr)); }
@@ -141,7 +145,7 @@
 
 @if($isSuperAdmin)
     <section class="dash-strip" aria-label="Super Admin overview">
-        <div><span>Active Session</span><b>{{ $activeSession ? ($activeSession->semester . ' ' . $activeSession->academic_year) : 'Inactive' }}</b></div>
+        <div><span>Session</span><b>{{ $activeSession ? ($activeSession->semester . ' ' . $activeSession->academic_year) : 'Inactive' }}</b></div>
         <div><span>Demo Mode</span><b>{{ \App\Support\DepartmentFees::isDemoMode() ? 'Enabled' : 'Disabled' }}</b></div>
         <div><span>School Fees</span><b>{{ number_format($metrics['departments'] ?? 0) }} departments</b></div>
         <div><span>Admin Users</span><b>{{ number_format($metrics['admin_users'] ?? 0) }}</b></div>
@@ -149,30 +153,18 @@
         <div><span>Verification</span><b>{{ number_format($metrics['total_scans']) }} scans</b></div>
     </section>
 
-    <div class="dash-layout two">
-        <section class="dash-panel">
-            <div class="dash-panel-head"><h2>System Controls</h2><span>Working links only</span></div>
-            <div class="dash-panel-body">
-                <div class="dash-actions">
-                    @foreach($systemLinks as $link)
-                        <a href="{{ $link['route'] }}">{{ $link['label'] }} <span>-></span></a>
-                    @endforeach
-                </div>
-            </div>
-        </section>
+    <nav class="dash-action-bar" aria-label="System shortcuts">
+        @foreach($systemLinks as $link)
+            <a href="{{ $link['route'] }}">{{ $link['label'] }}</a>
+        @endforeach
+    </nav>
 
-        <section class="dash-panel">
-            <div class="dash-panel-head"><h2>Risk / Review</h2><span>Needs attention</span></div>
-            <div class="dash-panel-body">
-                <div class="dash-list">
-                    <div class="dash-row"><div><b>Repeated attempts</b><span>Possible repeated scans.</span></div><strong class="mono">{{ number_format($riskMetrics['duplicate_scans'] ?? 0) }}</strong></div>
-                    <div class="dash-row"><div><b>Rejected scans</b><span>Exam pass activity that needs review.</span></div><strong class="mono">{{ number_format($riskMetrics['rejected_scans'] ?? 0) }}</strong></div>
-                    <div class="dash-row"><div><b>Missing photos</b><span>Students without identity photos.</span></div><strong class="mono">{{ number_format($riskMetrics['missing_passports'] ?? 0) }}</strong></div>
-                    <div class="dash-row"><div><b>Payment without pass</b><span>Paid students without issued exam passes.</span></div><strong class="mono">{{ number_format($riskMetrics['paid_without_qr'] ?? 0) }}</strong></div>
-                    <div class="dash-row"><div><b>Inactive examiners</b><span>Disabled scanner accounts.</span></div><strong class="mono">{{ number_format($riskMetrics['inactive_examiners'] ?? 0) }}</strong></div>
-                </div>
-            </div>
-        </section>
+    <div class="dash-review-strip" aria-label="Review summary">
+        <span>Repeated {{ number_format($riskMetrics['duplicate_scans'] ?? 0) }}</span>
+        <span>Rejected {{ number_format($riskMetrics['rejected_scans'] ?? 0) }}</span>
+        <span>Missing photos {{ number_format($riskMetrics['missing_passports'] ?? 0) }}</span>
+        <span>Payment without pass {{ number_format($riskMetrics['paid_without_qr'] ?? 0) }}</span>
+        <span>Inactive examiners {{ number_format($riskMetrics['inactive_examiners'] ?? 0) }}</span>
     </div>
 
     <section class="dash-panel" style="margin-top:16px">
@@ -198,29 +190,17 @@
         <div><span>Scans</span><b>{{ number_format($metrics['total_scans']) }}</b></div>
     </section>
 
-    <div class="dash-layout two">
-        <section class="dash-panel">
-            <div class="dash-panel-head"><h2>Operations Summary</h2><span>View-only system state</span></div>
-            <div class="dash-panel-body">
-                <div class="dash-list">
-                    <div class="dash-row"><div><b>Active session</b><span>{{ $activeSession ? ($activeSession->semester . ' / ' . $activeSession->academic_year) : 'No active session' }}</span></div><span class="dash-pill">{{ $activeSession ? 'Active' : 'Inactive' }}</span></div>
-                    <div class="dash-row"><div><b>Today’s exams</b><span>{{ $departmentsToday->take(4)->implode(', ') ?: 'No department schedule published today.' }}</span></div><strong class="mono">{{ number_format($metrics['today_exams']) }}</strong></div>
-                    <div class="dash-row"><div><b>Setup checks</b><span>{{ $availableChecks }}/{{ $readiness->count() }} operational checks passed.</span></div><span class="dash-pill">{{ $availableChecks === $readiness->count() ? 'Complete' : 'Review' }}</span></div>
-                    <div class="dash-row"><div><b>Next exam</b><span>{{ $nextExam ? (($nextExam->course_code ?? 'Course') . ' / ' . ($nextExam->start_time ?? '--:--')) : 'No exam queued today.' }}</span></div><span></span></div>
-                </div>
-            </div>
-        </section>
+    <nav class="dash-action-bar" aria-label="Admin shortcuts">
+        @foreach($adminLinks as $link)
+            <a href="{{ $link['route'] }}">{{ $link['label'] }}</a>
+        @endforeach
+    </nav>
 
-        <section class="dash-panel">
-            <div class="dash-panel-head"><h2>Quick Actions</h2><span>Working links</span></div>
-            <div class="dash-panel-body">
-                <div class="dash-actions">
-                    @foreach($adminLinks as $link)
-                        <a href="{{ $link['route'] }}">{{ $link['label'] }} <span>-></span></a>
-                    @endforeach
-                </div>
-            </div>
-        </section>
+    <div class="dash-review-strip" aria-label="Current session summary">
+        <span>{{ $activeSession ? ($activeSession->semester . ' / ' . $activeSession->academic_year) : 'No session selected' }}</span>
+        <span>Today’s exams {{ number_format($metrics['today_exams']) }}</span>
+        <span>Checks {{ $availableChecks }}/{{ $readiness->count() }}</span>
+        <span>{{ $nextExam ? (($nextExam->course_code ?? 'Course') . ' / ' . ($nextExam->start_time ?? '--:--')) : 'No exam queued today' }}</span>
     </div>
 
     <section class="dash-panel" style="margin-top:16px">

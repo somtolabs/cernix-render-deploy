@@ -26,12 +26,13 @@
     <div class="admin-section" style="margin-bottom:16px"><div class="admin-section-body" style="color:var(--red)">{{ $errors->first() }}</div></div>
 @endif
 
-<div class="metric-strip" style="margin-bottom:16px">
-    <div class="metric-cell"><span class="metric-label">Active Session</span><b class="metric-value">{{ $activeSession ? 'Active' : 'Inactive' }}</b></div>
-    <div class="metric-cell"><span class="metric-label">Demo Mode</span><b class="metric-value">{{ $demoStatus['enabled'] ? 'Enabled' : 'Disabled' }}</b></div>
-    <div class="metric-cell"><span class="metric-label">Demo Passports</span><b class="metric-value">{{ $demoStatus['demo_passports'] }}/20</b></div>
-    <div class="metric-cell"><span class="metric-label">Settings Store</span><b class="metric-value">{{ $settingsStorageReady ? 'Available' : 'Missing' }}</b></div>
-</div>
+@if(! $canManageSessions && ! $canManageFees && ! $canManageSettings)
+    <section class="admin-section">
+        <div class="admin-section-body">
+            <div class="admin-empty">No editable settings are available for this role.</div>
+        </div>
+    </section>
+@else
 
 <div class="admin-grid two">
     <section class="admin-section" id="active-session">
@@ -90,7 +91,6 @@
                 <div class="admin-info-row"><span class="admin-label">Demo Source</span><span class="admin-value">{{ $demoStatus['source'] }}</span></div>
                 <div class="admin-info-row"><span class="admin-label">Environment Override</span><span class="admin-value">{{ $demoStatus['environment_demo_enabled'] ? 'Enabled by APP_ENV=' . $demoStatus['app_env'] : 'Not enabled by APP_ENV' }}</span></div>
                 <div class="admin-info-row"><span class="admin-label">Stored Switch</span><span class="admin-value">{{ $demoStatus['stored_enabled'] ? 'Enabled (does not override production env)' : 'Disabled' }}</span></div>
-                <div class="admin-info-row"><span class="admin-label">Allowed Test RRR Pattern</span><span class="admin-value mono">TEST-*</span></div>
             </div>
 
             @if($canManageSettings)
@@ -155,60 +155,5 @@
     </div>
 </section>
 
-<div class="admin-grid two" style="margin-top:16px">
-    <section class="admin-section">
-        <div class="admin-section-head"><h2>QR / Verification Rules</h2><span>Security rules are protected</span></div>
-        <div class="admin-section-body">
-            <div class="admin-info-list">
-                @foreach($verificationRules as $label => $status)
-                    <div class="admin-info-row" style="grid-template-columns:1fr auto;align-items:center">
-                        <span class="admin-value">{{ $label }}</span>
-                        <span class="admin-status {{ $status === 'Disabled' ? 'red' : 'green' }}">{{ $status }}</span>
-                    </div>
-                @endforeach
-            </div>
-        </div>
-    </section>
-
-    <section class="admin-section">
-        <div class="admin-section-head"><h2>Scanner Settings / Status</h2><span>Operational guidance</span></div>
-        <div class="admin-section-body">
-            <div class="admin-info-list">
-                @foreach($scannerStatus as $label => $status)
-                    <div class="admin-info-row"><span class="admin-label">{{ $label }}</span><span class="admin-value">{{ $status }}</span></div>
-                @endforeach
-            </div>
-        </div>
-    </section>
-</div>
-
-<div class="admin-grid two" style="margin-top:16px">
-    <section class="admin-section" id="maintenance">
-        <div class="admin-section-head"><h2>Role / Access Overview</h2><span>Current permissions</span></div>
-        <div class="admin-section-body">
-            <div class="admin-info-list">
-                <div class="admin-info-row"><span class="admin-label">Signed In As</span><span class="admin-value">{{ $currentAdmin['name'] }} <span class="mono">({{ $currentAdmin['username'] }})</span></span></div>
-                <div class="admin-info-row"><span class="admin-label">Role</span><span class="admin-value">{{ $roleLabel }}</span></div>
-                <div class="admin-info-row"><span class="admin-label">Allowed Areas</span><span class="admin-value">{{ implode(', ', $accessOverview['allowed'] ?? []) }}</span></div>
-                @if(! empty($accessOverview['restricted']))
-                    <div class="admin-info-row"><span class="admin-label">Restricted for Admin</span><span class="admin-value">{{ implode(', ', $accessOverview['restricted']) }}</span></div>
-                @endif
-                @if(! empty($accessOverview['super_admin']))
-                    <div class="admin-info-row"><span class="admin-label">Super Admin Controls</span><span class="admin-value">{{ implode(', ', $accessOverview['super_admin']) }}</span></div>
-                @endif
-            </div>
-        </div>
-    </section>
-
-    <section class="admin-section">
-        <div class="admin-section-head"><h2>Maintenance / Cache Info</h2><span>{{ $permissions['can_manage_maintenance'] ? 'Super Admin status' : 'Read-only status' }}</span></div>
-        <div class="admin-section-body">
-            <div class="admin-info-list">
-                <div class="admin-info-row"><span class="admin-label">Database</span><span class="admin-value">{{ $health['database'] ? 'Available' : 'Issue detected' }}</span></div>
-                <div class="admin-info-row"><span class="admin-label">Storage</span><span class="admin-value">{{ $health['storage'] ? 'Writable' : 'Locked' }}</span></div>
-                <div class="admin-info-row"><span class="admin-label">Cache Controls</span><span class="admin-value">{{ $permissions['can_manage_maintenance'] ? 'Safe status visible. Destructive cache actions stay in terminal.' : 'Super Admin only' }}</span></div>
-            </div>
-        </div>
-    </section>
-</div>
+@endif
 @endsection

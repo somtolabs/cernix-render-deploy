@@ -32,7 +32,7 @@
     </div>
     <div class="admin-section-body">
         <form class="admin-filter" method="GET">
-            <input name="q" value="{{ request('q') }}" placeholder="Search name, matric, payment reference">
+            <input name="q" value="{{ request('q') }}" placeholder="Search name or matric">
             <select name="department">
                 <option value="">All departments</option>
                 @foreach($departments as $department)

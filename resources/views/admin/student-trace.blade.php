@@ -4,13 +4,13 @@
 
 @section('admin-content')
 <div class="admin-page-head">
-    <div><div class="cx-eyebrow">Student Trace Search</div><h1>Student Trace</h1><p>Search by matric number, name, or payment reference and inspect the complete exam access trail.</p></div>
+    <div><div class="cx-eyebrow">Student Trace Search</div><h1>Student Trace</h1><p>Search by matric number or name and inspect the complete exam access trail.</p></div>
 </div>
 
 <section class="admin-section">
     <div class="admin-section-head"><h2>Trace Search</h2><span>Identity, payment, QR, timetable, scans</span></div>
     <div class="admin-section-body">
-        <form class="admin-filter" method="GET"><input name="q" value="{{ $queryText }}" placeholder="Matric, name, payment reference"><button class="admin-action">Search</button><a class="admin-action ghost" href="{{ route('admin.student-trace') }}">Reset</a></form>
+        <form class="admin-filter" method="GET"><input name="q" value="{{ $queryText }}" placeholder="Matric or name"><button class="admin-action">Search</button><a class="admin-action ghost" href="{{ route('admin.student-trace') }}">Reset</a></form>
         @if($queryText !== '' && $results->isEmpty())
             <div class="admin-empty">No student trace matched that search.</div>
         @endif
@@ -20,9 +20,9 @@
 @if($results->count())
 <section class="admin-section">
     <div class="admin-section-head"><h2>Matches</h2><span>{{ $results->count() }} shown</span></div>
-    <div class="admin-section-body"><div class="admin-table-wrap"><table class="admin-table"><thead><tr><th>Name</th><th>Matric</th><th>Department</th><th>Level</th><th>RRR</th><th>QR</th><th>Action</th></tr></thead><tbody>
+    <div class="admin-section-body"><div class="admin-table-wrap"><table class="admin-table"><thead><tr><th>Name</th><th>Matric</th><th>Department</th><th>Level</th><th>Exam Pass</th><th>Action</th></tr></thead><tbody>
         @foreach($results as $row)
-            <tr><td>{{ $row->full_name }}</td><td class="mono">{{ $row->matric_no }}</td><td>{{ $row->dept_name ?? 'Not available' }}</td><td>{{ $row->level }}</td><td class="mono">{{ $row->rrr_number ?? 'Not available' }}</td><td>{{ match(strtoupper((string) ($row->token_status ?? ''))) { 'UNUSED' => 'Ready', 'USED' => 'Already scanned', 'REVOKED' => 'Unavailable', default => $row->token_status ?? 'Missing' } }}</td><td><a class="admin-action ghost" href="{{ route('admin.student-trace', ['q' => $queryText, 'student' => $row->matric_no]) }}">Trace</a></td></tr>
+            <tr><td>{{ $row->full_name }}</td><td class="mono">{{ $row->matric_no }}</td><td>{{ $row->dept_name ?? 'Not available' }}</td><td>{{ $row->level }}</td><td>{{ match(strtoupper((string) ($row->token_status ?? ''))) { 'UNUSED' => 'Ready', 'USED' => 'Already scanned', 'REVOKED' => 'Unavailable', default => $row->token_status ?? 'Missing' } }}</td><td><a class="admin-action ghost" href="{{ route('admin.student-trace', ['q' => $queryText, 'student' => $row->matric_no]) }}">Trace</a></td></tr>
         @endforeach
     </tbody></table></div></div>
 </section>
@@ -54,7 +54,7 @@
     <section class="admin-section">
         <div class="admin-section-head"><h2>Access Summary</h2></div>
         <div class="admin-section-body"><div class="admin-info-list">
-            <div class="admin-info-row"><span class="admin-label">Payment</span><span class="admin-value">{{ $payment ? 'Verified · '.$payment->rrr_number : 'No payment record' }}</span></div>
+            <div class="admin-info-row"><span class="admin-label">Payment</span><span class="admin-value">{{ $payment ? 'Verified' : 'No payment record' }}</span></div>
             <div class="admin-info-row"><span class="admin-label">Exam Pass</span><span class="admin-value">{{ $token ? match(strtoupper((string) $token->status)) { 'UNUSED' => 'Ready', 'USED' => 'Already scanned', 'REVOKED' => 'Unavailable', default => $token->status } : 'Not issued' }}</span></div>
             <div class="admin-info-row"><span class="admin-label">Next Exam</span><span class="admin-value">{{ $nextExam ? ($nextExam->course_code.' · '.$nextExam->course_title.' · '.$nextExam->venue) : 'No upcoming exam found' }}</span></div>
         </div></div>

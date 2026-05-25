@@ -153,8 +153,8 @@ class AdminWebController extends Controller
             ->get();
 
         $timeline = collect([
-            $payment ? ['label' => 'Payment verified', 'time' => $payment->verified_at, 'meta' => $payment->rrr_number] : null,
-            $token ? ['label' => 'Exam pass issued', 'time' => $token->issued_at, 'meta' => $token->status] : null,
+            $payment ? ['label' => 'Payment verified', 'time' => $payment->verified_at, 'meta' => 'Verified payment'] : null,
+            $token ? ['label' => 'Exam pass issued', 'time' => $token->issued_at, 'meta' => match(strtoupper((string) $token->status)) { 'UNUSED' => 'Ready', 'USED' => 'Already scanned', 'REVOKED' => 'Unavailable', default => 'Recorded' }] : null,
             $timetableCount > 0 ? ['label' => 'Timetable assigned', 'time' => $student->created_at, 'meta' => $timetableCount . ' timetable entries'] : null,
         ])->filter()->merge($scanHistory->take(8)->map(fn ($log) => [
             'label' => $log->decision . ' scan',
@@ -393,6 +393,22 @@ class AdminWebController extends Controller
         $notes = $this->adminNotes('payment', $rrr);
 
         return view('admin.payments.show', compact('payment', 'token', 'scanSummary', 'notes'));
+    }
+
+    public function paymentShowByStudent(Request $request, string $student)
+    {
+        if ($response = $this->guardAdmin($request)) {
+            return $response;
+        }
+
+        $payment = DB::table('payment_records')
+            ->where('student_id', $student)
+            ->orderByDesc('verified_at')
+            ->first();
+
+        abort_unless($payment, 404);
+
+        return $this->paymentShow($request, (string) $payment->rrr_number);
     }
 
     public function timetable(Request $request)
@@ -1310,11 +1326,18 @@ class AdminWebController extends Controller
             'both' => 'Visible to Student and Examiner',
             default => 'Internal Only',
         };
-        $note->entity_label = Str::headline($note->entity_type ?? 'record') . ' · ' . ($note->entity_id ?? 'unknown');
+        $paymentStudent = null;
+        if (($note->entity_type ?? '') === 'payment') {
+            $paymentStudent = DB::table('payment_records')->where('rrr_number', $note->entity_id)->value('student_id');
+        }
+
+        $note->entity_label = ($note->entity_type ?? '') === 'payment'
+            ? 'Payment record' . ($paymentStudent ? ' · ' . $paymentStudent : '')
+            : Str::headline($note->entity_type ?? 'record') . ' · ' . ($note->entity_id ?? 'unknown');
         $note->entity_url = match ($note->entity_type ?? '') {
             'student' => route('admin.students.show', $note->entity_id),
             'examiner' => route('admin.examiners.show', $note->entity_id),
-            'payment' => route('admin.payments.show', $note->entity_id),
+            'payment' => $paymentStudent ? route('admin.payments.student.show', $paymentStudent) : null,
             'scan' => route('admin.scan-logs.show', $note->entity_id),
             default => null,
         };

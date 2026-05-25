@@ -637,7 +637,7 @@
                 </div>
                 <div class="doc-card">
                     <div class="card-label">Payment check</div>
-                    <div class="card-title">Remita RRR</div>
+                    <div class="card-title">Payment reference</div>
                     <div class="card-desc">Production payment checks remain separate from demo-mode testing references.</div>
                 </div>
             </div>
@@ -834,7 +834,7 @@
                 </div>
                 <div class="doc-info-row">
                     <div class="dir-key">Payment</div>
-                    <div class="dir-val">Production payment configuration plus demo-mode payment references for local/testing use only</div>
+                    <div class="dir-val">Production payment configuration plus demo-mode payment checks for local/testing use only</div>
                 </div>
                 <div class="doc-info-row">
                     <div class="dir-key">Intelligence</div>

@@ -32,6 +32,12 @@
     .intel-metrics .metric-value { overflow-wrap:anywhere; }
     .intel-list { margin:0; padding-left:18px; color:var(--ink-2); line-height:1.65; }
     .intel-list li + li { margin-top:4px; }
+    .intel-more { border:1px solid var(--line); border-radius:16px; background:#fff; overflow:hidden; }
+    .intel-more summary { cursor:pointer; padding:12px 14px; font-weight:900; display:flex; justify-content:space-between; gap:10px; }
+    .intel-more-body { padding:0 14px 14px; color:var(--ink-2); line-height:1.55; }
+    .intel-issue { max-width:380px; line-height:1.45; }
+    .intel-issue details { margin-top:4px; }
+    .intel-issue summary { cursor:pointer; color:var(--navy); font-size:12px; font-weight:900; }
     .intel-table .admin-table { min-width:900px; }
     .intel-mobile-cards { display:none; }
     .intel-review-card { border:1px solid var(--line); border-radius:16px; background:#fff; padding:14px; display:grid; gap:10px; }
@@ -96,99 +102,25 @@
     <section class="intel-metrics" aria-label="Intelligence summary">
         <div class="metric-cell"><span class="metric-label">Total Scans</span><b class="metric-value">{{ number_format($summary['total_scans'] ?? 0) }}</b></div>
         <div class="metric-cell"><span class="metric-label">Approved</span><b class="metric-value">{{ number_format($summary['approved_count'] ?? 0) }}</b></div>
-        <div class="metric-cell"><span class="metric-label">Rejected</span><b class="metric-value">{{ number_format($summary['rejected_count'] ?? 0) }}</b></div>
         <div class="metric-cell"><span class="metric-label">Repeated</span><b class="metric-value">{{ number_format($summary['duplicate_count'] ?? 0) }}</b></div>
-        <div class="metric-cell"><span class="metric-label">Approval Rate</span><b class="metric-value">{{ number_format((float) ($summary['approval_rate'] ?? 0), 1) }}%</b></div>
-        <div class="metric-cell"><span class="metric-label">Repeated Rate</span><b class="metric-value">{{ number_format((float) ($summary['duplicate_rate'] ?? 0), 1) }}%</b></div>
-        <div class="metric-cell"><span class="metric-label">Rejection Rate</span><b class="metric-value">{{ number_format((float) ($summary['rejection_rate'] ?? 0), 1) }}%</b></div>
-        <div class="metric-cell"><span class="metric-label">Total Students</span><b class="metric-value">{{ number_format($summary['total_students'] ?? 0) }}</b></div>
-        <div class="metric-cell"><span class="metric-label">Verified Payments</span><b class="metric-value">{{ number_format($summary['verified_payments'] ?? 0) }}</b></div>
+        <div class="metric-cell"><span class="metric-label">Rejected</span><b class="metric-value">{{ number_format($summary['rejected_count'] ?? 0) }}</b></div>
+        <div class="metric-cell"><span class="metric-label">Students to Review</span><b class="metric-value">{{ number_format(($overview['critical_risk_students_count'] ?? 0) + ($overview['high_risk_students_count'] ?? 0) + ($overview['medium_risk_students_count'] ?? 0)) }}</b></div>
+        <div class="metric-cell"><span class="metric-label">Examiners to Review</span><b class="metric-value">{{ number_format($overview['suspicious_examiners_count'] ?? 0) }}</b></div>
         <div class="metric-cell"><span class="metric-label">Exam Passes</span><b class="metric-value">{{ number_format($summary['qr_issued'] ?? $summary['unused_tokens'] ?? $summary['active_tokens'] ?? 0) }}</b></div>
     </section>
 
-    <section class="admin-section">
-        <div class="admin-section-head"><h2>Risk Overview</h2><span>{{ $intelligence['status'] ?? 'Available' }}</span></div>
-        <div class="admin-section-body">
-            <div class="metric-strip">
-                <div class="metric-cell"><span class="metric-label">Critical-risk Students</span><b class="metric-value">{{ number_format($overview['critical_risk_students_count'] ?? 0) }}</b></div>
-                <div class="metric-cell"><span class="metric-label">High-risk Students</span><b class="metric-value">{{ number_format($overview['high_risk_students_count'] ?? 0) }}</b></div>
-                <div class="metric-cell"><span class="metric-label">Medium-risk Students</span><b class="metric-value">{{ number_format($overview['medium_risk_students_count'] ?? 0) }}</b></div>
-                <div class="metric-cell"><span class="metric-label">Suspicious Examiners</span><b class="metric-value">{{ number_format($overview['suspicious_examiners_count'] ?? 0) }}</b></div>
-                <div class="metric-cell"><span class="metric-label">Scanner Devices</span><b class="metric-value">{{ number_format($overview['suspicious_devices_count'] ?? 0) }}</b></div>
-                <div class="metric-cell"><span class="metric-label">Network Patterns</span><b class="metric-value">{{ number_format($overview['suspicious_ips_count'] ?? 0) }}</b></div>
-                <div class="metric-cell"><span class="metric-label">Repeated Attempts</span><b class="metric-value">{{ number_format($overview['duplicate_attempts'] ?? 0) }}</b></div>
-                <div class="metric-cell"><span class="metric-label">Rejected Attempts</span><b class="metric-value">{{ number_format($overview['rejected_attempts'] ?? 0) }}</b></div>
-            </div>
-            <p class="muted" style="margin:14px 0 0">Risk distribution: Low {{ $riskDistribution['low'] ?? 0 }}, Medium {{ $riskDistribution['medium'] ?? 0 }}, High {{ $riskDistribution['high'] ?? 0 }}, Critical {{ $riskDistribution['critical'] ?? 0 }}.</p>
-        </div>
-    </section>
-
-    <section class="admin-section intel-table">
-        <div class="admin-section-head"><h2>Department / Level Trends</h2><span>Risk concentration</span></div>
-        <div class="admin-section-body">
-            <div class="admin-grid two">
-                <div>
-                    <h3 style="margin:0 0 10px;font-size:14px">Departments</h3>
-                    @if($departmentTrends->isEmpty())
-                        <div class="admin-empty">No department trend data available yet.</div>
-                    @else
-                        <div class="admin-table-wrap">
-                            <table class="admin-table" style="min-width:520px">
-                                <thead><tr><th>Department</th><th>Scans</th><th>Rejected</th><th>Repeated</th><th>Risk</th></tr></thead>
-                                <tbody>
-                                    @foreach($departmentTrends->take(6) as $trend)
-                                        <tr>
-                                            <td>{{ $trend['label'] ?? 'Unknown' }}</td>
-                                            <td class="mono">{{ $trend['total_scans'] ?? 0 }}</td>
-                                            <td class="mono">{{ $trend['rejected_count'] ?? 0 }} <span class="muted">({{ number_format((float) ($trend['rejection_rate'] ?? 0), 1) }}%)</span></td>
-                                            <td class="mono">{{ $trend['duplicate_count'] ?? 0 }} <span class="muted">({{ number_format((float) ($trend['duplicate_rate'] ?? 0), 1) }}%)</span></td>
-                                            <td class="mono">{{ $trend['risk_score'] ?? 0 }}</td>
-                                        </tr>
-                                    @endforeach
-                                </tbody>
-                            </table>
-                        </div>
-                    @endif
-                </div>
-                <div>
-                    <h3 style="margin:0 0 10px;font-size:14px">Levels</h3>
-                    @if($levelTrends->isEmpty())
-                        <div class="admin-empty">No level trend data available yet.</div>
-                    @else
-                        <div class="admin-table-wrap">
-                            <table class="admin-table" style="min-width:520px">
-                                <thead><tr><th>Level</th><th>Scans</th><th>Rejected</th><th>Repeated</th><th>Risk</th></tr></thead>
-                                <tbody>
-                                    @foreach($levelTrends->take(6) as $trend)
-                                        <tr>
-                                            <td>{{ $trend['label'] ?? 'Unknown' }}</td>
-                                            <td class="mono">{{ $trend['total_scans'] ?? 0 }}</td>
-                                            <td class="mono">{{ $trend['rejected_count'] ?? 0 }} <span class="muted">({{ number_format((float) ($trend['rejection_rate'] ?? 0), 1) }}%)</span></td>
-                                            <td class="mono">{{ $trend['duplicate_count'] ?? 0 }} <span class="muted">({{ number_format((float) ($trend['duplicate_rate'] ?? 0), 1) }}%)</span></td>
-                                            <td class="mono">{{ $trend['risk_score'] ?? 0 }}</td>
-                                        </tr>
-                                    @endforeach
-                                </tbody>
-                            </table>
-                        </div>
-                    @endif
-                </div>
-            </div>
-        </div>
-    </section>
-
-    <section class="admin-section">
-        <div class="admin-section-head"><h2>Key Observations</h2><span>{{ $observations->count() }} items</span></div>
-        <div class="admin-section-body">
+    <details class="intel-more">
+        <summary>Observations and trends <span>{{ $observations->count() + $departmentTrends->count() + $levelTrends->count() }} items</span></summary>
+        <div class="intel-more-body">
             <ul class="intel-list">
-                @forelse($observations as $observation)
+                @forelse($observations->take(5) as $observation)
                     <li>{{ $observation }}</li>
                 @empty
                     <li>No high-risk student activity detected.</li>
                 @endforelse
             </ul>
         </div>
-    </section>
+    </details>
 
     <section class="admin-section intel-table">
         <div class="admin-section-head"><h2>Student Risk Review</h2><span>{{ $students->count() }} records</span></div>
@@ -198,20 +130,21 @@
             @else
                 <div class="admin-table-wrap intel-table-wrap">
                     <table class="admin-table">
-                        <thead><tr><th>Student</th><th>Matric No</th><th>Department</th><th>Level</th><th>Risk Score</th><th>Risk Level</th><th>Repeated</th><th>Rejected</th><th>Last Activity</th><th>Reasons</th><th>Action</th></tr></thead>
+                        <thead><tr><th>Student</th><th>Matric</th><th>Issue</th><th>Repeated</th><th>Rejected</th><th>Last Seen</th><th>Action</th></tr></thead>
                         <tbody>
                             @foreach($students as $student)
                                 <tr>
-                                    <td>{{ $student['student_name'] ?? '-' }}</td>
+                                    <td><b>{{ $student['student_name'] ?? '-' }}</b><br><span class="muted">{{ $student['department'] ?? '-' }} · {{ $student['level'] ?? '-' }}</span></td>
                                     <td class="mono">{{ $student['matric_no'] ?? '-' }}</td>
-                                    <td>{{ $student['department'] ?? '-' }}</td>
-                                    <td>{{ $student['level'] ?? '-' }}</td>
-                                    <td class="mono">{{ $student['score'] ?? 0 }}</td>
-                                    <td><span class="risk-level {{ strtolower((string) ($student['risk_level'] ?? 'low')) }}">{{ $student['risk_level'] ?? 'low' }}</span></td>
+                                    <td class="intel-issue">
+                                        {{ collect($student['reasons'] ?? [])->first() ?: 'Needs review.' }}
+                                        @if(count((array) ($student['reasons'] ?? [])) > 1 || !empty($student['recommendation']))
+                                            <details><summary>View more</summary>{{ implode('; ', (array) ($student['reasons'] ?? [])) }} @if(!empty($student['recommendation'])) Recommendation: {{ $student['recommendation'] }} @endif</details>
+                                        @endif
+                                    </td>
                                     <td class="mono">{{ $student['duplicate_count'] ?? 0 }}</td>
                                     <td class="mono">{{ $student['rejected_count'] ?? 0 }}</td>
                                     <td class="mono">{{ $student['last_activity'] ? \Carbon\Carbon::parse($student['last_activity'])->format('M j, g:i A') : '-' }}</td>
-                                    <td>{{ implode('; ', (array) ($student['reasons'] ?? [])) ?: '-' }}</td>
                                     <td>
                                         @if(! empty($student['matric_no']) && $student['matric_no'] !== '-')
                                             <a class="admin-action ghost" href="{{ route('admin.students.show', $student['matric_no']) }}">View</a>
@@ -234,14 +167,11 @@
                                 </div>
                                 <span class="risk-level {{ strtolower((string) ($student['risk_level'] ?? 'low')) }}">{{ $student['risk_level'] ?? 'low' }}</span>
                             </div>
-                            <div class="intel-review-grid">
-                                <div><span>Repeated scans</span><b>{{ $student['duplicate_count'] ?? 0 }}</b></div>
-                                <div><span>Rejected scans</span><b>{{ $student['rejected_count'] ?? 0 }}</b></div>
-                                <div><span>Last activity</span><b>{{ ($student['last_activity'] ?? '') ? \Carbon\Carbon::parse($student['last_activity'])->format('M j, g:i A') : '-' }}</b></div>
-                                <div><span>Risk score</span><b>{{ $student['score'] ?? 0 }}</b></div>
-                            </div>
-                            <div class="intel-review-copy"><span>What happened</span><p style="margin:0">{{ implode('; ', (array) ($student['reasons'] ?? [])) ?: 'Needs review.' }}</p></div>
-                            <div class="intel-review-copy"><span>Recommended action</span><p style="margin:0">{{ $student['recommendation'] ?? 'Review the scan history.' }}</p></div>
+                            <p class="muted" style="margin:0">{{ $student['duplicate_count'] ?? 0 }} repeated scans · {{ $student['rejected_count'] ?? 0 }} rejected · Last seen {{ ($student['last_activity'] ?? '') ? \Carbon\Carbon::parse($student['last_activity'])->format('M j, g:i A') : '-' }}</p>
+                            <p style="margin:0">{{ collect($student['reasons'] ?? [])->first() ?: 'Needs review.' }}</p>
+                            @if(count((array) ($student['reasons'] ?? [])) > 1 || !empty($student['recommendation']))
+                                <details class="intel-issue"><summary>View more</summary>{{ implode('; ', (array) ($student['reasons'] ?? [])) }} @if(!empty($student['recommendation'])) Recommendation: {{ $student['recommendation'] }} @endif</details>
+                            @endif
                             @if(! empty($student['matric_no']) && $student['matric_no'] !== '-')
                                 <a class="admin-action ghost" href="{{ route('admin.students.show', $student['matric_no']) }}">View Student</a>
                             @endif
@@ -260,20 +190,22 @@
             @else
                 <div class="admin-table-wrap intel-table-wrap">
                     <table class="admin-table">
-                        <thead><tr><th>Examiner</th><th>Total Scans</th><th>Approved</th><th>Rejected</th><th>Repeated</th><th>Students Linked</th><th>Review Score</th><th>Last Activity</th><th>Reasons</th><th>Recommendation</th></tr></thead>
+                        <thead><tr><th>Examiner</th><th>Issue</th><th>Total</th><th>Repeated</th><th>Rejected</th><th>Students</th><th>Last Seen</th></tr></thead>
                         <tbody>
                             @foreach($examiners as $examiner)
                                 <tr>
                                     <td>{{ $examiner['examiner_name'] ?? ('Examiner #' . ($examiner['examiner_id'] ?? '-')) }}</td>
+                                    <td class="intel-issue">
+                                        {{ collect($examiner['reasons'] ?? [])->first() ?: 'Needs review.' }}
+                                        @if(count((array) ($examiner['reasons'] ?? [])) > 1 || !empty($examiner['recommendation']))
+                                            <details><summary>View more</summary>{{ implode('; ', (array) ($examiner['reasons'] ?? [])) }} @if(!empty($examiner['recommendation'])) Recommendation: {{ $examiner['recommendation'] }} @endif</details>
+                                        @endif
+                                    </td>
                                     <td class="mono">{{ $examiner['total_scans'] ?? 0 }}</td>
-                                    <td class="mono">{{ $examiner['approved_count'] ?? 0 }}</td>
-                                    <td class="mono">{{ $examiner['rejected_count'] ?? 0 }}</td>
                                     <td class="mono">{{ $examiner['duplicate_count'] ?? 0 }}</td>
+                                    <td class="mono">{{ $examiner['rejected_count'] ?? 0 }}</td>
                                     <td class="mono">{{ $examiner['suspicious_students_count'] ?? 0 }}</td>
-                                    <td class="mono">{{ $examiner['suspicious_score'] ?? 0 }}</td>
                                     <td class="mono">{{ ($examiner['last_activity'] ?? '') ? \Carbon\Carbon::parse($examiner['last_activity'])->format('M j, g:i A') : '-' }}</td>
-                                    <td>{{ implode('; ', (array) ($examiner['reasons'] ?? [])) ?: '-' }}</td>
-                                    <td>{{ $examiner['recommendation'] ?? '-' }}</td>
                                 </tr>
                             @endforeach
                         </tbody>
@@ -289,14 +221,11 @@
                                 </div>
                                 <span class="risk-level {{ strtolower((string) ($examiner['risk_level'] ?? 'medium')) }}">{{ $examiner['risk_level'] ?? 'review' }}</span>
                             </div>
-                            <div class="intel-review-grid">
-                                <div><span>Total scans</span><b>{{ $examiner['total_scans'] ?? 0 }}</b></div>
-                                <div><span>Repeated scans</span><b>{{ $examiner['duplicate_count'] ?? 0 }}</b></div>
-                                <div><span>Rejected scans</span><b>{{ $examiner['rejected_count'] ?? 0 }}</b></div>
-                                <div><span>Students affected</span><b>{{ $examiner['suspicious_students_count'] ?? 0 }}</b></div>
-                            </div>
-                            <div class="intel-review-copy"><span>What happened</span><p style="margin:0">{{ implode('; ', (array) ($examiner['reasons'] ?? [])) ?: 'Needs review.' }}</p></div>
-                            <div class="intel-review-copy"><span>Recommended action</span><p style="margin:0">{{ $examiner['recommendation'] ?? 'Review examiner activity.' }}</p></div>
+                            <p class="muted" style="margin:0">{{ $examiner['duplicate_count'] ?? 0 }} repeated scans · {{ $examiner['suspicious_students_count'] ?? 0 }} students affected</p>
+                            <p style="margin:0">{{ collect($examiner['reasons'] ?? [])->first() ?: 'Needs review.' }}</p>
+                            @if(count((array) ($examiner['reasons'] ?? [])) > 1 || !empty($examiner['recommendation']))
+                                <details class="intel-issue"><summary>View more</summary>{{ implode('; ', (array) ($examiner['reasons'] ?? [])) }} @if(!empty($examiner['recommendation'])) Recommendation: {{ $examiner['recommendation'] }} @endif</details>
+                            @endif
                         </article>
                     @endforeach
                 </div>
@@ -354,9 +283,9 @@
         </div>
     </section>
 
-    <section class="admin-section">
-        <div class="admin-section-head"><h2>Recommendations</h2><span>{{ $recommendations->count() }} items</span></div>
-        <div class="admin-section-body">
+    <details class="intel-more">
+        <summary>Recommendations <span>{{ $recommendations->count() }} items</span></summary>
+        <div class="intel-more-body">
             <ul class="intel-list">
                 @forelse($recommendations as $recommendation)
                     <li>{{ $recommendation }}</li>
@@ -367,15 +296,6 @@
                 @endforelse
             </ul>
         </div>
-    </section>
-
-    <section class="admin-section">
-        <div class="admin-section-head"><h2>Report Status</h2><span>{{ $intelligence['source_label'] ?? 'Live Summary' }}</span></div>
-        <div class="admin-section-body admin-info-list">
-            <div class="admin-info-row"><span class="admin-label">Report source</span><b class="admin-value">{{ $intelligence['source_label'] ?? 'Live Summary' }}</b></div>
-            <div class="admin-info-row"><span class="admin-label">Last updated</span><b class="admin-value">{{ $intelligence['last_updated_label'] ?? 'Generated live for this request' }}</b></div>
-            <div class="admin-info-row"><span class="admin-label">Freshness</span><b class="admin-value">{{ $intelligence['freshness_label'] ?? 'Source: Current system records' }}</b></div>
-        </div>
-    </section>
+    </details>
 </div>
 @endsection

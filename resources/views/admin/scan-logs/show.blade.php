@@ -97,7 +97,6 @@
             <div class="scan-panel-body">
                 @if($payment)
                     <div class="scan-row"><span class="admin-label">Status</span><span class="admin-value">Verified</span></div>
-                    <div class="scan-row"><span class="admin-label">Remita RRR</span><span class="admin-value mono">{{ $payment->rrr_number }}</span></div>
                     <div class="scan-row"><span class="admin-label">Amount</span><span class="admin-value mono">{{ number_format((float) $payment->amount_confirmed, 2) }}</span></div>
                     <div class="scan-row"><span class="admin-label">Verified</span><span class="admin-value mono">{{ $payment->verified_at }}</span></div>
                 @else
