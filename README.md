@@ -1,5 +1,7 @@
 # CERNIX — Secure Exam Access & Verification System
 
+> **Important:** CERNIX is a final year academic project demonstration. Payment verification uses Remita's demo environment — no real fees are collected. Student identity verification uses a simulated SIS. This system is not connected to any institution's live payment or student records system.
+
 CERNIX is a Laravel-based examination access and verification system for Adekunle Ajasin University project work. It links student identity, school-fee/payment status, timetable context, and a server-verifiable QR exam pass so exam access can be checked quickly and consistently at the venue.
 
 Students register through a guided portal, select their faculty, department, level, and student number, and CERNIX generates the full matric number from the configured Faculty of Computing code map. The system validates the generated record, confirms the required department fee/payment state, and issues a one-time QR exam pass.
