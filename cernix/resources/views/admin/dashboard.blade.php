@@ -285,6 +285,7 @@
     }
     .admin-sidebar.open { transform: translateX(0); }
     .hamburger { display: flex; }
+    .admin-logo-mobile { display: block !important; }
     .admin-content { padding: 16px; }
     .admin-header { padding: 12px 16px; }
     .admin-header h1 { font-size: 16px; }
@@ -313,9 +314,9 @@
 <div class="admin-wrap">
     <!-- ── Sidebar ── -->
     <div class="admin-sidebar" id="admin-sidebar">
-        <div class="logo-mini">
-            <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24" style="display:inline;vertical-align:-2px;margin-right:6px"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-            CERNIX
+        <div class="logo-mini" style="display:flex;align-items:center;gap:8px;padding:0 4px 0 2px;">
+            <img src="/aaua-logo.png" alt="AAUA" style="height:26px;width:auto;flex-shrink:0;display:block;">
+            <span style="font-size:11px;font-weight:700;letter-spacing:.1em;color:var(--navy);">CERNIX</span>
         </div>
 
         <div class="nav-section">
@@ -344,7 +345,7 @@
                 <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>
                 <span>Examiners</span>
             </a>
-            <a href="#" class="nav-item">
+            <a href="#" class="nav-item" onclick="switchTab(4);closeSidebar();return false;">
                 <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
                 <span>Students (SIS)</span>
             </a>
@@ -353,7 +354,7 @@
         <div class="nav-spacer"></div>
 
         <div class="nav-section">
-            <a href="#" class="nav-item">
+            <a href="#" class="nav-item" onclick="switchTab(5);closeSidebar();return false;">
                 <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
                 <span>Settings</span>
             </a>
@@ -372,6 +373,7 @@
                 <button class="hamburger" onclick="openSidebar()" aria-label="Open menu">
                     <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
                 </button>
+                <img src="/aaua-logo.png" alt="AAUA" style="height:28px;width:auto;display:none;flex-shrink:0;" class="admin-logo-mobile" id="admin-logo-mobile">
                 <h1>Admin Dashboard</h1>
             </div>
             <div class="admin-header-right">
@@ -479,6 +481,14 @@
                     <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="display:inline;vertical-align:-2px;margin-right:5px"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>
                     Examiners
                     <span style="margin-left:6px;background:var(--line-2);border-radius:999px;padding:1px 7px;font-size:10px;font-weight:700;">{{ $stats['examiners'] }}</span>
+                </button>
+                <button onclick="switchTab(4)">
+                    <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="display:inline;vertical-align:-2px;margin-right:5px"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                    Students (SIS)
+                </button>
+                <button onclick="switchTab(5)">
+                    <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="display:inline;vertical-align:-2px;margin-right:5px"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+                    Settings
                 </button>
             </div>
 
@@ -673,6 +683,113 @@
                         No examiners registered yet.
                     </div>
                     @endforelse
+                </div>
+            </div>
+
+            <!-- Tab: Students (SIS) -->
+            <div class="tab-panel" id="tab-4" style="display:none;">
+                @php
+                    $sisList = \Illuminate\Support\Facades\DB::table('mock_sis')->orderBy('matric_no')->get();
+                @endphp
+                <div class="panel">
+                    <div class="panel-head">
+                        <h3>Student Information System (SIS)</h3>
+                        <span class="count">{{ $sisList->count() }} records</span>
+                    </div>
+                    @forelse($sisList as $sis)
+                    @php
+                        $sisName     = $sis->full_name   ?? '—';
+                        $sisDept     = $sis->department  ?? '—';
+                        $sisInitials = collect(explode(' ', $sisName))->map(fn($w) => strtoupper($w[0] ?? ''))->take(2)->implode('');
+                        $sisPhoto    = $sis->photo_path  ?? null;
+                        $hasPhoto    = $sisPhoto && file_exists(public_path($sisPhoto));
+                    @endphp
+                    <div class="examiner-row">
+                        <div class="ex-av" style="border-radius:6px;overflow:hidden;background:var(--line);">
+                            @if($hasPhoto)
+                                <img src="/photo-thumb/{{ basename($sisPhoto) }}" alt="{{ $sisInitials }}"
+                                     style="width:100%;height:100%;object-fit:cover;object-position:center top;display:block;">
+                            @else
+                                {{ $sisInitials ?: 'S' }}
+                            @endif
+                        </div>
+                        <div class="ex-bd">
+                            <b>{{ $sisName }}</b>
+                            <span style="font-family:inherit;">{{ $sis->matric_no ?? '—' }} &middot; {{ $sisDept }}</span>
+                        </div>
+                        <span class="chip" style="background:rgba(45,108,255,.1);color:var(--blue);font-size:10px;">
+                            {{ strtoupper(Str::limit($sisDept, 14)) }}
+                        </span>
+                    </div>
+                    @empty
+                    <div class="empty-state">
+                        <svg width="32" height="32" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24" style="margin:0 auto 10px;display:block;opacity:.3"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
+                        No SIS records found.
+                    </div>
+                    @endforelse
+                </div>
+            </div>
+
+            <!-- Tab: Settings -->
+            <div class="tab-panel" id="tab-5" style="display:none;">
+                <div class="panel" style="margin-bottom:16px;">
+                    <div class="panel-head">
+                        <h3>System Configuration</h3>
+                        <span class="count">Read-only</span>
+                    </div>
+                    @php
+                        $cfg = $activeSession;
+                    @endphp
+                    <div style="padding:20px;display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px;">
+                        <div class="res-mc" style="background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:12px 14px;">
+                            <div style="font-size:9px;color:var(--ink-4);font-weight:700;letter-spacing:.07em;text-transform:uppercase;">Crypto — Payload</div>
+                            <div style="font-size:13px;font-weight:700;margin-top:5px;font-family:'JetBrains Mono',monospace;color:var(--ink);">AES-256-GCM</div>
+                        </div>
+                        <div class="res-mc" style="background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:12px 14px;">
+                            <div style="font-size:9px;color:var(--ink-4);font-weight:700;letter-spacing:.07em;text-transform:uppercase;">Crypto — Signature</div>
+                            <div style="font-size:13px;font-weight:700;margin-top:5px;font-family:'JetBrains Mono',monospace;color:var(--ink);">HMAC-SHA256</div>
+                        </div>
+                        <div class="res-mc" style="background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:12px 14px;">
+                            <div style="font-size:9px;color:var(--ink-4);font-weight:700;letter-spacing:.07em;text-transform:uppercase;">Session AES Key</div>
+                            <div style="font-size:13px;font-weight:700;margin-top:5px;font-family:'JetBrains Mono',monospace;color:var(--ink);">{{ $cfg ? (strlen($cfg->aes_key ?? '') > 0 ? '✓ Set (' . strlen($cfg->aes_key) . ' chars)' : '✗ Missing') : 'No active session' }}</div>
+                        </div>
+                        <div class="res-mc" style="background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:12px 14px;">
+                            <div style="font-size:9px;color:var(--ink-4);font-weight:700;letter-spacing:.07em;text-transform:uppercase;">Session HMAC Secret</div>
+                            <div style="font-size:13px;font-weight:700;margin-top:5px;font-family:'JetBrains Mono',monospace;color:var(--ink);">{{ $cfg ? (strlen($cfg->hmac_secret ?? '') > 0 ? '✓ Set (' . strlen($cfg->hmac_secret) . ' chars)' : '✗ Missing') : 'No active session' }}</div>
+                        </div>
+                        <div class="res-mc" style="background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:12px 14px;">
+                            <div style="font-size:9px;color:var(--ink-4);font-weight:700;letter-spacing:.07em;text-transform:uppercase;">Verify Timer — Approved</div>
+                            <div style="font-size:13px;font-weight:700;margin-top:5px;font-family:'JetBrains Mono',monospace;color:var(--ink);">12 seconds</div>
+                        </div>
+                        <div class="res-mc" style="background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:12px 14px;">
+                            <div style="font-size:9px;color:var(--ink-4);font-weight:700;letter-spacing:.07em;text-transform:uppercase;">Verify Timer — Rejected/Dup</div>
+                            <div style="font-size:13px;font-weight:700;margin-top:5px;font-family:'JetBrains Mono',monospace;color:var(--ink);">14 seconds</div>
+                        </div>
+                        <div class="res-mc" style="background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:12px 14px;">
+                            <div style="font-size:9px;color:var(--ink-4);font-weight:700;letter-spacing:.07em;text-transform:uppercase;">PHP Version</div>
+                            <div style="font-size:13px;font-weight:700;margin-top:5px;font-family:'JetBrains Mono',monospace;color:var(--ink);">{{ phpversion() }}</div>
+                        </div>
+                        <div class="res-mc" style="background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:12px 14px;">
+                            <div style="font-size:9px;color:var(--ink-4);font-weight:700;letter-spacing:.07em;text-transform:uppercase;">Environment</div>
+                            <div style="font-size:13px;font-weight:700;margin-top:5px;font-family:'JetBrains Mono',monospace;color:var(--ink);">{{ strtoupper(app()->environment()) }}</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="panel">
+                    <div class="panel-head" style="background:rgba(180,83,9,.05);border-color:rgba(180,83,9,.18);">
+                        <div style="display:flex;align-items:center;gap:8px;">
+                            <svg width="14" height="14" fill="none" stroke="var(--amber)" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                            <h3 style="color:var(--amber);">Settings Management</h3>
+                        </div>
+                    </div>
+                    <div style="padding:20px 20px 24px;">
+                        <p style="font-size:13px;color:var(--ink-2);margin:0 0 10px;line-height:1.6;">
+                            Full settings management — including session key rotation, examiner permissions, and timing configuration — is managed directly in the database or via the seeding commands during the current development phase.
+                        </p>
+                        <p style="font-size:12px;color:var(--ink-3);margin:0;font-family:'JetBrains Mono',monospace;">
+                            To modify cryptographic parameters, contact the IT administrator or run <code style="background:var(--bg);padding:2px 6px;border-radius:4px;border:1px solid var(--line);">php artisan db:seed</code> with the appropriate seeder.
+                        </p>
+                    </div>
                 </div>
             </div>
 

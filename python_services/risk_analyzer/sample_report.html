@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CERNIX Intelligence Report</title>
+  <style>
+    :root { color-scheme: light; --ink:#111827; --muted:#667085; --line:#e5e7eb; --navy:#0f2347; --soft:#f8fafc; }
+    body { margin:0; font-family: Arial, Helvetica, sans-serif; background:#f4f6f8; color:var(--ink); }
+    main { max-width: 1040px; margin: 0 auto; padding: 32px 18px; }
+    header { background:white; border:1px solid var(--line); border-radius:16px; padding:22px; margin-bottom:18px; }
+    h1 { margin:0; color:var(--navy); font-size:28px; }
+    h2 { margin:0 0 12px; color:var(--navy); font-size:18px; }
+    p { color:var(--muted); line-height:1.5; }
+    .grid { display:grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap:12px; margin-top:18px; }
+    .metric, section { background:white; border:1px solid var(--line); border-radius:14px; padding:16px; }
+    .metric span { display:block; color:var(--muted); font-size:12px; font-weight:700; text-transform:uppercase; }
+    .metric b { display:block; margin-top:8px; font-size:24px; color:var(--navy); }
+    section { margin-top:16px; }
+    table { width:100%; border-collapse:collapse; font-size:14px; }
+    th, td { text-align:left; border-bottom:1px solid var(--line); padding:9px 8px; vertical-align:top; }
+    th { color:var(--muted); font-size:12px; text-transform:uppercase; }
+    .pill { display:inline-block; border-radius:999px; padding:3px 8px; font-size:12px; font-weight:700; background:#eef2ff; color:#1e3a8a; }
+    ul { margin:8px 0 0 18px; padding:0; }
+    li { margin:6px 0; }
+    .empty { color:var(--muted); background:var(--soft); border-radius:10px; padding:12px; }
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>CERNIX Intelligence Report</h1>
+    <p>Rule-based scan, examiner, scanner, network, and payment/demo-mode risk analysis. Generated 2026-05-25T16:18:59.729754+00:00.</p>
+    <div class="grid"><div class="metric"><span>Total scans</span><b>8</b></div><div class="metric"><span>Approved</span><b>1</b></div><div class="metric"><span>Rejected</span><b>4</b></div><div class="metric"><span>Repeated</span><b>3</b></div><div class="metric"><span>Approval rate</span><b>12.5%</b></div><div class="metric"><span>Overall risk</span><b>Critical</b></div></div>
+  </header>
+  <section>
+    <h2>Risk Distribution</h2>
+    <div class="grid"><div class="metric"><span>Low</span><b>0</b></div><div class="metric"><span>Medium</span><b>2</b></div><div class="metric"><span>High</span><b>1</b></div><div class="metric"><span>Critical</span><b>7</b></div></div>
+  </section>
+  <section>
+    <h2>Department Trends</h2>
+    <table><thead><tr><th>Department</th><th>Scans</th><th>Approved</th><th>Rejected</th><th>Repeated</th><th>Repeated rate</th><th>Rejection rate</th></tr></thead><tbody><tr><td>Data Science</td><td>3</td><td>0</td><td>3</td><td>0</td><td>0.0%</td><td>100.0%</td></tr><tr><td>Computer Science</td><td>3</td><td>1</td><td>0</td><td>2</td><td>66.67%</td><td>0.0%</td></tr><tr><td>Software Engineering</td><td>1</td><td>0</td><td>0</td><td>1</td><td>100.0%</td><td>0.0%</td></tr><tr><td>Cyber Security</td><td>1</td><td>0</td><td>1</td><td>0</td><td>0.0%</td><td>100.0%</td></tr></tbody></table>
+  </section>
+  <section>
+    <h2>Level Trends</h2>
+    <table><thead><tr><th>Level</th><th>Scans</th><th>Approved</th><th>Rejected</th><th>Repeated</th><th>Repeated rate</th><th>Rejection rate</th></tr></thead><tbody><tr><td>300</td><td>4</td><td>0</td><td>4</td><td>0</td><td>0.0%</td><td>100.0%</td></tr><tr><td>400</td><td>2</td><td>1</td><td>0</td><td>1</td><td>50.0%</td><td>0.0%</td></tr><tr><td>100</td><td>1</td><td>0</td><td>0</td><td>1</td><td>100.0%</td><td>0.0%</td></tr><tr><td>200</td><td>1</td><td>0</td><td>0</td><td>1</td><td>100.0%</td><td>0.0%</td></tr></tbody></table>
+  </section>
+  <section>
+    <h2>High-Risk Students</h2>
+    <table><thead><tr><th>Student</th><th>Class</th><th>Risk</th><th>Reasons</th><th>Recommendation</th></tr></thead><tbody><tr><td>230408010<br><small>Amara Blessing Nwankwo</small></td><td>Data Science<br><small>300</small></td><td><span class="pill">critical</span><br>130</td><td>student has repeated rejected scans; student appears on multiple device fingerprints; student appears from multiple IP addresses; payment status is missing or not verified; exam pass status needs review; scan happened outside expected exam time; repeated scans happened within two minutes</td><td>Investigate repeated access activity before this student is cleared.</td></tr><tr><td>220404008<br><small>Chukwuemeka Daniel Nwosu</small></td><td>Computer Science<br><small>400</small></td><td><span class="pill">critical</span><br>90</td><td>This exam pass was scanned again after approval; 1 duplicate/repeated scan attempt(s); repeated scans happened within two minutes</td><td>Investigate repeated access activity before this student is cleared.</td></tr><tr><td>250405011<br><small>Femi Joshua Akinola</small></td><td>Software Engineering<br><small>100</small></td><td><span class="pill">critical</span><br>75</td><td>This exam pass was scanned again after approval; 1 duplicate/repeated scan attempt(s)</td><td>Investigate repeated access activity before this student is cleared.</td></tr><tr><td>240404012<br><small>Ibrahim Musa Adamu</small></td><td>Computer Science<br><small>200</small></td><td><span class="pill">critical</span><br>75</td><td>This exam pass was scanned again after approval; 1 duplicate/repeated scan attempt(s)</td><td>Investigate repeated access activity before this student is cleared.</td></tr></tbody></table>
+  </section>
+  <section>
+    <h2>Suspicious Examiners</h2>
+    <table><thead><tr><th>Examiner</th><th>Scans</th><th>A/R/D</th><th>Risk</th><th>Reasons</th><th>Recommendation</th></tr></thead><tbody><tr><td>3<br><small>Examiner Two</small></td><td>6</td><td>0/4/2</td><td><span class="pill">critical</span><br>110</td><td>repeated scan attempts recorded; rejected scan volume requires review; too many scans processed in a short time window; examiner appears across many devices or IP addresses; examiner is linked to multiple suspicious students; examiner has scans outside expected exam time windows</td><td>Confirm device assignment and check whether scanner access was shared.</td></tr><tr><td>2<br><small>Examiner One</small></td><td>2</td><td>1/0/1</td><td><span class="pill">high</span><br>50</td><td>repeated scan attempts recorded; same student/token scanned repeatedly</td><td>Review examiner activity log.</td></tr></tbody></table>
+  </section>
+  <section>
+    <h2>Scanner And Network Patterns</h2>
+    <table><thead><tr><th>Type</th><th>Identifier</th><th>Scans</th><th>Students</th><th>Examiners</th><th>Risk</th><th>Recommendation</th></tr></thead><tbody><tr><td>device</td><td>device-shared</td><td>5</td><td>4</td><td>1</td><td><span class="pill">critical</span></td><td>Confirm whether this scanner device was shared or reused across halls.</td></tr><tr><td>device</td><td>device-alpha</td><td>2</td><td>1</td><td>1</td><td><span class="pill">medium</span></td><td>Confirm whether this scanner device was shared or reused across halls.</td></tr><tr><td>ip</td><td>10.10.0.50</td><td>4</td><td>4</td><td>1</td><td><span class="pill">critical</span></td><td>Review network/source IP context for repeated failed scan attempts.</td></tr><tr><td>ip</td><td>10.10.0.11</td><td>2</td><td>1</td><td>1</td><td><span class="pill">medium</span></td><td>Review network/source IP context for repeated failed scan attempts.</td></tr></tbody></table>
+  </section>
+  <section>
+    <h2>Recommendations</h2>
+    <ul><li>Review high and medium risk findings before exam-day reporting is finalized.</li><li>Compare flagged scans with physical hall attendance and examiner assignment.</li><li>Verify student payment/access records for flagged students.</li><li>Review examiner activity logs and scanner-device assignment.</li><li>Check repeated scanner or network patterns for shared-device behavior.</li></ul>
+  </section>
+</main>
+</body>
+</html>

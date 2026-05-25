@@ -1,0 +1,525 @@
+{
+  "generated_at": "2026-05-25T16:18:59.729754+00:00",
+  "source": "python_risk_analyzer",
+  "summary": {
+    "total_scans": 8,
+    "approved_count": 1,
+    "rejected_count": 4,
+    "duplicate_count": 3,
+    "approval_rate": 12.5,
+    "duplicate_rate": 37.5,
+    "rejection_rate": 50.0,
+    "total_students": 5,
+    "verified_payments": 5,
+    "qr_issued": 7
+  },
+  "risk_overview": {
+    "critical_risk_students_count": 4,
+    "high_risk_students_count": 0,
+    "medium_risk_students_count": 0,
+    "suspicious_examiners_count": 2,
+    "suspicious_devices_count": 2,
+    "suspicious_ips_count": 2,
+    "duplicate_attempts": 3,
+    "rejected_attempts": 4
+  },
+  "risk_distribution": {
+    "low": 0,
+    "medium": 2,
+    "high": 1,
+    "critical": 7
+  },
+  "department_trends": [
+    {
+      "label": "Data Science",
+      "total_scans": 3,
+      "approved_count": 0,
+      "rejected_count": 3,
+      "duplicate_count": 0,
+      "approval_rate": 0.0,
+      "duplicate_rate": 0.0,
+      "rejection_rate": 100.0,
+      "risk_score": 45
+    },
+    {
+      "label": "Computer Science",
+      "total_scans": 3,
+      "approved_count": 1,
+      "rejected_count": 0,
+      "duplicate_count": 2,
+      "approval_rate": 33.33,
+      "duplicate_rate": 66.67,
+      "rejection_rate": 0.0,
+      "risk_score": 40
+    },
+    {
+      "label": "Software Engineering",
+      "total_scans": 1,
+      "approved_count": 0,
+      "rejected_count": 0,
+      "duplicate_count": 1,
+      "approval_rate": 0.0,
+      "duplicate_rate": 100.0,
+      "rejection_rate": 0.0,
+      "risk_score": 20
+    },
+    {
+      "label": "Cyber Security",
+      "total_scans": 1,
+      "approved_count": 0,
+      "rejected_count": 1,
+      "duplicate_count": 0,
+      "approval_rate": 0.0,
+      "duplicate_rate": 0.0,
+      "rejection_rate": 100.0,
+      "risk_score": 15
+    }
+  ],
+  "level_trends": [
+    {
+      "label": "300",
+      "total_scans": 4,
+      "approved_count": 0,
+      "rejected_count": 4,
+      "duplicate_count": 0,
+      "approval_rate": 0.0,
+      "duplicate_rate": 0.0,
+      "rejection_rate": 100.0,
+      "risk_score": 60
+    },
+    {
+      "label": "400",
+      "total_scans": 2,
+      "approved_count": 1,
+      "rejected_count": 0,
+      "duplicate_count": 1,
+      "approval_rate": 50.0,
+      "duplicate_rate": 50.0,
+      "rejection_rate": 0.0,
+      "risk_score": 20
+    },
+    {
+      "label": "100",
+      "total_scans": 1,
+      "approved_count": 0,
+      "rejected_count": 0,
+      "duplicate_count": 1,
+      "approval_rate": 0.0,
+      "duplicate_rate": 100.0,
+      "rejection_rate": 0.0,
+      "risk_score": 20
+    },
+    {
+      "label": "200",
+      "total_scans": 1,
+      "approved_count": 0,
+      "rejected_count": 0,
+      "duplicate_count": 1,
+      "approval_rate": 0.0,
+      "duplicate_rate": 100.0,
+      "rejection_rate": 0.0,
+      "risk_score": 20
+    }
+  ],
+  "key_observations": [
+    "Repeated attempts were concentrated in Computer Science (2 repeated scans).",
+    "Device device-shared appeared across 4 students.",
+    "Examiner 3 has a suspicious score of 110.",
+    "4 medium/high risk student record(s) require review.",
+    "IP 10.10.0.50 generated 2 rejected scans."
+  ],
+  "student_risks": [
+    {
+      "matric_no": "230408010",
+      "student_name": "Amara Blessing Nwankwo",
+      "department": "Data Science",
+      "level": "300",
+      "score": 130,
+      "risk_level": "critical",
+      "reasons": [
+        "student has repeated rejected scans",
+        "student appears on multiple device fingerprints",
+        "student appears from multiple IP addresses",
+        "payment status is missing or not verified",
+        "exam pass status needs review",
+        "scan happened outside expected exam time",
+        "repeated scans happened within two minutes"
+      ],
+      "recommendation": "Investigate repeated access activity before this student is cleared.",
+      "scan_count": 3,
+      "duplicate_count": 0,
+      "rejected_count": 3,
+      "device_count": 2,
+      "ip_count": 3,
+      "last_activity": "2026-05-24T13:30:00+00:00"
+    },
+    {
+      "matric_no": "220404008",
+      "student_name": "Chukwuemeka Daniel Nwosu",
+      "department": "Computer Science",
+      "level": "400",
+      "score": 90,
+      "risk_level": "critical",
+      "reasons": [
+        "This exam pass was scanned again after approval",
+        "1 duplicate/repeated scan attempt(s)",
+        "repeated scans happened within two minutes"
+      ],
+      "recommendation": "Investigate repeated access activity before this student is cleared.",
+      "scan_count": 2,
+      "duplicate_count": 1,
+      "rejected_count": 0,
+      "device_count": 1,
+      "ip_count": 1,
+      "last_activity": "2026-05-24T09:00:35+00:00"
+    },
+    {
+      "matric_no": "250405011",
+      "student_name": "Femi Joshua Akinola",
+      "department": "Software Engineering",
+      "level": "100",
+      "score": 75,
+      "risk_level": "critical",
+      "reasons": [
+        "This exam pass was scanned again after approval",
+        "1 duplicate/repeated scan attempt(s)"
+      ],
+      "recommendation": "Investigate repeated access activity before this student is cleared.",
+      "scan_count": 1,
+      "duplicate_count": 1,
+      "rejected_count": 0,
+      "device_count": 1,
+      "ip_count": 1,
+      "last_activity": "2026-05-24T09:02:30+00:00"
+    },
+    {
+      "matric_no": "240404012",
+      "student_name": "Ibrahim Musa Adamu",
+      "department": "Computer Science",
+      "level": "200",
+      "score": 75,
+      "risk_level": "critical",
+      "reasons": [
+        "This exam pass was scanned again after approval",
+        "1 duplicate/repeated scan attempt(s)"
+      ],
+      "recommendation": "Investigate repeated access activity before this student is cleared.",
+      "scan_count": 1,
+      "duplicate_count": 1,
+      "rejected_count": 0,
+      "device_count": 1,
+      "ip_count": 1,
+      "last_activity": "2026-05-24T09:03:00+00:00"
+    }
+  ],
+  "high_risk_students": [
+    {
+      "matric_no": "230408010",
+      "student_name": "Amara Blessing Nwankwo",
+      "department": "Data Science",
+      "level": "300",
+      "score": 130,
+      "risk_level": "critical",
+      "reasons": [
+        "student has repeated rejected scans",
+        "student appears on multiple device fingerprints",
+        "student appears from multiple IP addresses",
+        "payment status is missing or not verified",
+        "exam pass status needs review",
+        "scan happened outside expected exam time",
+        "repeated scans happened within two minutes"
+      ],
+      "recommendation": "Investigate repeated access activity before this student is cleared.",
+      "scan_count": 3,
+      "duplicate_count": 0,
+      "rejected_count": 3,
+      "device_count": 2,
+      "ip_count": 3,
+      "last_activity": "2026-05-24T13:30:00+00:00"
+    },
+    {
+      "matric_no": "220404008",
+      "student_name": "Chukwuemeka Daniel Nwosu",
+      "department": "Computer Science",
+      "level": "400",
+      "score": 90,
+      "risk_level": "critical",
+      "reasons": [
+        "This exam pass was scanned again after approval",
+        "1 duplicate/repeated scan attempt(s)",
+        "repeated scans happened within two minutes"
+      ],
+      "recommendation": "Investigate repeated access activity before this student is cleared.",
+      "scan_count": 2,
+      "duplicate_count": 1,
+      "rejected_count": 0,
+      "device_count": 1,
+      "ip_count": 1,
+      "last_activity": "2026-05-24T09:00:35+00:00"
+    },
+    {
+      "matric_no": "250405011",
+      "student_name": "Femi Joshua Akinola",
+      "department": "Software Engineering",
+      "level": "100",
+      "score": 75,
+      "risk_level": "critical",
+      "reasons": [
+        "This exam pass was scanned again after approval",
+        "1 duplicate/repeated scan attempt(s)"
+      ],
+      "recommendation": "Investigate repeated access activity before this student is cleared.",
+      "scan_count": 1,
+      "duplicate_count": 1,
+      "rejected_count": 0,
+      "device_count": 1,
+      "ip_count": 1,
+      "last_activity": "2026-05-24T09:02:30+00:00"
+    },
+    {
+      "matric_no": "240404012",
+      "student_name": "Ibrahim Musa Adamu",
+      "department": "Computer Science",
+      "level": "200",
+      "score": 75,
+      "risk_level": "critical",
+      "reasons": [
+        "This exam pass was scanned again after approval",
+        "1 duplicate/repeated scan attempt(s)"
+      ],
+      "recommendation": "Investigate repeated access activity before this student is cleared.",
+      "scan_count": 1,
+      "duplicate_count": 1,
+      "rejected_count": 0,
+      "device_count": 1,
+      "ip_count": 1,
+      "last_activity": "2026-05-24T09:03:00+00:00"
+    }
+  ],
+  "suspicious_examiners": [
+    {
+      "examiner_id": "3",
+      "examiner_name": "Examiner Two",
+      "total_scans": 6,
+      "approved_count": 0,
+      "rejected_count": 4,
+      "duplicate_count": 2,
+      "suspicious_score": 110,
+      "risk_level": "critical",
+      "reasons": [
+        "repeated scan attempts recorded",
+        "rejected scan volume requires review",
+        "too many scans processed in a short time window",
+        "examiner appears across many devices or IP addresses",
+        "examiner is linked to multiple suspicious students",
+        "examiner has scans outside expected exam time windows"
+      ],
+      "recommendation": "Confirm device assignment and check whether scanner access was shared.",
+      "max_two_minute_burst": 4,
+      "device_count": 2,
+      "ip_count": 3,
+      "suspicious_students_count": 4,
+      "last_activity": "2026-05-24T13:30:00+00:00"
+    },
+    {
+      "examiner_id": "2",
+      "examiner_name": "Examiner One",
+      "total_scans": 2,
+      "approved_count": 1,
+      "rejected_count": 0,
+      "duplicate_count": 1,
+      "suspicious_score": 50,
+      "risk_level": "high",
+      "reasons": [
+        "repeated scan attempts recorded",
+        "same student/token scanned repeatedly"
+      ],
+      "recommendation": "Review examiner activity log.",
+      "max_two_minute_burst": 2,
+      "device_count": 1,
+      "ip_count": 1,
+      "suspicious_students_count": 1,
+      "last_activity": "2026-05-24T09:00:35+00:00"
+    }
+  ],
+  "suspicious_devices": [
+    {
+      "identifier": "device-shared",
+      "type": "device",
+      "total_scans": 5,
+      "unique_students": 4,
+      "unique_examiners": 1,
+      "duplicate_count": 2,
+      "rejected_count": 3,
+      "score": 95,
+      "risk_level": "critical",
+      "reasons": [
+        "identifier appears across many students",
+        "identifier produced many rejected scans",
+        "scanner or network pattern produced many repeated scans",
+        "repeated failed attempts from this identifier"
+      ],
+      "recommendation": "Confirm whether this scanner device was shared or reused across halls."
+    },
+    {
+      "identifier": "device-alpha",
+      "type": "device",
+      "total_scans": 2,
+      "unique_students": 1,
+      "unique_examiners": 1,
+      "duplicate_count": 1,
+      "rejected_count": 0,
+      "score": 25,
+      "risk_level": "medium",
+      "reasons": [
+        "scanner or network pattern produced many repeated scans"
+      ],
+      "recommendation": "Confirm whether this scanner device was shared or reused across halls."
+    }
+  ],
+  "suspicious_ips": [
+    {
+      "identifier": "10.10.0.50",
+      "type": "ip",
+      "total_scans": 4,
+      "unique_students": 4,
+      "unique_examiners": 1,
+      "duplicate_count": 2,
+      "rejected_count": 2,
+      "score": 95,
+      "risk_level": "critical",
+      "reasons": [
+        "identifier appears across many students",
+        "identifier produced many rejected scans",
+        "scanner or network pattern produced many repeated scans",
+        "repeated failed attempts from this identifier"
+      ],
+      "recommendation": "Review network/source IP context for repeated failed scan attempts."
+    },
+    {
+      "identifier": "10.10.0.11",
+      "type": "ip",
+      "total_scans": 2,
+      "unique_students": 1,
+      "unique_examiners": 1,
+      "duplicate_count": 1,
+      "rejected_count": 0,
+      "score": 25,
+      "risk_level": "medium",
+      "reasons": [
+        "scanner or network pattern produced many repeated scans"
+      ],
+      "recommendation": "Review network/source IP context for repeated failed scan attempts."
+    }
+  ],
+  "daily_summary": {
+    "total_scans": 8,
+    "approved_count": 1,
+    "rejected_count": 4,
+    "duplicate_count": 3,
+    "approval_rate": 12.5,
+    "duplicate_rate": 37.5,
+    "rejection_rate": 50.0,
+    "most_active_department": {
+      "label": "Computer Science",
+      "count": 3
+    },
+    "most_active_level": {
+      "label": "300",
+      "count": 4
+    },
+    "top_examiner_by_scans": {
+      "examiner_id": "3",
+      "examiner_name": "Examiner Two",
+      "scan_count": 6
+    },
+    "highest_risk_student": {
+      "matric_no": "230408010",
+      "student_name": "Amara Blessing Nwankwo",
+      "department": "Data Science",
+      "level": "300",
+      "score": 130,
+      "risk_level": "critical",
+      "reasons": [
+        "student has repeated rejected scans",
+        "student appears on multiple device fingerprints",
+        "student appears from multiple IP addresses",
+        "payment status is missing or not verified",
+        "exam pass status needs review",
+        "scan happened outside expected exam time",
+        "repeated scans happened within two minutes"
+      ],
+      "recommendation": "Investigate repeated access activity before this student is cleared.",
+      "scan_count": 3,
+      "duplicate_count": 0,
+      "rejected_count": 3,
+      "device_count": 2,
+      "ip_count": 3,
+      "last_activity": "2026-05-24T13:30:00+00:00"
+    },
+    "highest_risk_examiner": {
+      "examiner_id": "3",
+      "examiner_name": "Examiner Two",
+      "total_scans": 6,
+      "approved_count": 0,
+      "rejected_count": 4,
+      "duplicate_count": 2,
+      "suspicious_score": 110,
+      "risk_level": "critical",
+      "reasons": [
+        "repeated scan attempts recorded",
+        "rejected scan volume requires review",
+        "too many scans processed in a short time window",
+        "examiner appears across many devices or IP addresses",
+        "examiner is linked to multiple suspicious students",
+        "examiner has scans outside expected exam time windows"
+      ],
+      "recommendation": "Confirm device assignment and check whether scanner access was shared.",
+      "max_two_minute_burst": 4,
+      "device_count": 2,
+      "ip_count": 3,
+      "suspicious_students_count": 4,
+      "last_activity": "2026-05-24T13:30:00+00:00"
+    },
+    "suspicious_device_count": 2,
+    "suspicious_ip_count": 2,
+    "key_observations": [
+      "Repeated attempts were concentrated in Computer Science (2 repeated scans).",
+      "Device device-shared appeared across 4 students.",
+      "Examiner 3 has a suspicious score of 110.",
+      "4 medium/high risk student record(s) require review.",
+      "IP 10.10.0.50 generated 2 rejected scans."
+    ],
+    "recommendations": [
+      "Review high and medium risk findings before exam-day reporting is finalized.",
+      "Compare flagged scans with physical hall attendance and examiner assignment.",
+      "Verify student payment/access records for flagged students.",
+      "Review examiner activity logs and scanner-device assignment.",
+      "Check repeated scanner or network patterns for shared-device behavior."
+    ]
+  },
+  "risk_summary": {
+    "low": 0,
+    "medium": 2,
+    "high": 1,
+    "critical": 7,
+    "overall_level": "critical"
+  },
+  "recommendations": [
+    "Review high and medium risk findings before exam-day reporting is finalized.",
+    "Compare flagged scans with physical hall attendance and examiner assignment.",
+    "Verify student payment/access records for flagged students.",
+    "Review examiner activity logs and scanner-device assignment.",
+    "Check repeated scanner or network patterns for shared-device behavior."
+  ],
+  "total_scans": 8,
+  "approved_count": 1,
+  "rejected_count": 4,
+  "duplicate_count": 3,
+  "approval_rate": 12.5,
+  "duplicate_rate": 37.5,
+  "rejection_rate": 50.0,
+  "total_students": 5,
+  "verified_payments": 5,
+  "qr_issued": 7
+}

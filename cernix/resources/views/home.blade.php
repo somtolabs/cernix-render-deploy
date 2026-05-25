@@ -125,8 +125,8 @@
 
         <div style="max-width:600px; margin:0 auto;">
             <div class="logo-mark">
-                <span class="logo-glyph"></span>
-                <span>CERNIX</span>
+                <img src="/aaua-logo.png" alt="AAUA" style="height:32px;width:auto;flex-shrink:0;display:block;">
+                <span>CERNIX &nbsp;·&nbsp; AAUA</span>
             </div>
 
             <h1 class="brand">
@@ -134,8 +134,8 @@
             </h1>
 
             <p class="tag">
-                End-to-end secure exam hall access control. AES-256-GCM encrypted QR tokens,
-                HMAC-verified identities, one-time admission.
+                End-to-end secure exam hall access control for Adekunle Ajasin University.
+                AES-256-GCM encrypted QR tokens, HMAC-verified identities, one-time admission.
             </p>
 
             <div class="stat-strip">
@@ -182,7 +182,7 @@
             </div>
         </a>
 
-        <a href="/presentation" class="portal">
+        <a href="/documentation" class="portal">
             <span class="accent-line"></span>
             <div class="ico admin">
                 <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
@@ -190,8 +190,8 @@
                 </svg>
             </div>
             <div class="txt">
-                <h3>How It Works</h3>
-                <p>Read a guide to the Cernix system and its cryptographic foundation</p>
+                <h3>Documentation</h3>
+                <p>System documentation — verification flow, cryptography, and examiner instructions</p>
             </div>
             <div class="arrow">
                 <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg>

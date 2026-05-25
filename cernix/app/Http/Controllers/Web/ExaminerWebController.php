@@ -123,6 +123,9 @@ class ExaminerWebController extends Controller
             $service = new VerificationService(new CryptoService());
             $result  = $service->verifyQr($data['qr_data'], $examinerId, $deviceFp, $ip);
 
+            // Surface examiner identity for the verification card
+            $result['examiner'] = $request->session()->get('examiner_name', 'Examiner');
+
             if ($result['status'] === 'APPROVED') {
                 app(AuditService::class)->logAction(
                     (string) $examinerId,

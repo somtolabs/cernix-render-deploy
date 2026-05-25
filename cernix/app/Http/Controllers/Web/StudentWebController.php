@@ -27,6 +27,7 @@ class StudentWebController extends Controller
         $data = $request->validate([
             'matric_no'  => 'required|string|max:50',
             'rrr_number' => 'required|string|max:50',
+            'photo'      => 'nullable|image|max:5120',
         ]);
 
         $session = DB::table('exam_sessions')->where('is_active', true)->first();
@@ -55,7 +56,26 @@ class StudentWebController extends Controller
                 'session_id'      => (int) $session->session_id,
             ]);
 
-            // Build the QR SVG — fetch hmac_signature from DB
+            // Handle optional photo upload — overwrites SIS photo for this student
+            $photoPath = $result['data']['photo_path'] ?? 'photos/placeholder.jpg';
+
+            if ($request->hasFile('photo') && $request->file('photo')->isValid()) {
+                $sanitized = preg_replace('/[^a-z0-9]/i', '_', strtolower($data['matric_no']));
+                $filename  = 'upload_' . $sanitized . '_' . time() . '.jpg';
+                $request->file('photo')->move(public_path('photos'), $filename);
+                $photoPath = 'photos/' . $filename;
+
+                DB::table('students')
+                    ->where('matric_no', $data['matric_no'])
+                    ->where('session_id', (int) $session->session_id)
+                    ->update(['photo_path' => $photoPath]);
+
+                DB::table('mock_sis')
+                    ->where('matric_no', $data['matric_no'])
+                    ->update(['photo_path' => $photoPath]);
+            }
+
+            // Build the QR SVG
             $tokenRow = DB::table('qr_tokens')
                 ->where('token_id', $result['data']['token_id'])
                 ->first();
@@ -68,7 +88,7 @@ class StudentWebController extends Controller
                 'session_id'        => (int) $session->session_id,
             ]);
 
-            // Fetch department name for QR pass display
+            // Fetch department name
             $deptRow = DB::table('students')
                 ->join('departments', 'students.department_id', '=', 'departments.dept_id')
                 ->where('students.matric_no', $data['matric_no'])
@@ -76,7 +96,6 @@ class StudentWebController extends Controller
                 ->select('departments.dept_name')
                 ->first();
 
-            // Audit the registration
             app(AuditService::class)->logAction(
                 $data['matric_no'],
                 'student',
@@ -91,6 +110,8 @@ class StudentWebController extends Controller
                     'qr_svg'     => $qrSvg,
                     'department' => $deptRow->dept_name ?? '',
                     'session_id' => (int) $session->session_id,
+                    'photo_path' => $photoPath,
+                    'photo_url'  => '/' . $photoPath,
                 ]),
             ]);
 

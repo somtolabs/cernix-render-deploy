@@ -17,7 +17,19 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware) {
-        //
+        // Trust all proxies so ngrok HTTPS headers are respected
+        $middleware->trustProxies(
+            at: '*',
+            headers: \Symfony\Component\HttpFoundation\Request::HEADER_X_FORWARDED_FOR |
+                     \Symfony\Component\HttpFoundation\Request::HEADER_X_FORWARDED_HOST |
+                     \Symfony\Component\HttpFoundation\Request::HEADER_X_FORWARDED_PORT |
+                     \Symfony\Component\HttpFoundation\Request::HEADER_X_FORWARDED_PROTO
+        );
+
+        // Bypass ngrok browser-warning interstitial on every response.
+        // Without this header, ngrok's free-tier CDN injects a "Visit Site" click-
+        // through page that breaks first-load on browsers and all mobile access.
+        $middleware->append(\App\Http\Middleware\NgrokHeaders::class);
     })
     ->withExceptions(function (Exceptions $exceptions) {
 

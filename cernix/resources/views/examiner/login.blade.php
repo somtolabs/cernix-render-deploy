@@ -4,233 +4,94 @@
 
 @section('content')
 <style>
-    /* ── Page ──────────────────────────────────────────── */
-    body { background: #f2f2f0; }
-    .lp {
-        min-height: 100vh;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        padding: 24px 20px;
-    }
+    .login-shell { min-height: 100vh; background: var(--bg); display: flex; flex-direction: column; animation: fadeUp .35s ease both; }
+    .login-body  { flex: 1; padding: 24px 20px 48px; max-width: 480px; margin: 0 auto; width: 100%; }
 
-    /* ── Card ──────────────────────────────────────────── */
-    .lp-card {
-        background: #fff;
-        border: 1px solid #e2e2e0;
-        border-radius: 16px;
-        padding: 36px 32px;
-        width: 100%;
-        max-width: 400px;
-        box-shadow: 0 1px 4px rgba(0,0,0,.05), 0 8px 28px rgba(0,0,0,.05);
-        animation: fadeUp .35s ease both;
+    .role-pill {
+        padding: 14px 16px; margin-bottom: 24px;
+        background: rgba(15,32,80,.04); border: 1px solid var(--line);
+        border-radius: 14px; display: flex; align-items: center; gap: 12px;
     }
+    .role-pill .rp-icon {
+        width: 36px; height: 36px; border-radius: 10px; background: var(--navy);
+        display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+    }
+    .role-pill b    { display: block; font-size: 13px; font-weight: 600; }
+    .role-pill span { font-size: 11px; color: var(--ink-3); }
 
-    /* ── Header mark ───────────────────────────────────── */
-    .lp-mark {
-        width: 38px;
-        height: 38px;
-        border-radius: 10px;
-        background: #1a1a1a;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        margin-bottom: 18px;
-    }
-    .lp-title {
-        font-size: 22px;
-        font-weight: 700;
-        color: #111;
-        margin: 0 0 5px;
-        letter-spacing: -.025em;
-    }
-    .lp-sub {
-        font-size: 13px;
-        color: #6b6b6b;
-        margin: 0 0 28px;
-        line-height: 1.55;
-    }
-
-    /* ── Fields ────────────────────────────────────────── */
-    .lp-field { margin-bottom: 14px; }
-    .lp-label {
-        display: block;
-        font-size: 12px;
-        font-weight: 600;
-        color: #444;
-        letter-spacing: .02em;
-        text-transform: uppercase;
-        margin-bottom: 7px;
-    }
-    .lp-input {
-        width: 100%;
-        padding: 11px 14px;
-        border: 1.5px solid #d6d6d4;
-        border-radius: 10px;
-        font-size: 14px;
-        background: #fff;
-        color: #111;
-        transition: border-color .15s, box-shadow .15s;
-        outline: none;
-    }
-    .lp-input:hover:not(:focus) { border-color: #b0b0ae; }
-    .lp-input:focus {
-        border-color: #3b82f6;
-        box-shadow: 0 0 0 3px rgba(59,130,246,.1);
-    }
-    .lp-pw-wrap { position: relative; }
-    .lp-pw-toggle {
-        position: absolute;
-        right: 4px;
-        top: 4px;
-        width: 38px;
-        height: 38px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        color: #9ca3af;
-        border-radius: 8px;
-        background: none;
-        border: none;
-        cursor: pointer;
-        transition: color .15s;
-    }
-    .lp-pw-toggle:hover { color: #6b6b6b; }
-
-    /* ── Error ─────────────────────────────────────────── */
-    .lp-error {
-        display: none;
-        padding: 10px 13px;
-        background: #fef2f2;
-        border: 1px solid #fecaca;
-        border-radius: 9px;
-        font-size: 13px;
-        color: #b91c1c;
-        margin-bottom: 14px;
-        align-items: center;
-        gap: 8px;
-    }
-    .lp-error.show { display: flex; }
-
-    /* ── Submit ────────────────────────────────────────── */
-    .lp-btn {
-        width: 100%;
-        padding: 12px;
-        background: #1a1a1a;
-        color: #fff;
-        border: none;
-        border-radius: 10px;
-        font-size: 14px;
-        font-weight: 600;
-        cursor: pointer;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        gap: 8px;
-        transition: background .15s, transform .15s;
-        margin-top: 4px;
-    }
-    .lp-btn:hover { background: #2a2a2a; }
-    .lp-btn:active { transform: scale(.99); }
-    .lp-btn:disabled { opacity: .55; cursor: not-allowed; }
-
-    /* ── Footer note ───────────────────────────────────── */
-    .lp-note {
-        margin-top: 20px;
-        font-size: 11px;
-        color: #a8a8a6;
-        text-align: center;
-        line-height: 1.55;
-    }
-
-    /* ── Back button ───────────────────────────────────── */
-    .lp-back {
-        position: fixed;
-        top: 20px;
-        left: 20px;
-        z-index: 10;
-        width: 36px;
-        height: 36px;
-        background: #fff;
-        border: 1px solid #e2e2e0;
-        border-radius: 10px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        color: #444;
-        text-decoration: none;
-        transition: background .15s, border-color .15s;
-    }
-    .lp-back:hover { background: #f5f5f4; border-color: #c8c8c6; }
-
-    @keyframes fadeUp {
-        from { opacity: 0; transform: translateY(10px); }
-        to   { opacity: 1; transform: none; }
+    .sec-note {
+        display: flex; gap: 10px; align-items: flex-start;
+        padding: 12px 14px; background: var(--bg); border: 1px dashed var(--line-2);
+        border-radius: 12px; font-size: 11px; color: var(--ink-3); line-height: 1.5;
     }
 </style>
 
-<a href="/" class="lp-back" aria-label="Back to home">
-    <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-        <path d="M15 18l-6-6 6-6"/>
-    </svg>
-</a>
+<div class="login-shell">
+    <div class="topbar">
+        <a href="/" class="back" aria-label="Back">
+            <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg>
+        </a>
+        <h1>Examiner Login</h1>
+    </div>
 
-<div class="lp">
-    <div class="lp-card">
-        <div class="lp-mark">
-            <svg width="18" height="18" fill="none" stroke="#fff" stroke-width="2" viewBox="0 0 24 24">
-                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
-            </svg>
+    <div class="login-body">
+        <div style="margin-bottom:20px;padding:10px 14px;background:rgba(15,32,80,.03);border:1px solid var(--line);border-radius:12px;display:flex;align-items:center;gap:12px">
+            <img src="/aaua-logo.png" alt="AAUA" style="height:36px;width:auto;flex-shrink:0;display:block;">
+            <div>
+                <div style="font-size:12px;font-weight:700;color:var(--navy);line-height:1.2">Adekunle Ajasin University</div>
+                <div style="font-size:10px;color:var(--ink-4);margin-top:2px">Faculty of Computing · CERNIX Exam System</div>
+            </div>
         </div>
-        <h1 class="lp-title">Examiner access</h1>
-        <p class="lp-sub">Sign in to start verifying student QR passes at your assigned hall.</p>
+        <div style="margin-bottom:24px">
+            <h2 style="font-size:22px;font-weight:700;letter-spacing:-.02em;margin:0 0 8px;color:var(--ink)">Sign in to verify</h2>
+            <p style="font-size:14px;color:var(--ink-3);margin:0;line-height:1.6">Enter your credentials to access the QR scanner and start verifying student passes.</p>
+        </div>
+
+        <div class="role-pill">
+            <div class="rp-icon">
+                <svg width="16" height="16" fill="none" stroke="#fff" stroke-width="2.5" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+            </div>
+            <div>
+                <b>Examiner Portal</b>
+                <span>Sessions expire after 4 hours · All scans are logged</span>
+            </div>
+        </div>
 
         <form id="login-form" novalidate>
-            <div class="lp-field">
-                <label class="lp-label" for="username">Username</label>
-                <input id="username" class="lp-input" type="text"
-                       placeholder="examiner1" autocomplete="username" required>
+            <div class="field mono">
+                <label for="username">Username</label>
+                <input id="username" type="text" class="input" placeholder="examiner1" autocomplete="username" required>
             </div>
 
-            <div class="lp-field">
-                <label class="lp-label" for="password">Password</label>
-                <div class="lp-pw-wrap">
-                    <input id="password" class="lp-input" type="password"
-                           placeholder="••••••••••" autocomplete="current-password"
-                           style="padding-right:46px" required>
-                    <button type="button" class="lp-pw-toggle" id="toggle-pw" aria-label="Toggle password">
-                        <svg id="eye-show" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                            <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/>
-                            <circle cx="12" cy="12" r="3"/>
-                        </svg>
-                        <svg id="eye-hide" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="display:none">
-                            <path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24"/>
-                            <line x1="1" y1="1" x2="23" y2="23"/>
-                        </svg>
+            <div class="field">
+                <label for="password">Password</label>
+                <div style="position:relative">
+                    <input id="password" type="password" class="input" placeholder="••••••••••"
+                           autocomplete="current-password" style="padding-right:48px" required>
+                    <button type="button" id="toggle-pw" aria-label="Toggle password"
+                        style="position:absolute;right:4px;top:50%;transform:translateY(-50%);width:40px;height:40px;display:flex;align-items:center;justify-content:center;background:none;border:none;cursor:pointer;color:var(--ink-4);transition:color .15s">
+                        <svg id="eye-show" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3"/></svg>
+                        <svg id="eye-hide" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="display:none"><path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
                     </button>
                 </div>
             </div>
 
-            <div class="lp-error" id="login-error">
-                <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="flex-shrink:0">
-                    <circle cx="12" cy="12" r="10"/>
-                    <line x1="12" y1="8" x2="12" y2="12"/>
-                    <line x1="12" y1="16" x2="12.01" y2="16"/>
-                </svg>
-                <span id="login-error-text"></span>
+            <div id="error-box" class="error-box" style="display:none;margin-bottom:16px;">
+                <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="flex-shrink:0;margin-top:1px"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                <div><span id="error-text"></span></div>
             </div>
 
-            <button type="submit" class="lp-btn" id="login-btn">
-                <svg id="login-icon" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
-                    <path d="M15 3h4a2 2 0 012 2v14a2 2 0 01-2 2h-4M10 17l5-5-5-5M15 12H3"/>
-                </svg>
-                <span id="login-label">Sign in</span>
-                <span id="login-dots" class="dots" style="display:none"><span></span><span></span><span></span></span>
+            <button type="submit" id="submit-btn" class="btn btn-primary btn-block" style="margin-top:4px">
+                <svg id="btn-icon" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M15 3h4a2 2 0 012 2v14a2 2 0 01-2 2h-4M10 17l5-5-5-5M15 12H3"/></svg>
+                <span id="btn-label">Sign in</span>
+                <span id="btn-dots" class="dots" style="display:none"><span></span><span></span><span></span></span>
             </button>
         </form>
 
-        <p class="lp-note">Sessions expire after 4 hours · All scan activity is logged</p>
+        <div class="sec-note" style="margin-top:20px">
+            <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="flex-shrink:0;margin-top:1px"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
+            All scan activity is recorded and linked to your examiner account.
+        </div>
     </div>
 </div>
 @endsection
@@ -252,26 +113,24 @@ const csrfToken = document.querySelector('meta[name="csrf-token"]').content;
 
 document.getElementById('login-form').addEventListener('submit', async (e) => {
     e.preventDefault();
-    const btn   = document.getElementById('login-btn');
-    const label = document.getElementById('login-label');
-    const icon  = document.getElementById('login-icon');
-    const dots  = document.getElementById('login-dots');
-    const err   = document.getElementById('login-error');
+    const btn    = document.getElementById('submit-btn');
+    const label  = document.getElementById('btn-label');
+    const icon   = document.getElementById('btn-icon');
+    const dots   = document.getElementById('btn-dots');
+    const errBox = document.getElementById('error-box');
 
-    label.textContent = 'Signing in…';
+    label.textContent  = 'Signing in…';
     icon.style.display = 'none';
     dots.style.display = 'inline-flex';
-    btn.disabled = true;
-    err.classList.remove('show');
+    btn.disabled       = true;
+    errBox.style.display = 'none';
 
     try {
         const resp = await fetch('/examiner/login', {
             method: 'POST',
             headers: {
-                'Content-Type': 'application/json',
-                'Accept': 'application/json',
-                'X-CSRF-TOKEN': csrfToken,
-                'X-Requested-With': 'XMLHttpRequest',
+                'Content-Type': 'application/json', 'Accept': 'application/json',
+                'X-CSRF-TOKEN': csrfToken, 'X-Requested-With': 'XMLHttpRequest',
             },
             credentials: 'same-origin',
             body: JSON.stringify({
@@ -283,10 +142,10 @@ document.getElementById('login-form').addEventListener('submit', async (e) => {
         if (!resp.ok || data.status === 'error') throw new Error(data.message || 'Invalid credentials.');
         window.location.href = '/examiner/dashboard';
     } catch (ex) {
-        document.getElementById('login-error-text').textContent = ex.message;
-        err.classList.add('show');
+        document.getElementById('error-text').textContent = ex.message;
+        errBox.style.display = 'flex';
     } finally {
-        label.textContent = 'Sign in';
+        label.textContent  = 'Sign in';
         icon.style.display = '';
         dots.style.display = 'none';
         btn.disabled = false;

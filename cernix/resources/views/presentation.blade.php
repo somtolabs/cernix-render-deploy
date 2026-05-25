@@ -529,26 +529,30 @@ const signature = hmac(token, HMAC_SECRET);
             <div class="chapter-num">Development Team</div>
             <h2>Built by final-year students.</h2>
             <div class="leader">
-                <div class="tag">Group Leader</div>
+                <div class="tag">220404008</div>
                 <div class="name">Agwunobi Somtochukwu Bright</div>
-                <div class="role">Cryptography & System Architecture</div>
+                <div class="role">Project Lead · Cryptography & System Architecture</div>
             </div>
             <div class="team-grid">
                 <div class="team-member">
-                    <div class="name">Chinwe Ifeoma Okonkwo</div>
-                    <div class="role">Frontend & Scanner</div>
+                    <div class="name">Olatunji Jubril Temitope</div>
+                    <div class="role">200404169</div>
                 </div>
                 <div class="team-member">
-                    <div class="name">Musa Abdullahi Garba</div>
-                    <div class="role">Backend & Database</div>
+                    <div class="name">Adebowale Kolawole Joshua</div>
+                    <div class="role">220404170</div>
                 </div>
                 <div class="team-member">
-                    <div class="name">Ngozi Chinyere Eze</div>
-                    <div class="role">Admin & Audit Log</div>
+                    <div class="name">Ubong Victory Peace</div>
+                    <div class="role">220404107</div>
                 </div>
                 <div class="team-member">
-                    <div class="name">Emeka Tochukwu Nwosu</div>
-                    <div class="role">Testing & QA</div>
+                    <div class="name">Oluwatomiwa Olumofe</div>
+                    <div class="role">170404081</div>
+                </div>
+                <div class="team-member">
+                    <div class="name">Ojekunle Boluwatife</div>
+                    <div class="role">220404256</div>
                 </div>
             </div>
         </div>

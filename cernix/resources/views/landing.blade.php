@@ -544,24 +544,25 @@ ol.steps li b{display:block;font-family:'Inter',sans-serif;font-weight:600;font-
   <section class="chapter ack" id="ch8" data-ch="08">
     <div class="pre">— With Gratitude —</div>
     <h2>Acknowledgments</h2>
-    <p class="ack-sub">This system was designed, built, tested, and refined by a team of final-year students from the Department of Computer Science.</p>
+    <p class="ack-sub">This system was designed, built, tested, and refined by a team of six final-year students, Faculty of Computing, Adekunle Ajasin University, Akungba-Akoko.</p>
 
     <!-- Group leader -->
     <div class="leader">
-      <div class="ld-tag">Group Leader</div>
+      <div class="ld-tag">Group Member · 220404008</div>
       <div class="ld-name">Agwunobi Somtochukwu Bright</div>
       <div class="ld-role">Project Lead · Cryptography &amp; System Architecture</div>
     </div>
 
     <!-- Members -->
     <div class="members">
-      <div><span class="nm">Chinwe Ifeoma Okonkwo</span><span class="rl">Frontend &amp; Scanner</span></div>
-      <div><span class="nm">Musa Abdullahi Garba</span><span class="rl">Backend &amp; Database</span></div>
-      <div><span class="nm">Ngozi Chinyere Eze</span><span class="rl">Admin &amp; Audit Log</span></div>
-      <div><span class="nm">Emeka Tochukwu Nwosu</span><span class="rl">Testing &amp; QA</span></div>
+      <div><span class="nm">Olatunji Jubril Temitope</span><span class="rl">200404169</span></div>
+      <div><span class="nm">Adebowale Kolawole Joshua</span><span class="rl">220404170</span></div>
+      <div><span class="nm">Ubong Victory Peace</span><span class="rl">220404107</span></div>
+      <div><span class="nm">Oluwatomiwa Olumofe</span><span class="rl">170404081</span></div>
+      <div><span class="nm">Ojekunle Boluwatife</span><span class="rl">220404256</span></div>
     </div>
 
-    <div class="colophon">— Department of Computer Science · 2025/2026 —</div>
+    <div class="colophon">Supervised by Dr. Ogbeide · Faculty of Computing · 2025/2026</div>
   </section>
 
   <!-- CHAPTER 9 — END -->

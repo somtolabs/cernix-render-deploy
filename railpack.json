@@ -1,0 +1,31 @@
+{
+  "$schema": "https://schema.railpack.com",
+  "provider": "php",
+  "packages": {
+    "php": "8.4",
+    "node": "22"
+  },
+  "steps": {
+    "install": {
+      "variables": {
+        "RAILPACK_PHP_EXTENSIONS": "gd,pdo_pgsql"
+      },
+      "commands": [
+        "..."
+      ]
+    },
+    "build": {
+      "variables": {
+        "RAILPACK_PHP_EXTENSIONS": "gd,pdo_pgsql"
+      },
+      "commands": [
+        "..."
+      ]
+    }
+  },
+  "deploy": {
+    "variables": {
+      "RAILPACK_PHP_EXTENSIONS": "gd,pdo_pgsql"
+    }
+  }
+}
