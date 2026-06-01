@@ -45,6 +45,10 @@ fi
 # Runtime records must never be deleted or recreated during startup.
 php artisan migrate --force
 
+# Registration requires these insert-safe reference rows. This targeted seeder
+# updates baseline department metadata only; it never touches runtime activity.
+php artisan db:seed --class="Database\\Seeders\\DepartmentsSeeder" --force
+
 if [ "${CERNIX_SEED_ON_BOOT:-false}" = "true" ]; then
     echo "Running explicitly enabled insert-only seeders."
     php artisan db:seed --force

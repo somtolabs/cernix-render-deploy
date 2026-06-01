@@ -367,6 +367,7 @@ class ExaminerWebController extends Controller
                 'student' => null,
                 'token_id' => null,
                 'timestamp' => now()->toIso8601String(),
+                'reason' => 'verification_failed',
             ]);
         }
     }

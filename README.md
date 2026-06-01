@@ -52,9 +52,12 @@ Render startup runs:
 
 ```bash
 php artisan migrate --force
+php artisan db:seed --class="Database\\Seeders\\DepartmentsSeeder" --force
 ```
 
-It does not seed by default. For a first provisioning deploy only, set:
+The targeted department seed is insert-safe and keeps registration reference
+rows available without touching runtime activity. Full demo seeding remains
+disabled by default. For a first provisioning deploy only, set:
 
 ```env
 CERNIX_SEED_ON_BOOT=true
@@ -99,4 +102,3 @@ python python_services/risk_analyzer/analyze.py
 - Keep `CERNIX_DEMO_MODE=false` for real production deployments.
 - Use the institution's official payment-provider account before collecting real fees.
 - Treat audit and scan records as append-only operational history.
-

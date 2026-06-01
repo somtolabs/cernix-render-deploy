@@ -42,7 +42,22 @@ class StudentPortalWebTest extends TestCase
             ->assertSee('Generated Matric Number')
             ->assertSee('Need demo credentials?')
             ->assertSee('230408010')
+            ->assertSee('Computer Science')
+            ->assertSee('Software Engineering')
+            ->assertSee('No departments are configured. Ask an admin to seed or create departments.')
+            ->assertSee('departmentSelect.replaceChildren', false)
             ->assertDontSee('name="matric_no"', false);
+    }
+
+    public function test_student_registration_rejects_unknown_department(): void
+    {
+        $this->postJson('/student/register', [
+            'faculty' => 'Faculty of Computing',
+            'department_id' => 999999,
+            'level' => '400',
+            'student_number' => '008',
+            'rrr_number' => 'TEST-DEMO',
+        ])->assertUnprocessable();
     }
 
     public function test_student_portal_routes_redirect_without_student_session(): void

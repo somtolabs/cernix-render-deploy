@@ -123,9 +123,16 @@
                         <select id="department_id" name="department_id" class="input" required>
                             <option value="">Select department</option>
                             @foreach($departments as $department)
-                                <option value="{{ $department->dept_id }}" data-faculty="{{ $department->faculty }}" data-fee="{{ $feeMap[$department->dept_name] ?? 0 }}">{{ $department->dept_name }}</option>
+                                <option value="{{ $department->dept_id }}">{{ $department->dept_name }}</option>
                             @endforeach
                         </select>
+                        <div class="sr-hint" id="departmentHelp">
+                            @if($departments->isEmpty())
+                                No departments are configured. Ask an admin to seed or create departments.
+                            @else
+                                Choose the department for your exam registration.
+                            @endif
+                        </div>
                     </div>
                 </div>
 
@@ -219,15 +226,28 @@
         currency: 'NGN',
         maximumFractionDigits: 0,
     }).format(Number(value || 0));
+    const normalize = (value) => String(value || '').trim().toLowerCase();
 
     function updateDepartmentOptions() {
-        const faculty = facultySelect.value;
-        [...departmentSelect.options].forEach((option) => {
-            if (!option.value) return;
-            option.hidden = option.dataset.faculty !== faculty;
+        const selectedDepartment = departmentSelect.value;
+        const faculty = normalize(facultySelect.value);
+        let matches = departments.filter((department) => !faculty || normalize(department.faculty) === faculty);
+
+        if (!matches.length) matches = departments;
+
+        departmentSelect.replaceChildren(new Option('Select department', ''));
+        matches.forEach((department) => {
+            departmentSelect.add(new Option(department.name, department.id));
         });
-        const selected = departmentSelect.selectedOptions[0];
-        if (selected && selected.hidden) departmentSelect.value = '';
+
+        if (matches.some((department) => department.id === selectedDepartment)) {
+            departmentSelect.value = selectedDepartment;
+        }
+
+        departmentSelect.disabled = matches.length === 0;
+        document.getElementById('departmentHelp').textContent = matches.length
+            ? 'Choose the department for your exam registration.'
+            : 'No departments are configured. Ask an admin to seed or create departments.';
         updateFee();
     }
 

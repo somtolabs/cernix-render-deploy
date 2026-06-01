@@ -87,6 +87,7 @@ php artisan route:clear
 php artisan view:clear
 php artisan storage:link || true
 php artisan migrate --force
+php artisan db:seed --class="Database\\Seeders\\DepartmentsSeeder" --force
 php artisan config:cache
 php artisan route:cache
 php artisan view:cache
@@ -94,9 +95,10 @@ php artisan serve --host=0.0.0.0 --port="$APP_PORT"
 ```
 
 Runtime records must never be deleted or recreated by startup scripts. Render
-boot is migration-only by default. Verification logs, audit logs, payments,
-exam passes, student registrations, notes, settings, and schedules remain in
-PostgreSQL across restarts and deploys.
+boot runs safe migrations plus the insert-safe baseline department seed needed
+by registration. Verification logs, audit logs, payments, exam passes, student
+registrations, notes, settings, and schedules remain in PostgreSQL across
+restarts and deploys.
 
 For the first provisioning deploy only, you may explicitly enable insert-only
 default seed data:

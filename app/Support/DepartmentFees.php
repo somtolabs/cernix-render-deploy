@@ -2,6 +2,9 @@
 
 namespace App\Support;
 
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
+
 final class DepartmentFees
 {
     public const FACULTY = 'Faculty of Computing';

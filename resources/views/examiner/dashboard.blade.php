@@ -29,6 +29,13 @@
     .pending-panel.show { display:grid; gap:10px; }
     .pending-panel b { color:#92400e; }
     .scanner-control-hidden { display:none !important; }
+    .scanner-diagnostics { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; margin-bottom:14px; }
+    .scanner-diagnostic { min-width:0; padding:9px 11px; border:1px solid #dde4db; border-radius:12px; background:#fff; }
+    .scanner-diagnostic span { display:block; color:#667066; font-size:10px; font-weight:900; letter-spacing:.08em; text-transform:uppercase; }
+    .scanner-diagnostic b { display:block; margin-top:3px; color:#17201b; font-size:12px; overflow-wrap:anywhere; }
+    .scanner-diagnostic.ok b { color:#047857; }
+    .scanner-diagnostic.warn b { color:#92400e; }
+    .scanner-diagnostic.error b { color:#b91c1c; }
     .verify-overlay { position: fixed; inset: 0; z-index: 1000; padding: clamp(14px, 4vw, 34px); background: rgba(23,32,27,.52); overflow-y: auto; overscroll-behavior: contain; animation: overlayIn .18s ease both; }
     .verify-overlay[hidden] { display: none; }
     .verify-document { position: relative; width: min(760px, 100%); margin: 0 auto; border-radius: 28px; border: 1px solid var(--result-border); background: var(--result-bg); color: #291f16; box-shadow: 0 30px 90px rgba(0,0,0,.28); overflow: hidden; animation: resultIn .2s ease both; }
@@ -60,6 +67,7 @@
     @keyframes resultIn { from{opacity:0;transform:translateY(12px) scale(.985)} to{opacity:1;transform:none} }
     @media (min-width: 980px) {
         .scanner-layout { grid-template-columns: minmax(0, 1fr) 360px; align-items: start; }
+        .scanner-diagnostics { grid-template-columns:repeat(4,minmax(0,1fr)); }
     }
     @media (max-width: 640px) {
         .scanner-stage { min-height: clamp(420px, 68dvh, 540px); width: 100%; }
@@ -95,6 +103,12 @@
                 </div>
             </div>
             <button class="ex-action secondary" type="button" id="retryPendingTop" style="display:none">Retry Verification</button>
+        </div>
+        <div class="scanner-diagnostics" aria-label="Scanner diagnostics">
+            <div class="scanner-diagnostic" id="diagLibrary"><span>Scanner</span><b>Checking reader...</b></div>
+            <div class="scanner-diagnostic" id="diagCamera"><span>Camera</span><b>Waiting to start</b></div>
+            <div class="scanner-diagnostic" id="diagServer"><span>Server</span><b>Checking connection...</b></div>
+            <div class="scanner-diagnostic" id="diagScan"><span>Latest scan</span><b>Waiting for QR</b></div>
         </div>
         <div class="scanner-panel">
             <div class="scanner-stage" id="scannerStage">
@@ -168,7 +182,6 @@
 @endsection
 
 @push('scripts')
-<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
 <script>
     const video = document.getElementById('scannerVideo');
     const canvas = document.getElementById('scannerCanvas');
@@ -193,6 +206,15 @@
     let serverReachable = true;
 
     function setState(message) { stateText.textContent = message; }
+    function setDiagnostic(id, message, mode = '') {
+        const element = document.getElementById(id);
+        element.className = `scanner-diagnostic ${mode}`;
+        element.querySelector('b').textContent = message;
+    }
+    function updateReaderDiagnostic() {
+        const ready = typeof window.jsQR === 'function';
+        setDiagnostic('diagLibrary', ready ? 'Reader ready' : 'Reader unavailable', ready ? 'ok' : 'error');
+    }
     function setScannerControls(mode) {
         startBtn.classList.toggle('scanner-control-hidden', mode === 'active' || mode === 'starting');
         stopBtn.classList.toggle('scanner-control-hidden', mode === 'idle' || mode === 'error');
@@ -220,6 +242,7 @@
         strip.className = `connection-strip ${mode}`;
         document.getElementById('connectionLabel').textContent = label;
         document.getElementById('connectionSub').textContent = sub;
+        setDiagnostic('diagServer', label, mode === 'online' ? 'ok' : (mode === 'slow' || mode === 'pending' ? 'warn' : 'error'));
     }
     function setPending(rawData, qrData, message) {
         pendingRawPayload = rawData || '';
@@ -304,24 +327,31 @@
     async function startScanner() {
         unlockAudio();
         try {
+            if (typeof window.jsQR !== 'function') {
+                setDiagnostic('diagLibrary', 'Reader unavailable', 'error');
+                throw new Error('scanner_library_unavailable');
+            }
+            if (!navigator.mediaDevices?.getUserMedia) {
+                setDiagnostic('diagCamera', 'Camera unavailable', 'error');
+                throw new Error('camera_api_unavailable');
+            }
             stopScanner(false);
             setState('Starting camera...');
+            setDiagnostic('diagCamera', 'Requesting permission', 'warn');
             setScannerControls('starting');
             startBtn.disabled = true;
-            stream = await navigator.mediaDevices.getUserMedia({
-                video: {
-                    facingMode: { ideal: 'environment' },
-                    width: { ideal: 1920 },
-                    height: { ideal: 1080 },
-                    aspectRatio: { ideal: 1.333 },
-                    advanced: [
-                        { focusMode: 'continuous' },
-                        { exposureMode: 'continuous' },
-                        { whiteBalanceMode: 'continuous' }
-                    ]
-                },
-                audio: false
-            });
+            try {
+                stream = await navigator.mediaDevices.getUserMedia({
+                    video: {
+                        facingMode: { ideal: 'environment' },
+                        width: { ideal: 1920 },
+                        height: { ideal: 1080 }
+                    },
+                    audio: false
+                });
+            } catch (_) {
+                stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+            }
             const [track] = stream.getVideoTracks();
             if (track?.applyConstraints) {
                 track.applyConstraints({
@@ -340,10 +370,19 @@
             lastPayload = '';
             lastScanAt = 0;
             setState('Scanner active. Point camera at QR code.');
+            setDiagnostic('diagCamera', 'Ready', 'ok');
+            setDiagnostic('diagScan', 'Waiting for QR');
             setScannerControls('active');
             animationFrameId = requestAnimationFrame(tick);
         } catch (error) {
-            setState('Camera permission denied or unavailable. Check browser permissions and retry.');
+            const libraryMissing = error?.message === 'scanner_library_unavailable';
+            const cameraMissing = error?.message === 'camera_api_unavailable';
+            setState(libraryMissing
+                ? 'QR reader could not load. Refresh the page and try again.'
+                : (cameraMissing
+                    ? 'Camera scanning is not supported in this browser.'
+                    : 'Camera permission denied or unavailable. Check browser permissions and retry.'));
+            if (!libraryMissing && !cameraMissing) setDiagnostic('diagCamera', 'Permission denied or unavailable', 'error');
             setScannerControls('error');
         } finally {
             startBtn.disabled = false;
@@ -382,12 +421,19 @@
         canvas.height = Math.max(240, Math.round(video.videoHeight * scale));
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
         const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        const code = jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: 'attemptBoth' });
+        if (typeof window.jsQR !== 'function') {
+            setState('QR reader could not load. Refresh the page and try again.');
+            setDiagnostic('diagLibrary', 'Reader unavailable', 'error');
+            stopScanner();
+            return;
+        }
+        const code = window.jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: 'attemptBoth' });
         if (code && code.data && code.data !== lastPayload) {
             lastPayload = code.data;
             verifying = true;
             scanFrame.classList.add('detected');
             setState('QR detected. Verifying...');
+            setDiagnostic('diagScan', 'QR detected. Checking...', 'warn');
             verifyQr(code.data);
         }
         animationFrameId = requestAnimationFrame(tick);
@@ -402,11 +448,24 @@
             showVerificationOverlay(result);
             playResultSound(result.status);
             setState('Invalid QR code. Waiting for another QR.');
+            setDiagnostic('diagScan', 'Invalid QR code', 'error');
             verifying = false;
             scanFrame.classList.remove('detected');
             return;
         }
-        if (!navigator.onLine || !serverReachable) {
+        const requiredFields = ['token_id', 'encrypted_payload', 'hmac_signature', 'session_id'];
+        if (!qrData || typeof qrData !== 'object' || !requiredFields.every((field) => qrData[field])) {
+            const result = { status: 'REJECTED', student: null, timestamp: new Date().toISOString(), reason: 'Invalid QR code.' };
+            renderResult(result);
+            showVerificationOverlay(result);
+            playResultSound(result.status);
+            setState('Invalid QR code. Waiting for another QR.');
+            setDiagnostic('diagScan', 'Invalid QR code', 'error');
+            verifying = false;
+            scanFrame.classList.remove('detected');
+            return;
+        }
+        if (!navigator.onLine) {
             const message = 'QR detected, but verification server is offline. This student is not verified yet.';
             setPending(rawData, qrData, message);
             renderPendingResult(message);
@@ -415,23 +474,42 @@
             scanFrame.classList.remove('detected');
             return;
         }
+        if (!serverReachable) await updateConnectionStatus();
         try {
+            setDiagnostic('diagScan', 'Sending verification...', 'warn');
             const response = await fetch('/examiner/verify', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': '{{ csrf_token() }}', 'Accept': 'application/json' },
                 body: JSON.stringify({ qr_data: qrData })
             });
-            const result = await response.json();
+            const result = await response.json().catch(() => ({
+                status: 'REJECTED',
+                student: null,
+                timestamp: new Date().toISOString(),
+                reason: 'The verification server returned an unreadable response.'
+            }));
+            if (response.status === 419) {
+                result.status = 'REJECTED';
+                result.reason = 'Session expired. Log in again.';
+            } else if (response.status === 401 || response.status === 403) {
+                result.status = 'REJECTED';
+                result.reason = 'Examiner access required. Log in again.';
+            } else if (!response.ok) {
+                result.status = 'REJECTED';
+                result.reason = result.message || result.reason || 'Verification could not be completed.';
+            }
             renderResult(result);
             showVerificationOverlay(result);
             playResultSound(result.status);
-            setState('Verification complete. Close the result to scan another QR.');
+            setState(result.reason || 'Verification complete. Close the result to scan another QR.');
+            setDiagnostic('diagScan', `${decisionLabel(result.status)} response received`, statusTheme(result.status) === 'approved' ? 'ok' : 'warn');
             clearPending();
         } catch (_) {
             const message = 'Verification failed due to network/server issue. This pass was not approved by this browser request. Retry verification when online.';
             setPending(rawData, qrData, message);
             renderPendingResult(message);
             setState(message);
+            setDiagnostic('diagScan', 'Verification request failed', 'error');
             verifying = false;
             scanFrame.classList.remove('detected');
         }
@@ -480,6 +558,9 @@
         document.getElementById('verifyIcon').textContent = theme === 'approved' ? '✓' : (theme === 'duplicate' ? '!' : '×');
         document.getElementById('verifyStatus').textContent = decisionLabel(status);
         document.getElementById('verifyMessage').textContent = statusMessage(status);
+        if (result.reason && !['token_already_used'].includes(result.reason)) {
+            document.getElementById('verifyMessage').textContent = friendlyReason(result.reason);
+        }
         document.getElementById('verifyPhoto').src = photoUrl(student.photo_path);
         document.getElementById('verifyPhoto').onerror = () => { document.getElementById('verifyPhoto').src = '/aaua-logo.png'; };
         document.getElementById('verifyName').textContent = student.full_name || 'Student unavailable';
@@ -509,6 +590,18 @@
     function decisionLabel(status) {
         return normalizeStatus(status) === 'DUPLICATE' ? 'REPEATED' : normalizeStatus(status);
     }
+    function friendlyReason(reason) {
+        const messages = {
+            invalid_format: 'This is not a valid CERNIX exam pass.',
+            invalid_session: 'This exam pass is not valid for the active exam session.',
+            tampered_token: 'This exam pass could not be verified.',
+            identity_mismatch: 'Student details could not be confirmed.',
+            token_not_found: 'This exam pass could not be found.',
+            token_revoked: 'This exam pass is unavailable.',
+            invalid_status: 'This exam pass is unavailable.'
+        };
+        return messages[reason] || String(reason || 'Verification failed. Access denied.');
+    }
     function closeOverlay() {
         overlay.hidden = true;
         verifying = false;
@@ -528,8 +621,10 @@
     overlay.addEventListener('click', event => { if (event.target === overlay) closeOverlay(); });
     window.addEventListener('beforeunload', stopScanner);
     setInterval(updateConnectionStatus, 15000);
+    window.addEventListener('cernix:scanner-ready', updateReaderDiagnostic);
+    window.addEventListener('load', updateReaderDiagnostic);
+    updateReaderDiagnostic();
     setScannerControls('idle');
     updateConnectionStatus();
 </script>
 @endpush
-

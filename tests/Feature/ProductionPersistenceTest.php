@@ -6,6 +6,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use Database\Seeders\DepartmentsSeeder;
 use Tests\TestCase;
 
 class ProductionPersistenceTest extends TestCase
@@ -116,6 +117,7 @@ class ProductionPersistenceTest extends TestCase
         $script = file_get_contents(base_path('scripts/render-start.sh'));
 
         $this->assertStringContainsString('php artisan migrate --force', $script);
+        $this->assertStringContainsString('php artisan db:seed --class="Database\\\\Seeders\\\\DepartmentsSeeder" --force', $script);
         $this->assertStringContainsString('CERNIX_SEED_ON_BOOT', $script);
         $this->assertStringContainsString('DB_CONNECTION:-', $script);
         $this->assertStringContainsString('DATABASE_URL:-${DB_URL:-}', $script);
@@ -125,6 +127,27 @@ class ProductionPersistenceTest extends TestCase
         $this->assertStringNotContainsString('migrate:fresh', $script);
         $this->assertStringNotContainsString('migrate:refresh', $script);
         $this->assertStringNotContainsString('db:wipe', $script);
+    }
+
+    public function test_baseline_department_seeder_restores_reference_rows_without_removing_runtime_activity(): void
+    {
+        $this->seed();
+
+        DB::table('departments')->where('dept_name', 'Data Science')->delete();
+        $runtimeStudent = DB::table('students')->where('matric_no', '220404008')->first();
+
+        $this->seed(DepartmentsSeeder::class);
+
+        $this->assertDatabaseHas('departments', [
+            'dept_name' => 'Data Science',
+            'faculty' => 'Faculty of Computing',
+            'department_code' => '08',
+            'faculty_code' => '04',
+        ]);
+
+        if ($runtimeStudent) {
+            $this->assertDatabaseHas('students', ['matric_no' => $runtimeStudent->matric_no]);
+        }
     }
 
     public function test_production_reset_is_blocked_without_explicit_override(): void

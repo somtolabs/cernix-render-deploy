@@ -57,7 +57,72 @@ class ExaminerPortalWebTest extends TestCase
             ->assertJsonPath('rows.0.action', 'scan.approved');
     }
 
+    public function test_examiner_scanner_page_uses_local_reader_and_visible_diagnostics(): void
+    {
+        $this->withSession($this->examinerSession())
+            ->get('/examiner/dashboard')
+            ->assertOk()
+            ->assertSee('Scanner diagnostics')
+            ->assertSee('Reader ready')
+            ->assertSee('window.jsQR')
+            ->assertSee('cernix:scanner-ready')
+            ->assertDontSee('cdn.jsdelivr.net/npm/jsqr');
+    }
+
+    public function test_examiner_web_scanner_route_approves_then_records_repeated_scan(): void
+    {
+        $token = $this->registerToken();
+        $qrData = $this->qrData($token);
+
+        $this->withSession($this->examinerSession())
+            ->postJson('/examiner/verify', ['qr_data' => $qrData])
+            ->assertOk()
+            ->assertJsonPath('status', 'APPROVED');
+
+        $this->withSession($this->examinerSession())
+            ->postJson('/examiner/verify', ['qr_data' => $qrData])
+            ->assertOk()
+            ->assertJsonPath('status', 'DUPLICATE');
+
+        $this->assertSame(2, DB::table('verification_logs')->where('token_id', $token->token_id)->count());
+        $this->assertDatabaseHas('verification_logs', ['token_id' => $token->token_id, 'decision' => 'APPROVED']);
+        $this->assertDatabaseHas('verification_logs', ['token_id' => $token->token_id, 'decision' => 'DUPLICATE']);
+    }
+
+    public function test_examiner_web_scanner_route_rejects_tampered_qr(): void
+    {
+        $token = $this->registerToken();
+        $qrData = $this->qrData($token);
+        $qrData['encrypted_payload'] = base64_encode('tampered');
+
+        $this->withSession($this->examinerSession())
+            ->postJson('/examiner/verify', ['qr_data' => $qrData])
+            ->assertOk()
+            ->assertJsonPath('status', 'REJECTED')
+            ->assertJsonPath('reason', 'tampered_token');
+    }
+
+    public function test_examiner_web_scanner_route_requires_examiner_session(): void
+    {
+        $this->postJson('/examiner/verify', ['qr_data' => []])
+            ->assertUnauthorized()
+            ->assertJsonPath('message', 'Not authenticated.');
+    }
+
     private function registerAndScan(int $examinerId): string
+    {
+        $token = $this->registerToken();
+        (new VerificationService(new CryptoService()))->verifyQr(
+            $this->qrData($token),
+            $examinerId,
+            'test-device',
+            '127.0.0.1'
+        );
+
+        return $token->token_id;
+    }
+
+    private function registerToken(): object
     {
         $session = DB::table('exam_sessions')->where('is_active', true)->first();
         $remita = $this->createMock(RemitaService::class);
@@ -71,14 +136,28 @@ class ExaminerPortalWebTest extends TestCase
             'session_id' => (int) $session->session_id,
         ]);
 
-        $token = DB::table('qr_tokens')->where('token_id', $result['data']['token_id'])->first();
-        (new VerificationService(new CryptoService()))->verifyQr([
+        return DB::table('qr_tokens')->where('token_id', $result['data']['token_id'])->first();
+    }
+
+    private function qrData(object $token): array
+    {
+        return [
             'token_id' => $token->token_id,
             'encrypted_payload' => $token->encrypted_payload,
             'hmac_signature' => $token->hmac_signature,
             'session_id' => $token->session_id,
-        ], $examinerId, 'test-device', '127.0.0.1');
+        ];
+    }
 
-        return $token->token_id;
+    private function examinerSession(): array
+    {
+        $examiner = DB::table('examiners')->where('username', 'examiner1')->first();
+
+        return [
+            'examiner_id' => (int) $examiner->examiner_id,
+            'examiner_username' => $examiner->username,
+            'examiner_name' => $examiner->full_name,
+            'examiner_role' => $examiner->role,
+        ];
     }
 }
