@@ -17,6 +17,8 @@ services:
         sync: false
       - key: APP_URL
         sync: false
+      - key: APP_JWT_SECRET
+        sync: false
       - key: LOG_CHANNEL
         value: stderr
       - key: LOG_LEVEL
@@ -40,6 +42,10 @@ services:
       - key: FILESYSTEM_DISK
         value: public
       - key: CERNIX_DEMO_MODE
+        value: "false"
+      - key: CERNIX_SEED_ON_BOOT
+        value: "false"
+      - key: CERNIX_ALLOW_PRODUCTION_RESET
         value: "false"
       - key: REMITA_MERCHANT_ID
         sync: false

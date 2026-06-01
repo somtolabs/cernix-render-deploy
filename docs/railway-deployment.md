@@ -68,11 +68,13 @@ Railway services are private until a domain is generated.
 composer install --no-dev --optimize-autoloader && npm ci && npm run build
 ```
 
-Before each deploy, Railway runs:
+Before each deploy, Railway runs safe migrations and rebuilds caches:
 
 ```bash
-php artisan migrate --force && php artisan db:seed --force && php artisan config:cache && php artisan route:cache && php artisan view:cache
+php artisan migrate --force && php artisan config:cache && php artisan route:cache && php artisan view:cache
 ```
+
+Runtime student, payment, pass, scan, audit, note, and timetable records must never be deleted or rewritten during startup. If a new environment needs its initial demo records, run the insert-only seeders once as an explicit provisioning step, then leave automatic seeding disabled.
 
 The app starts with:
 

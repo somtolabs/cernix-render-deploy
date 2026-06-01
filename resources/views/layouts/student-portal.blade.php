@@ -15,12 +15,12 @@
     $activePortal = $activePortal ?? 'overview';
 @endphp
 <style>
-    .sp-shell { min-height: 100vh; background: var(--bg); color: var(--ink); overflow-x: hidden; }
+    .sp-shell { min-height: 100dvh; background: var(--bg); color: var(--ink); overflow-x: clip; overflow-y: visible; }
     .sp-mobile-head { position: sticky; top: 0; z-index: 40; height: 72px; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 0 16px; background: rgba(255,255,255,.88); border-bottom: 1px solid var(--line); backdrop-filter: blur(14px); }
     .sp-menu-btn { width: 44px; height: 44px; border-radius: 14px; border: 1px solid var(--line); background: var(--bg-2); display: grid; place-items: center; }
     .sp-mobile-title b { display: block; font-size: 15px; }
     .sp-mobile-title span { display: block; font-size: 11px; color: var(--ink-3); margin-top: 2px; }
-    .sp-layout { display: block; width: 100%; }
+    .sp-layout { display: block; width: 100%; min-height: 100dvh; min-width: 0; }
     .sp-sidebar { position: fixed; inset: 0 auto 0 0; width: min(300px, 86vw); z-index: 60; background: var(--bg-2); border-right: 1px solid var(--line); transform: translateX(-105%); transition: transform .22s ease; padding: 18px; overflow-y: auto; }
     .sp-backdrop { position: fixed; inset: 0; z-index: 55; background: rgba(10,15,31,.34); opacity: 0; pointer-events: none; transition: opacity .2s ease; }
     .sp-shell.menu-open .sp-sidebar { transform: translateX(0); }
@@ -36,7 +36,7 @@
     .sp-nav-badge { margin-left: auto; min-width: 22px; height: 22px; padding: 0 7px; border-radius: 999px; display: inline-flex; align-items: center; justify-content: center; background: rgba(5,150,105,.12); color: var(--emerald); font-size: 11px; font-weight: 900; }
     .sp-nav a.active .sp-nav-badge { background: rgba(255,255,255,.18); color: #fff; }
     .sp-logout { width: 100%; margin-top: 14px; background: var(--bg); border-color: var(--line); justify-content: center; }
-    .sp-main { width: min(1180px, 100%); margin: 0 auto; padding: 22px 16px 48px; }
+    .sp-main { width: min(1180px, 100%); min-width: 0; margin: 0 auto; padding: 22px 16px max(72px, calc(48px + env(safe-area-inset-bottom))); }
     .sp-page-head { margin-bottom: 18px; }
     .sp-page-head h1 { margin: 0; font-size: clamp(28px, 7vw, 44px); letter-spacing: -.06em; line-height: 1; }
     .sp-page-head p { margin: 8px 0 0; color: var(--ink-3); line-height: 1.6; }
@@ -50,7 +50,7 @@
     .student-mini { display: flex; align-items: center; gap: 14px; min-width: 0; }
     .student-photo { width: 72px; height: 88px; border-radius: 16px; object-fit: cover; background: var(--bg); border: 1px solid var(--line); flex: 0 0 auto; }
     .student-fallback { width: 72px; height: 88px; border-radius: 16px; background: var(--bg); border: 1px solid var(--line); display: grid; place-items: center; color: var(--ink-3); font-weight: 800; flex: 0 0 auto; }
-    .table-card { overflow-x: auto; }
+    .table-card { max-width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
     .data-table { width: 100%; border-collapse: collapse; min-width: 620px; }
     .data-table th, .data-table td { text-align: left; padding: 13px 14px; border-bottom: 1px solid var(--line); vertical-align: top; }
     .data-table th { color: var(--ink-3); font-size: 11px; text-transform: uppercase; letter-spacing: .1em; }

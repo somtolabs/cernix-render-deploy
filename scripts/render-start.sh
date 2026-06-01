@@ -17,9 +17,36 @@ php artisan route:clear || true
 php artisan view:clear || true
 
 php artisan storage:link || true
+
+# Production activity must live in Render PostgreSQL. Refuse to boot with the
+# ephemeral container filesystem as the database.
+if [ "${APP_ENV:-production}" = "production" ]; then
+    if [ "${DB_CONNECTION:-}" != "pgsql" ]; then
+        echo "CERNIX production requires DB_CONNECTION=pgsql."
+        exit 1
+    fi
+
+    if [ -z "${DATABASE_URL:-${DB_URL:-}}" ]; then
+        echo "CERNIX production requires DATABASE_URL or DB_URL for Render PostgreSQL."
+        exit 1
+    fi
+
+    if [ -z "${APP_KEY:-}" ]; then
+        echo "CERNIX production requires APP_KEY."
+        exit 1
+    fi
+
+    if [ -z "${APP_JWT_SECRET:-${JWT_SECRET:-}}" ]; then
+        echo "CERNIX production requires APP_JWT_SECRET or JWT_SECRET."
+        exit 1
+    fi
+fi
+
+# Runtime records must never be deleted or recreated during startup.
 php artisan migrate --force
 
-if [ "${RENDER_SKIP_SEED:-false}" != "true" ]; then
+if [ "${CERNIX_SEED_ON_BOOT:-false}" = "true" ]; then
+    echo "Running explicitly enabled insert-only seeders."
     php artisan db:seed --force
 fi
 

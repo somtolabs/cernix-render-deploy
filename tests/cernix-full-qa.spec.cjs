@@ -108,7 +108,7 @@ async function login(page, role) {
   await page.locator('#username, input[autocomplete="username"], input[type="text"]').first().fill(USERS[role].username);
   await page.locator('#password, input[autocomplete="current-password"], input[type="password"]').first().fill(USERS[role].password);
   await page.locator('button[type="submit"], input[type="submit"]').first().click();
-  await page.waitForURL(url => !/\/(admin|examiner)\/login$/.test(url.pathname), { timeout: 15000 });
+  await page.waitForURL(url => !/\/(admin|examiner)\/login$/.test(url.pathname), { timeout: 15000, waitUntil: 'domcontentloaded' });
 
   if (/\/(admin|examiner)\/login$/.test(new URL(page.url()).pathname)) {
     throw new Error(`${role} login did not leave the login page`);

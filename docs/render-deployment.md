@@ -36,6 +36,7 @@ Set these on the Render Web Service. Store actual values in Render only:
 - `APP_NAME` set to `CERNIX`
 - `APP_ENV` set to `production`
 - `APP_KEY` generated privately
+- `APP_JWT_SECRET` generated privately
 - `APP_DEBUG` set to `false`
 - `APP_URL` set to the Render HTTPS URL
 - `LOG_CHANNEL` set to `stderr`
@@ -45,6 +46,8 @@ Set these on the Render Web Service. Store actual values in Render only:
 - `CACHE_STORE`, `SESSION_DRIVER`, and `QUEUE_CONNECTION` set to database-backed drivers
 - `FILESYSTEM_DISK` set to `public`
 - `CERNIX_DEMO_MODE` set to `false` for real production
+- `CERNIX_SEED_ON_BOOT` set to `false`
+- `CERNIX_ALLOW_PRODUCTION_RESET` set to `false`
 - Remita merchant/API/service/base URL values, stored privately
 - CERNIX cryptographic keys, stored privately
 
@@ -84,18 +87,27 @@ php artisan route:clear
 php artisan view:clear
 php artisan storage:link || true
 php artisan migrate --force
-php artisan db:seed --force
 php artisan config:cache
 php artisan route:cache
 php artisan view:cache
 php artisan serve --host=0.0.0.0 --port="$APP_PORT"
 ```
 
-The seeders are idempotent. To skip seeding on a future Render deploy, set:
+Runtime records must never be deleted or recreated by startup scripts. Render
+boot is migration-only by default. Verification logs, audit logs, payments,
+exam passes, student registrations, notes, settings, and schedules remain in
+PostgreSQL across restarts and deploys.
+
+For the first provisioning deploy only, you may explicitly enable insert-only
+default seed data:
 
 ```env
-RENDER_SKIP_SEED=true
+CERNIX_SEED_ON_BOOT=true
 ```
+
+Deploy once, confirm the default records exist, then restore
+`CERNIX_SEED_ON_BOOT=false`. The seeders preserve existing runtime activity.
+Never enable `CERNIX_ALLOW_PRODUCTION_RESET` during normal operation.
 
 ## 7. Assets And HTTPS
 
@@ -124,6 +136,11 @@ docs/images/project-media/
 ```
 
 They are not used as student identity/passport photos.
+
+Render's container filesystem is ephemeral. CERNIX currently uses committed
+demo passport images and regenerable thumbnail caches only. If real student
+uploads are introduced later, configure an S3-compatible filesystem disk before
+accepting uploads. Do not store durable uploads only on the local Render disk.
 
 ## 9. Smoke Test Checklist
 

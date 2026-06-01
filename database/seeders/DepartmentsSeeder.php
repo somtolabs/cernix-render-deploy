@@ -18,10 +18,9 @@ class DepartmentsSeeder extends Seeder
         ];
 
         foreach ($departments as $department) {
-            DB::table('departments')->updateOrInsert(
-                ['dept_name' => $department['dept_name']],
-                $department
-            );
+            if (! DB::table('departments')->where('dept_name', $department['dept_name'])->exists()) {
+                DB::table('departments')->insert($department);
+            }
         }
     }
 }

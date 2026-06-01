@@ -17,6 +17,7 @@ RUN apt-get update \
         libonig-dev \
         libpng-dev \
         libpq-dev \
+        libsodium-dev \
         libzip-dev \
         unzip \
         zip \
@@ -28,6 +29,7 @@ RUN apt-get update \
         mbstring \
         pcntl \
         pdo_pgsql \
+        sodium \
         zip \
     && curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
     && apt-get install -y --no-install-recommends nodejs \
@@ -44,10 +46,10 @@ RUN npm ci
 
 COPY . .
 
-RUN composer dump-autoload --no-dev --optimize \
+RUN mkdir -p storage/framework/cache storage/framework/sessions storage/framework/views storage/logs bootstrap/cache \
+    && composer dump-autoload --no-dev --optimize \
     && npm run build \
     && rm -rf node_modules \
-    && mkdir -p storage/framework/cache storage/framework/sessions storage/framework/views storage/logs bootstrap/cache \
     && chmod +x scripts/render-start.sh \
     && chown -R www-data:www-data storage bootstrap/cache
 

@@ -4,8 +4,6 @@ namespace Database\Seeders;
 
 use App\Models\MockSisRecord;
 use Illuminate\Database\Seeder;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Schema;
 
 class MockSISSeeder extends Seeder
 {
@@ -87,27 +85,10 @@ class MockSISSeeder extends Seeder
         }
 
         foreach ($students as $student) {
-            MockSisRecord::updateOrCreate(
+            MockSisRecord::firstOrCreate(
                 ['matric_no' => $student['matric_no']],
                 $student
             );
-
-            if (preg_match('/^\d{9}$/', $student['matric_no']) === 1 && Schema::hasTable('students')) {
-                $studentUpdate = [
-                    'full_name' => $student['full_name'],
-                    'photo_path' => $student['photo_path'],
-                ];
-
-                foreach (['level', 'department_code', 'faculty_code'] as $column) {
-                    if (Schema::hasColumn('students', $column)) {
-                        $studentUpdate[$column] = $student[$column] ?? null;
-                    }
-                }
-
-                DB::table('students')
-                    ->where('matric_no', $student['matric_no'])
-                    ->update($studentUpdate);
-            }
         }
     }
 }

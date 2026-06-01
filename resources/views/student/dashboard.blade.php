@@ -12,6 +12,8 @@
         ['label' => 'Exam Pass', 'value' => match(strtoupper((string) ($token->status ?? ''))) { 'UNUSED' => 'Ready', 'USED' => 'Already scanned', 'REVOKED' => 'Unavailable', default => $token->status ?? 'Pending' }, 'meta' => $token?->issued_at ? 'Issued ' . \Illuminate\Support\Carbon::parse($token->issued_at)->format('d M Y, H:i') : 'Pass pending'],
         ['label' => 'Timetable', 'value' => $timetable->count() ? 'Assigned' : 'Not assigned', 'meta' => $timetable->count() ? $timetable->count() . ' exams available' : 'Check back after admin scheduling'],
     ];
+    $visibleScans = $scanHistory->take(5);
+    $additionalScans = $scanHistory->slice(5);
 @endphp
 
 <div class="cx-page-head">
@@ -24,6 +26,7 @@
     .student-compact { display:grid; gap:14px; }
     .student-identity { border:1px solid var(--line); border-radius:20px; background:#fff; padding:16px; display:grid; gap:14px; box-shadow:var(--shadow-sm); }
     .student-id-main { display:flex; gap:14px; align-items:center; min-width:0; }
+    .student-id-main > div { min-width:0; }
     .student-id-main h2 { margin:0; font-size:clamp(24px,5vw,34px); letter-spacing:-.05em; line-height:1.05; }
     .student-id-main p { margin:5px 0 0; }
     .student-status-line { display:flex; flex-wrap:wrap; gap:8px; }
@@ -31,13 +34,23 @@
     .student-actions { display:grid; gap:8px; }
     .student-next { border:1px solid var(--line); border-radius:18px; background:#fff; padding:14px 16px; display:grid; gap:6px; }
     .student-next h2 { margin:0; font-size:18px; letter-spacing:-.02em; }
-    .student-activity { border:1px solid var(--line); border-radius:18px; background:#fff; padding:14px 16px; }
+    .student-activity { min-width:0; border:1px solid var(--line); border-radius:18px; background:#fff; padding:14px 16px; }
+    .student-history-mobile { display:grid; gap:8px; }
+    .student-history-row { display:grid; gap:7px; padding:12px; border:1px solid var(--line); border-radius:14px; background:rgba(244,244,239,.54); min-width:0; }
+    .student-history-row-head { display:flex; justify-content:space-between; align-items:flex-start; gap:8px; flex-wrap:wrap; }
+    .student-history-row p { margin:0; color:var(--ink-3); font-size:12px; line-height:1.45; overflow-wrap:anywhere; }
+    .student-history-row .btn { justify-self:start; min-height:36px; padding:0 12px; font-size:12px; }
+    .student-history-desktop { display:none; }
     .student-more { border:1px solid var(--line); border-radius:16px; background:#fff; overflow:hidden; }
     .student-more summary { cursor:pointer; padding:12px 14px; font-weight:900; }
     .student-more-body { padding:0 14px 14px; }
     @media (min-width:820px) {
         .student-identity { grid-template-columns:minmax(0,1fr) 260px; align-items:center; }
         .student-actions { grid-template-columns:1fr; }
+    }
+    @media (min-width:680px) {
+        .student-history-desktop { display:block; }
+        .student-history-mobile { display:none; }
     }
 </style>
 
@@ -77,11 +90,11 @@
 <section class="student-activity">
     <div class="cx-section-title"><h2>Access Activity</h2><span>{{ $scanHistory->count() }} recent</span></div>
     @if($scanHistory->count())
-        <div class="cx-table-wrap">
+        <div class="cx-table-wrap student-history-desktop">
             <table class="cx-table">
                 <thead><tr><th>Time</th><th>Decision</th><th>Examiner</th><th>Review Status</th><th>Action</th></tr></thead>
                 <tbody>
-                    @foreach($scanHistory as $scan)
+                    @foreach($visibleScans as $scan)
                         <tr>
                             <td class="mono">{{ $scan->timestamp }}</td>
                             <td><span class="chip {{ $scan->decision === 'APPROVED' ? 'emerald' : ($scan->decision === 'DUPLICATE' ? 'amber' : 'red') }}">{{ $scan->decision === 'DUPLICATE' ? 'REPEATED' : $scan->decision }}</span></td>
@@ -93,6 +106,37 @@
                 </tbody>
             </table>
         </div>
+        <div class="student-history-mobile">
+            @foreach($visibleScans as $scan)
+                <article class="student-history-row">
+                    <div class="student-history-row-head">
+                        <span class="chip {{ $scan->decision === 'APPROVED' ? 'emerald' : ($scan->decision === 'DUPLICATE' ? 'amber' : 'red') }}">{{ $scan->decision === 'DUPLICATE' ? 'REPEATED' : $scan->decision }}</span>
+                        <span class="mono cx-muted" style="font-size:11px">{{ $scan->timestamp }}</span>
+                    </div>
+                    <p>{{ $scan->examiner_name ?? $scan->examiner_username ?? 'Examiner unavailable' }} · {{ $scan->decision === 'DUPLICATE' ? 'Repeated scan recorded' : 'Recorded' }}</p>
+                    <a class="btn btn-ghost" href="{{ route('student.scans.show', $scan->log_id) }}">View</a>
+                </article>
+            @endforeach
+        </div>
+        @if($additionalScans->count())
+            <details class="student-more" style="margin-top:10px">
+                <summary>View {{ $additionalScans->count() }} more {{ \Illuminate\Support\Str::plural('scan', $additionalScans->count()) }}</summary>
+                <div class="student-more-body">
+                    <div class="student-history-mobile" style="display:grid">
+                        @foreach($additionalScans as $scan)
+                            <article class="student-history-row">
+                                <div class="student-history-row-head">
+                                    <span class="chip {{ $scan->decision === 'APPROVED' ? 'emerald' : ($scan->decision === 'DUPLICATE' ? 'amber' : 'red') }}">{{ $scan->decision === 'DUPLICATE' ? 'REPEATED' : $scan->decision }}</span>
+                                    <span class="mono cx-muted" style="font-size:11px">{{ $scan->timestamp }}</span>
+                                </div>
+                                <p>{{ $scan->examiner_name ?? $scan->examiner_username ?? 'Examiner unavailable' }} · {{ $scan->decision === 'DUPLICATE' ? 'Repeated scan recorded' : 'Recorded' }}</p>
+                                <a class="btn btn-ghost" href="{{ route('student.scans.show', $scan->log_id) }}">View</a>
+                            </article>
+                        @endforeach
+                    </div>
+                </div>
+            </details>
+        @endif
     @else
         <div class="cx-empty">No scan activity has been recorded for your access ID yet.</div>
     @endif

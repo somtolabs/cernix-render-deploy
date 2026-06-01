@@ -12,8 +12,16 @@ class CernixReset extends Command
 
     public function handle(): int
     {
-        if (app()->isProduction()) {
-            $this->error('This command cannot run in production.');
+        $productionResetAllowed = filter_var(env('CERNIX_ALLOW_PRODUCTION_RESET', false), FILTER_VALIDATE_BOOL);
+
+        if (app()->isProduction() && ! $productionResetAllowed) {
+            $this->error('Production reset blocked. Runtime records must never be deleted during startup or routine deploys.');
+            $this->line('Only set CERNIX_ALLOW_PRODUCTION_RESET=true for a deliberate, supervised recovery reset.');
+            return 1;
+        }
+
+        if (app()->isProduction() && ! $this->option('force')) {
+            $this->error('Production reset requires both CERNIX_ALLOW_PRODUCTION_RESET=true and --force.');
             return 1;
         }
 

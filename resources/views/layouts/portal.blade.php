@@ -46,7 +46,7 @@
         }
         *, *::before, *::after { box-sizing: border-box; }
         html { scroll-behavior: smooth; }
-        html, body { margin: 0; padding: 0; max-width: 100%; overflow-x: hidden; }
+        html, body { margin: 0; padding: 0; max-width: 100%; overflow-x: clip; overflow-y: auto; }
         body {
             font-family: 'Inter', system-ui, sans-serif;
             background: var(--bg);
@@ -230,7 +230,7 @@
         .cx-step-dot { width: 28px; height: 28px; border-radius: 50%; background: rgba(5,150,105,.12); color: var(--emerald); display: grid; place-items: center; font-weight: 900; font-size: 12px; }
         .cx-step b { display: block; font-size: 13px; }
         .cx-step span { display: block; margin-top: 3px; color: var(--ink-3); font-size: 12px; line-height: 1.5; }
-        .cx-table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 18px; background: var(--bg-2); }
+        .cx-table-wrap { max-width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; border: 1px solid var(--line); border-radius: 18px; background: var(--bg-2); }
         .cx-table { width: 100%; border-collapse: collapse; min-width: 620px; }
         .cx-table th, .cx-table td { text-align: left; padding: 12px 14px; border-bottom: 1px solid var(--line); vertical-align: top; }
         .cx-table th { color: var(--ink-4); font-size: 10px; font-weight: 900; letter-spacing: .13em; text-transform: uppercase; }

@@ -225,6 +225,32 @@ class StudentPortalWebTest extends TestCase
           ->assertJsonPath('message', 'Demo passport photo is only available for student numbers 001 to 014 right now.');
     }
 
+    public function test_dashboard_uses_scroll_safe_mobile_history_for_many_scans(): void
+    {
+        $this->registerDemoStudent();
+
+        $tokenId = DB::table('qr_tokens')->where('student_id', '220404008')->value('token_id');
+        $examinerId = DB::table('examiners')->where('username', 'examiner1')->value('examiner_id');
+
+        foreach (range(1, 10) as $scanNumber) {
+            DB::table('verification_logs')->insert([
+                'token_id' => $tokenId,
+                'examiner_id' => $examinerId,
+                'decision' => $scanNumber === 1 ? 'APPROVED' : 'DUPLICATE',
+                'timestamp' => now()->subMinutes($scanNumber),
+                'device_fp' => 'mobile-scroll-test',
+                'ip_address' => '127.0.0.1',
+            ]);
+        }
+
+        $this->get('/student/dashboard')
+            ->assertOk()
+            ->assertSee('student-history-mobile', false)
+            ->assertSee('student-history-desktop', false)
+            ->assertSee('View 5 more scans')
+            ->assertSee('Repeated scan recorded');
+    }
+
     private function registerDemoStudent(): void
     {
         $departmentId = DB::table('departments')->where('dept_name', 'Computer Science')->value('dept_id');

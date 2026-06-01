@@ -15,6 +15,12 @@ class TimetableSeeder extends Seeder
             return;
         }
 
+        // Seed an initial demo timetable only. Runtime schedules are admin-owned
+        // records and must not be rewritten or expanded during later seed runs.
+        if (DB::table('timetables')->where('exam_session_id', $session->session_id)->exists()) {
+            return;
+        }
+
         $courses = [
             'Computer Science' => [
                 '300' => [['CSC301', 'Operating Systems', 1, '09:00', '12:00', 'CBT Hall A']],
@@ -46,7 +52,7 @@ class TimetableSeeder extends Seeder
 
             foreach ($levels as $level => $entries) {
                 foreach ($entries as [$code, $title, $dayOffset, $start, $end, $venue]) {
-                    DB::table('timetables')->updateOrInsert(
+                    DB::table('timetables')->insert(
                         [
                             'exam_session_id' => $session->session_id,
                             'department_id' => $department->dept_id,
@@ -54,8 +60,6 @@ class TimetableSeeder extends Seeder
                             'course_code' => $code,
                             'exam_date' => Carbon::today()->addDays($dayOffset)->toDateString(),
                             'start_time' => $start,
-                        ],
-                        [
                             'course_title' => $title,
                             'end_time' => $end,
                             'venue' => $venue,
