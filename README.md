@@ -53,10 +53,12 @@ Render startup runs:
 ```bash
 php artisan migrate --force
 php artisan db:seed --class="Database\\Seeders\\DepartmentsSeeder" --force
+php artisan cernix:ensure-baseline-access
 ```
 
-The targeted department seed is insert-safe and keeps registration reference
-rows available without touching runtime activity. Full demo seeding remains
+The targeted department seed keeps registration reference rows available. The baseline
+access command repairs only the three demo staff login rows if their hashes, roles, or
+active flags are stale. Neither operation touches runtime activity. Full demo seeding remains
 disabled by default. For a first provisioning deploy only, set:
 
 ```env

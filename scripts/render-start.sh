@@ -49,6 +49,9 @@ php artisan migrate --force
 # updates baseline department metadata only; it never touches runtime activity.
 php artisan db:seed --class="Database\\Seeders\\DepartmentsSeeder" --force
 
+# Baseline login rows are repaired idempotently without touching runtime records.
+php artisan cernix:ensure-baseline-access
+
 if [ "${CERNIX_SEED_ON_BOOT:-false}" = "true" ]; then
     echo "Running explicitly enabled insert-only seeders."
     php artisan db:seed --force

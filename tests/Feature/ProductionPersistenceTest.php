@@ -118,6 +118,7 @@ class ProductionPersistenceTest extends TestCase
 
         $this->assertStringContainsString('php artisan migrate --force', $script);
         $this->assertStringContainsString('php artisan db:seed --class="Database\\\\Seeders\\\\DepartmentsSeeder" --force', $script);
+        $this->assertStringContainsString('php artisan cernix:ensure-baseline-access', $script);
         $this->assertStringContainsString('CERNIX_SEED_ON_BOOT', $script);
         $this->assertStringContainsString('DB_CONNECTION:-', $script);
         $this->assertStringContainsString('DATABASE_URL:-${DB_URL:-}', $script);

@@ -171,4 +171,34 @@ class AdminRoleControlsTest extends TestCase
             ->assertSee('Save Fee Mapping')
             ->assertSee('Save Demo Mode');
     }
+    public function test_baseline_staff_accounts_can_login_through_their_expected_portals(): void
+    {
+        $this->postJson('/examiner/login', [
+            'username' => 'examiner1',
+            'password' => 'password123',
+        ])->assertOk()->assertJsonPath('redirect_url', '/examiner/dashboard');
+
+        $this->postJson('/admin/login', [
+            'username' => 'admin1',
+            'password' => 'admin123',
+        ])->assertOk()->assertJsonPath('redirect_url', '/admin/dashboard');
+
+        $this->postJson('/admin/login', [
+            'username' => 'superadmin',
+            'password' => 'superadmin123',
+        ])->assertOk()->assertJsonPath('redirect_url', '/admin/dashboard');
+    }
+
+    public function test_wrong_baseline_passwords_still_fail(): void
+    {
+        $this->postJson('/examiner/login', [
+            'username' => 'examiner1',
+            'password' => 'wrong-password',
+        ])->assertUnauthorized()->assertJsonPath('message', 'Invalid credentials.');
+
+        $this->postJson('/admin/login', [
+            'username' => 'admin1',
+            'password' => 'wrong-password',
+        ])->assertUnauthorized()->assertJsonPath('message', 'Invalid credentials.');
+    }
 }
