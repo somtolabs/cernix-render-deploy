@@ -2,93 +2,73 @@
 
 @section('examiner-content')
 <style>
-    .scanner-layout { display: grid; gap: 18px; }
-    .connection-strip { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-bottom:14px; padding:12px 14px; border:1px solid #dde4db; border-radius:16px; background:#fff; box-shadow:0 10px 28px rgba(23,32,27,.05); }
-    .connection-left { display:flex; align-items:center; gap:10px; min-width:0; }
-    .connection-dot { width:10px; height:10px; border-radius:999px; background:#94a3b8; box-shadow:0 0 0 5px rgba(148,163,184,.12); }
-    .connection-strip.online .connection-dot { background:#059669; box-shadow:0 0 0 5px rgba(5,150,105,.12); }
-    .connection-strip.slow .connection-dot, .connection-strip.pending .connection-dot { background:#b45309; box-shadow:0 0 0 5px rgba(180,83,9,.13); }
-    .connection-strip.offline .connection-dot, .connection-strip.server-down .connection-dot { background:#dc2626; box-shadow:0 0 0 5px rgba(220,38,38,.12); }
-    .connection-label { display:block; font-weight:900; color:#17201b; }
-    .connection-sub { display:block; margin-top:2px; font-size:12px; color:#667066; line-height:1.35; }
-    .scanner-panel { border-radius: 22px; overflow: hidden; background: #fff; border: 1px solid #dde4db; box-shadow: 0 18px 48px rgba(23,32,27,.08); max-width: 100%; }
-    .scanner-stage { position: relative; min-height: clamp(560px, 72dvh, 680px); background: #eef2ec; overflow: hidden; display: grid; place-items: center; width: 100%; max-width: 100%; }
-    .scanner-stage video, .scanner-stage canvas { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: center; }
-    .scanner-idle { position: relative; z-index: 3; color: #566157; text-align: center; padding: 12px 14px; max-width: 360px; border: 1px solid rgba(255,255,255,.75); border-radius: 14px; background: rgba(255,255,255,.78); box-shadow: 0 10px 26px rgba(23,32,27,.08); }
-    .scan-frame { position: relative; z-index: 2; width: min(520px, 88%); aspect-ratio: 1; border: 3px solid rgba(23,32,27,.88); border-radius: 24px; box-shadow: 0 0 0 999px rgba(23,32,27,.16); pointer-events: none; animation: scanPulse 1.65s ease-in-out infinite; overflow:hidden; }
-    .scan-frame::after { content:""; position:absolute; left:8%; right:8%; top:12%; height:3px; border-radius:999px; background:rgba(5,150,105,.85); box-shadow:0 0 18px rgba(5,150,105,.45); animation:scanLine 1.45s ease-in-out infinite; }
-    .scan-frame.detected { border-color:#059669; box-shadow:0 0 0 999px rgba(5,150,105,.18), 0 0 0 8px rgba(5,150,105,.12); }
-    .scanner-controls { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 15px; border-top: 1px solid #e7ebe3; background: #fbfcf8; }
-    .scanner-state { color: #667066; font-size: 13px; line-height: 1.5; align-self: center; max-width: 520px; }
-    .latest-result { display: grid; gap: 10px; }
-    .latest-result strong { font-size: 18px; }
-    .result-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 8px 14px; margin-top: 10px; }
-    .result-grid span { color: #667066; font-size: 11px; font-weight: 900; text-transform: uppercase; letter-spacing: .08em; }
-    .result-grid b { display: block; color: #17201b; margin-top: 2px; overflow-wrap: anywhere; }
-    .pending-panel { display:none; margin-top:14px; border:1px solid #f1d189; border-radius:16px; background:#fff8e5; padding:14px; color:#4c2f1d; }
-    .pending-panel.show { display:grid; gap:10px; }
+    .scanner-layout { display:grid; gap:14px; }
+    .connection-strip { display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; margin-bottom:10px; padding:9px 11px; border:1px solid #dde4db; border-radius:12px; background:#fff; }
+    .connection-left { display:flex; align-items:center; gap:9px; min-width:0; }
+    .connection-dot { width:8px; height:8px; border-radius:999px; background:#94a3b8; }
+    .connection-strip.online .connection-dot { background:#059669; }
+    .connection-strip.slow .connection-dot, .connection-strip.pending .connection-dot { background:#b45309; }
+    .connection-strip.offline .connection-dot, .connection-strip.server-down .connection-dot { background:#dc2626; }
+    .connection-label { display:block; font-weight:900; color:#17201b; font-size:13px; }
+    .connection-sub { display:block; margin-top:1px; font-size:12px; color:#667066; line-height:1.35; }
+    .scanner-panel { overflow:hidden; background:#fff; border:1px solid #dde4db; border-radius:16px; max-width:100%; }
+    .scanner-stage { position:relative; min-height:clamp(390px, 62dvh, 580px); background:#e9eee8; overflow:hidden; display:grid; place-items:center; width:100%; }
+    .scanner-stage video, .scanner-stage canvas { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; object-position:center; }
+    .scanner-idle { position:relative; z-index:3; color:#566157; text-align:center; padding:10px 12px; max-width:300px; border-radius:10px; background:rgba(255,255,255,.86); font-size:13px; line-height:1.5; }
+    .scan-frame { position:relative; z-index:2; width:min(390px, 78%); aspect-ratio:1; border:2px solid rgba(23,32,27,.72); border-radius:16px; box-shadow:0 0 0 999px rgba(23,32,27,.12); pointer-events:none; overflow:hidden; }
+    .scan-frame::after { content:""; position:absolute; left:10%; right:10%; top:50%; height:2px; border-radius:999px; background:rgba(5,150,105,.72); }
+    .scan-frame.detected { border-color:#059669; box-shadow:0 0 0 999px rgba(5,150,105,.12), 0 0 0 5px rgba(5,150,105,.12); }
+    .scanner-controls { display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; padding:12px; border-top:1px solid #e7ebe3; background:#fbfcf8; }
+    .scanner-state { color:#667066; font-size:13px; line-height:1.45; max-width:520px; }
+    .latest-result { display:grid; gap:9px; }
+    .latest-result strong { font-size:17px; }
+    .result-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px 12px; margin-top:8px; }
+    .result-grid span { color:#667066; font-size:10px; font-weight:900; text-transform:uppercase; letter-spacing:.08em; }
+    .result-grid b { display:block; color:#17201b; margin-top:2px; overflow-wrap:anywhere; }
+    .pending-panel { display:none; margin-top:11px; border:1px solid #f1d189; border-radius:12px; background:#fff8e5; padding:11px; color:#4c2f1d; font-size:13px; }
+    .pending-panel.show { display:grid; gap:8px; }
     .pending-panel b { color:#92400e; }
     .scanner-control-hidden { display:none !important; }
-    .scanner-diagnostics { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; margin-bottom:14px; }
-    .scanner-diagnostic { min-width:0; padding:9px 11px; border:1px solid #dde4db; border-radius:12px; background:#fff; }
-    .scanner-diagnostic span { display:block; color:#667066; font-size:10px; font-weight:900; letter-spacing:.08em; text-transform:uppercase; }
-    .scanner-diagnostic b { display:block; margin-top:3px; color:#17201b; font-size:12px; overflow-wrap:anywhere; }
+    .scanner-checks { margin:0 0 10px; }
+    .scanner-checks summary { color:#667066; cursor:pointer; font-size:12px; font-weight:800; }
+    .scanner-diagnostics { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:7px; margin-top:8px; }
+    .scanner-diagnostic { min-width:0; padding:8px 9px; border:1px solid #e3e8e0; border-radius:10px; background:#fff; }
+    .scanner-diagnostic span { display:block; color:#667066; font-size:9px; font-weight:900; letter-spacing:.08em; text-transform:uppercase; }
+    .scanner-diagnostic b { display:block; margin-top:2px; color:#17201b; font-size:11px; overflow-wrap:anywhere; }
     .scanner-diagnostic.ok b { color:#047857; }
     .scanner-diagnostic.warn b { color:#92400e; }
     .scanner-diagnostic.error b { color:#b91c1c; }
-    .verify-overlay { position: fixed; inset: 0; z-index: 1000; padding: clamp(14px, 4vw, 34px); background: rgba(23,32,27,.52); overflow-y: auto; overscroll-behavior: contain; animation: overlayIn .18s ease both; }
-    .verify-overlay[hidden] { display: none; }
-    .verify-document { position: relative; width: min(760px, 100%); margin: 0 auto; border-radius: 28px; border: 1px solid var(--result-border); background: var(--result-bg); color: #291f16; box-shadow: 0 30px 90px rgba(0,0,0,.28); overflow: hidden; animation: resultIn .2s ease both; }
-    .verify-document::before { content: ""; position: absolute; inset: 0; background: url('/aaua-logo.png') center / 105% no-repeat; opacity: .19; z-index: 0; pointer-events: none; }
-    .verify-document > * { position: relative; z-index: 1; }
-    .verify-document.approved { --result-bg: #f0fbf4; --result-border: #86efac; --result-accent: #047857; --result-soft: #dcfce7; }
-    .verify-document.rejected { --result-bg: #fff1f2; --result-border: #fda4af; --result-accent: #b91c1c; --result-soft: #fee2e2; }
-    .verify-document.duplicate { --result-bg: #fff8e5; --result-border: #f5c56b; --result-accent: #92400e; --result-soft: #fef3c7; }
-    .verify-top { display: grid; grid-template-columns: auto minmax(0,1fr); gap: 18px; padding: clamp(20px, 5vw, 34px); align-items: center; }
-    .verify-icon { width: 74px; height: 74px; border-radius: 24px; display: grid; place-items: center; background: var(--result-soft); color: var(--result-accent); border: 2px solid var(--result-border); font-size: 34px; font-weight: 900; }
-    .verify-label { color: #9b8067; text-transform: uppercase; letter-spacing: .22em; font-weight: 900; font-size: 12px; }
-    .verify-status { margin: 5px 0 0; color: var(--result-accent); font-size: clamp(40px, 11vw, 68px); line-height: .94; letter-spacing: -.055em; font-weight: 950; }
-    .verify-message { margin: 8px 0 0; color: #7a614b; font-size: clamp(16px, 4vw, 22px); line-height: 1.35; }
-    .verify-body { padding: 0 clamp(20px, 5vw, 34px) clamp(18px, 5vw, 30px); display: grid; gap: 16px; }
-    .verify-student { display: grid; grid-template-columns: 86px minmax(0,1fr); gap: 16px; align-items: center; padding: 16px; border-radius: 22px; background: rgba(255,255,255,.76); border: 1px solid rgba(255,255,255,.7); }
-    .verify-photo { width: 86px; height: 114px; aspect-ratio: 3 / 4; object-fit: cover; object-position: center; border-radius: 12px; background: #ece8df; border: 1px solid rgba(0,0,0,.12); box-shadow: inset 0 0 0 4px rgba(255,255,255,.55); }
-    .verify-name { margin: 0; font-size: clamp(21px, 5.5vw, 30px); line-height: 1.08; letter-spacing: -.02em; color: #3a2415; overflow-wrap: anywhere; }
-    .verify-meta { margin-top: 6px; color: #8a715d; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-weight: 800; }
-    .verify-details { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 10px; }
-    .verify-detail { padding: 13px 14px; border-radius: 16px; background: rgba(255,255,255,.64); border: 1px solid rgba(255,255,255,.7); min-width: 0; }
-    .verify-detail span { display: block; color: #9b8067; font-size: 11px; text-transform: uppercase; letter-spacing: .1em; font-weight: 900; }
-    .verify-detail b { display: block; margin-top: 5px; color: #4c2f1d; overflow-wrap: anywhere; }
-    .verify-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 16px clamp(20px, 5vw, 34px) clamp(20px, 5vw, 30px); background: rgba(255,255,255,.42); border-top: 1px solid rgba(0,0,0,.06); }
-    .verify-actions button, .verify-actions a { min-height: 50px; border-radius: 16px; border: 1px solid rgba(0,0,0,.08); background: #fff; color: #4c2f1d; display: inline-flex; align-items: center; justify-content: center; text-decoration: none; font-weight: 950; font-size: 16px; }
-    .verify-actions a { background: var(--result-accent); color: #fff; border-color: var(--result-accent); }
-    @keyframes scanPulse { 0%,100%{border-color:rgba(23,32,27,.7)} 50%{border-color:rgba(4,120,87,.96)} }
-    @keyframes scanLine { 0%,100%{ transform:translateY(0); opacity:.55; } 50%{ transform:translateY(265px); opacity:1; } }
-    @keyframes overlayIn { from{opacity:0} to{opacity:1} }
-    @keyframes resultIn { from{opacity:0;transform:translateY(12px) scale(.985)} to{opacity:1;transform:none} }
-    @media (min-width: 980px) {
-        .scanner-layout { grid-template-columns: minmax(0, 1fr) 360px; align-items: start; }
-        .scanner-diagnostics { grid-template-columns:repeat(4,minmax(0,1fr)); }
-    }
-    @media (max-width: 640px) {
-        .scanner-stage { min-height: clamp(420px, 68dvh, 540px); width: 100%; }
-        .scan-frame { width:min(420px, 90%); }
-        .verify-overlay { padding: 10px; }
-        .verify-top { grid-template-columns: 1fr; gap: 12px; }
-        .verify-icon { width: 62px; height: 62px; border-radius: 20px; font-size: 28px; }
-        .verify-student { grid-template-columns: 72px minmax(0,1fr); gap: 12px; padding: 13px; }
-        .verify-photo { width: 72px; height: 96px; }
-        .verify-details { grid-template-columns: 1fr; gap: 8px; }
-        .verify-actions { grid-template-columns: 1fr; }
-    }
-    @media (prefers-reduced-motion: reduce) {
-        .scan-frame, .scan-frame::after, .verify-overlay, .verify-document { animation: none !important; }
-    }
+    .verify-overlay { position:fixed; inset:0; z-index:1000; padding:14px; background:rgba(23,32,27,.42); overflow-y:auto; overscroll-behavior:contain; }
+    .verify-overlay[hidden] { display:none; }
+    .verify-document { position:relative; width:min(620px,100%); margin:4vh auto 0; border-radius:18px; border:1px solid var(--result-border); background:var(--result-bg); color:#291f16; overflow:hidden; }
+    .verify-document.approved { --result-bg:#f0fbf4; --result-border:#86efac; --result-accent:#047857; --result-soft:#dcfce7; }
+    .verify-document.rejected { --result-bg:#fff1f2; --result-border:#fda4af; --result-accent:#b91c1c; --result-soft:#fee2e2; }
+    .verify-document.duplicate { --result-bg:#fff8e5; --result-border:#f5c56b; --result-accent:#92400e; --result-soft:#fef3c7; }
+    .verify-top { display:grid; grid-template-columns:auto minmax(0,1fr); gap:12px; padding:18px; align-items:center; }
+    .verify-icon { width:50px; height:50px; border-radius:14px; display:grid; place-items:center; background:var(--result-soft); color:var(--result-accent); border:1px solid var(--result-border); font-size:24px; font-weight:900; }
+    .verify-label { color:#806b59; text-transform:uppercase; letter-spacing:.12em; font-weight:900; font-size:10px; }
+    .verify-status { margin:3px 0 0; color:var(--result-accent); font-size:30px; line-height:1; font-weight:950; }
+    .verify-message { margin:5px 0 0; color:#6f5a49; font-size:14px; line-height:1.4; }
+    .verify-body { padding:0 18px 16px; display:grid; gap:11px; }
+    .verify-student { display:grid; grid-template-columns:62px minmax(0,1fr); gap:11px; align-items:center; padding:11px; border-radius:13px; background:rgba(255,255,255,.72); }
+    .verify-photo { width:62px; height:82px; object-fit:cover; object-position:center; border-radius:9px; background:#ece8df; border:1px solid rgba(0,0,0,.1); }
+    .verify-name { margin:0; font-size:19px; line-height:1.12; color:#3a2415; overflow-wrap:anywhere; }
+    .verify-meta { margin-top:4px; color:#806b59; font-weight:800; }
+    .verify-details { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:7px; }
+    .verify-detail { padding:9px 10px; border-radius:10px; background:rgba(255,255,255,.64); min-width:0; }
+    .verify-detail span { display:block; color:#806b59; font-size:9px; text-transform:uppercase; letter-spacing:.08em; font-weight:900; }
+    .verify-detail b { display:block; margin-top:3px; color:#4c2f1d; font-size:13px; overflow-wrap:anywhere; }
+    .verify-actions { display:grid; grid-template-columns:1fr 1fr; gap:9px; padding:12px 18px 16px; border-top:1px solid rgba(0,0,0,.06); }
+    .verify-actions button, .verify-actions a { min-height:42px; border-radius:11px; border:1px solid rgba(0,0,0,.08); background:#fff; color:#4c2f1d; display:inline-flex; align-items:center; justify-content:center; text-decoration:none; font-weight:900; font-size:14px; }
+    .verify-actions a { background:var(--result-accent); color:#fff; border-color:var(--result-accent); }
+    @media (min-width:980px) { .scanner-layout { grid-template-columns:minmax(0,1fr) 320px; align-items:start; } .scanner-stage { min-height:560px; } .scanner-diagnostics { grid-template-columns:repeat(4,minmax(0,1fr)); } }
+    @media (max-width:640px) { .scanner-stage { min-height:420px; } .scan-frame { width:min(320px,78%); } .scanner-controls { align-items:stretch; } .scanner-controls > div { width:100%; } .scanner-controls .ex-action { flex:1 1 auto; } .verify-overlay { padding:8px; } .verify-document { margin:8px auto 0; } .verify-top { padding:14px; } .verify-body { padding:0 14px 12px; } .verify-details { grid-template-columns:repeat(2,minmax(0,1fr)); } .verify-actions { padding:10px 14px 14px; } }
 </style>
 
 <div class="ex-page-head">
     <div>
-        <h1 class="ex-title">Live Scanner</h1>
-        <p class="ex-subtitle">Scan one CERNIX QR at a time. Server verification controls approval.</p>
+        <h1 class="ex-title">Scanner</h1>
+        <p class="ex-subtitle">Scan a student exam pass and confirm the server result.</p>
     </div>
 </div>
 
@@ -104,21 +84,24 @@
             </div>
             <button class="ex-action secondary" type="button" id="retryPendingTop" style="display:none">Retry Verification</button>
         </div>
-        <div class="scanner-diagnostics" aria-label="Scanner diagnostics">
-            <div class="scanner-diagnostic" id="diagLibrary"><span>Scanner</span><b>Checking reader...</b></div>
-            <div class="scanner-diagnostic" id="diagCamera"><span>Camera</span><b>Waiting to start</b></div>
-            <div class="scanner-diagnostic" id="diagServer"><span>Server</span><b>Checking connection...</b></div>
-            <div class="scanner-diagnostic" id="diagScan"><span>Latest scan</span><b>Waiting for QR</b></div>
-        </div>
+        <details class="scanner-checks">
+            <summary>Scanner checks</summary>
+            <div class="scanner-diagnostics" aria-label="Scanner diagnostics">
+                <div class="scanner-diagnostic" id="diagLibrary"><span>Scanner</span><b>Checking reader...</b></div>
+                <div class="scanner-diagnostic" id="diagCamera"><span>Camera</span><b>Waiting to start</b></div>
+                <div class="scanner-diagnostic" id="diagServer"><span>Server</span><b>Checking connection...</b></div>
+                <div class="scanner-diagnostic" id="diagScan"><span>Latest scan</span><b>Waiting for QR</b></div>
+            </div>
+        </details>
         <div class="scanner-panel">
             <div class="scanner-stage" id="scannerStage">
                 <video id="scannerVideo" playsinline muted></video>
                 <canvas id="scannerCanvas" hidden></canvas>
                 <div class="scan-frame" aria-hidden="true"></div>
-                <div class="scanner-idle" id="scannerIdle">Camera is idle. Press Start Scanner to begin verification.</div>
+                <div class="scanner-idle" id="scannerIdle">Camera is idle. Start the scanner and point it at an exam pass.</div>
             </div>
             <div class="scanner-controls">
-                <div class="scanner-state" id="scannerState">Camera permission needed. Hold the QR steady inside the frame. Use good lighting. Move closer if not detected.</div>
+                <div class="scanner-state" id="scannerState">Camera permission is required. Hold the exam pass inside the frame.</div>
                 <div style="display:flex;gap:8px;flex-wrap:wrap">
                     <button class="ex-action" type="button" id="startScanner">Start Scanner</button>
                     <button class="ex-action secondary scanner-control-hidden" type="button" id="stopScanner">Stop Scanner</button>
@@ -129,9 +112,9 @@
     </section>
 
     <aside class="ex-panel ex-section-pad">
-        <h2 style="margin:0 0 10px;font-size:20px">Latest Result</h2>
+        <div style="display:flex;justify-content:space-between;gap:10px;align-items:center;margin-bottom:10px"><h2 style="margin:0;font-size:18px">Latest Result</h2><a class="ex-action secondary" href="{{ route('examiner.scan-history') }}">History</a></div>
         <div id="latestResult" class="latest-result">
-            <p class="ex-empty">No QR has been verified in this browser session yet.</p>
+            <p class="ex-empty">No scan yet. Start the camera and point it at a CERNIX exam pass.</p>
         </div>
         <div class="pending-panel" id="pendingPanel">
             <b>Pending verification</b>

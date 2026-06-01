@@ -57,12 +57,15 @@ class ExaminerPortalWebTest extends TestCase
             ->assertJsonPath('rows.0.action', 'scan.approved');
     }
 
-    public function test_examiner_scanner_page_uses_local_reader_and_visible_diagnostics(): void
+    public function test_examiner_scanner_page_uses_local_reader_and_compact_optional_diagnostics(): void
     {
         $this->withSession($this->examinerSession())
             ->get('/examiner/dashboard')
             ->assertOk()
+            ->assertSee('Scanner checks')
             ->assertSee('Scanner diagnostics')
+            ->assertSee('Start Scanner')
+            ->assertSee('Latest Result')
             ->assertSee('Reader ready')
             ->assertSee('window.jsQR')
             ->assertSee('cernix:scanner-ready')

@@ -64,6 +64,7 @@
     .demo-record span { display:block; margin-top:3px; color:var(--ink-3); font-size:12px; line-height:1.45; }
     .demo-record button { min-height:34px; padding:0 10px; border-radius:11px; border:1px solid var(--line); background:#fff; color:var(--navy); font-size:12px; font-weight:900; transition:transform .16s ease, box-shadow .16s ease; }
     .demo-record button:hover { transform:translateY(-1px); box-shadow:var(--shadow-sm); }
+    .sr-alert { margin-top:12px; padding:10px 12px; border:1px solid #f1d189; border-radius:10px; background:#fff8e5; color:#7c4a13; font-size:13px; line-height:1.45; }
     .sr-submit { margin-top:18px; min-height:50px; border-radius:14px; transition:transform .16s ease, box-shadow .16s ease; }
     .sr-submit:hover { transform:translateY(-1px); box-shadow:var(--shadow-sm); }
     #message { display:none; margin-top:14px; padding:12px 13px; border:1px dashed var(--line-2); border-radius:14px; background:var(--bg); color:var(--ink-3); font-size:13px; line-height:1.5; }
@@ -105,6 +106,9 @@
                     <span class="sr-chip">{{ ($session->semester ?? 'No active semester') }} {{ $session->academic_year ?? '' }}</span>
                     <span class="sr-chip">Faculty of Computing</span>
                 </div>
+                @if(! $session)
+                    <div class="sr-alert" role="alert">No active exam session is currently open. An admin must activate an exam session.</div>
+                @endif
             </div>
 
             <div class="sr-body">
@@ -197,7 +201,7 @@
                     </details>
                 @endif
 
-                <button class="btn btn-primary btn-block sr-submit" type="submit" id="submit-btn">Open my Exam Dashboard</button>
+                <button class="btn btn-primary btn-block sr-submit" type="submit" id="submit-btn" @disabled(! $session)>Open my Exam Dashboard</button>
                 <div id="message"></div>
             </div>
         </form>
