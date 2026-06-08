@@ -43,22 +43,24 @@ class ExaminerWebController extends Controller
         return view('examiner.login', ['mode' => 'admin']);
     }
 
-    public function doLogin(Request $request): JsonResponse
+    public function doLogin(Request $request): JsonResponse|RedirectResponse
     {
         return $this->loginWithMode($request, 'examiner');
     }
 
-    public function adminDoLogin(Request $request): JsonResponse
+    public function adminDoLogin(Request $request): JsonResponse|RedirectResponse
     {
         return $this->loginWithMode($request, 'admin');
     }
 
-    private function loginWithMode(Request $request, string $mode): JsonResponse
+    private function loginWithMode(Request $request, string $mode): JsonResponse|RedirectResponse
     {
         $credentials = $request->validate([
             'username' => 'required|string|max:100',
             'password' => 'required|string|max:200',
         ]);
+
+        $expectsJson = $request->expectsJson() || $request->ajax();
 
         $examiner = DB::table('examiners')
             ->where('username', $credentials['username'])
@@ -66,15 +68,37 @@ class ExaminerWebController extends Controller
             ->first();
 
         if (! $examiner || ! Hash::check($credentials['password'], $examiner->password_hash)) {
-            return response()->json(['status' => 'error', 'message' => 'Invalid credentials.'], 401);
+            if ($expectsJson) {
+                return response()->json(['status' => 'error', 'message' => 'Invalid credentials.'], 401);
+            }
+
+            return back()
+                ->withInput($request->only('username'))
+                ->with('error', 'Invalid credentials.');
         }
 
         if ($mode === 'examiner' && ! Roles::isExaminer($examiner->role)) {
-            return response()->json(['status' => 'error', 'message' => 'This account is not permitted to access the Examiner portal.'], 403);
+            $message = 'This account is not permitted to access the Examiner portal.';
+
+            if ($expectsJson) {
+                return response()->json(['status' => 'error', 'message' => $message], 403);
+            }
+
+            return back()
+                ->withInput($request->only('username'))
+                ->with('error', $message);
         }
 
         if ($mode === 'admin' && ! Roles::isAdminLike($examiner->role)) {
-            return response()->json(['status' => 'error', 'message' => 'This account is not permitted to access the Admin portal.'], 403);
+            $message = 'This account is not permitted to access the Admin portal.';
+
+            if ($expectsJson) {
+                return response()->json(['status' => 'error', 'message' => $message], 403);
+            }
+
+            return back()
+                ->withInput($request->only('username'))
+                ->with('error', $message);
         }
 
         $request->session()->regenerate();
@@ -85,10 +109,16 @@ class ExaminerWebController extends Controller
 
         app(AuditService::class)->logAction((string) $examiner->examiner_id, 'examiner', 'examiner.login', ['username' => $examiner->username]);
 
+        $redirectUrl = $mode === 'admin' ? '/admin/dashboard' : '/examiner/dashboard';
+
+        if (! $expectsJson) {
+            return redirect($redirectUrl);
+        }
+
         return response()->json([
             'status' => 'success',
             'message' => 'Login successful',
-            'redirect_url' => $mode === 'admin' ? '/admin/dashboard' : '/examiner/dashboard',
+            'redirect_url' => $redirectUrl,
             'data' => [
                 'examiner_id' => $examiner->examiner_id,
                 'full_name' => $examiner->full_name,
@@ -134,6 +164,7 @@ class ExaminerWebController extends Controller
         return view('examiner.dashboard', [
             'examiner' => $examiner,
             'metrics' => $this->metricsData((int) $examiner['id']),
+            'recentRows' => $this->scanRows((int) $examiner['id'], 3),
             'notificationUnreadCount' => $this->examinerUnreadNotes((int) $examiner['id']),
         ]);
     }

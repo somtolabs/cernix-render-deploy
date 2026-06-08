@@ -4,13 +4,9 @@
 @php
     $nav = [
         ['key' => 'overview', 'label' => 'Overview', 'route' => 'student.dashboard'],
-        ['key' => 'profile', 'label' => 'Profile', 'route' => 'student.profile'],
         ['key' => 'exam-access-id', 'label' => 'Exam Pass', 'route' => 'student.exam-access-id'],
         ['key' => 'timetable', 'label' => 'Timetable', 'route' => 'student.timetable'],
-        ['key' => 'payment', 'label' => 'Payment', 'route' => 'student.payment'],
         ['key' => 'notifications', 'label' => 'Notifications', 'route' => 'student.notifications', 'badge' => $notificationUnreadCount ?? 0],
-        ['key' => 'instructions', 'label' => 'Instructions', 'route' => 'student.instructions'],
-        ['key' => 'print', 'label' => 'Print Pass', 'route' => 'student.exam-pass'],
     ];
     $activePortal = $activePortal ?? 'overview';
 @endphp
@@ -48,8 +44,8 @@
     .metric span { display: block; color: var(--ink-3); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; font-weight: 800; }
     .metric b { display: block; margin-top: 8px; font-size: 18px; overflow-wrap: anywhere; }
     .student-mini { display: flex; align-items: center; gap: 14px; min-width: 0; }
-    .student-photo { width: 72px; height: 88px; border-radius: 16px; object-fit: cover; background: var(--bg); border: 1px solid var(--line); flex: 0 0 auto; }
-    .student-fallback { width: 72px; height: 88px; border-radius: 16px; background: var(--bg); border: 1px solid var(--line); display: grid; place-items: center; color: var(--ink-3); font-weight: 800; flex: 0 0 auto; }
+    .student-photo { width: 72px; height: 72px; border-radius: 9999px; aspect-ratio: 1 / 1; object-fit: cover; object-position: center; background: var(--bg); border: 1px solid var(--line); flex: 0 0 auto; overflow: hidden; }
+    .student-fallback { width: 72px; height: 72px; border-radius: 9999px; aspect-ratio: 1 / 1; background: var(--navy); border: 1px solid var(--line); display: grid; place-items: center; color: #fff; font-weight: 800; flex: 0 0 auto; overflow: hidden; }
     .table-card { max-width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
     .data-table { width: 100%; border-collapse: collapse; min-width: 620px; }
     .data-table th, .data-table td { text-align: left; padding: 13px 14px; border-bottom: 1px solid var(--line); vertical-align: top; }

@@ -39,15 +39,15 @@
             display: inline-grid;
             place-items: center;
             flex: 0 0 auto;
-            aspect-ratio: 3 / 4;
+            aspect-ratio: 1 / 1;
             overflow: hidden;
             border: 1px solid var(--line-2, #d7d4c8);
-            border-radius: 14px;
-            background: linear-gradient(180deg, #f7f7f3, #ecebe3);
-            color: var(--ink-3, #6b7085);
+            border-radius: 9999px;
+            background: var(--navy, #0f2050);
+            color: #fff;
             font-weight: 900;
             line-height: 1;
-            box-shadow: inset 0 0 0 4px rgba(255,255,255,.64), 0 1px 2px rgba(14,18,38,.06);
+            box-shadow: inset 0 0 0 3px rgba(255,255,255,.72), 0 1px 2px rgba(14,18,38,.06);
         }
         .cernix-passport-photo img {
             position: absolute;
@@ -57,17 +57,25 @@
             display: block;
             object-fit: cover;
             object-position: center;
+            border-radius: inherit;
         }
         .cernix-passport-initials { position: relative; z-index: 0; }
-        .cernix-passport-photo--compact { width: 48px; height: 64px; border-radius: 10px; font-size: 14px; }
-        .cernix-passport-photo--passport { width: 72px; height: 96px; border-radius: 12px; font-size: 18px; }
-        .cernix-passport-photo--profile { width: 92px; height: 122px; border-radius: 16px; font-size: 24px; }
-        .cernix-passport-photo--scan-result { width: 106px; height: 140px; border-radius: 18px; font-size: 28px; }
-        .cernix-passport-photo--admin-detail { width: 104px; height: 138px; border-radius: 18px; font-size: 28px; }
+        .student-avatar,
+        .student-avatar-fallback { border-radius: 9999px; aspect-ratio: 1 / 1; overflow: hidden; object-fit: cover; object-position: center; }
+        .student-avatar-sm,
+        .cernix-passport-photo--compact { width: 40px; height: 40px; font-size: 13px; }
+        .student-avatar-md { width: 56px; height: 56px; font-size: 16px; }
+        .student-avatar-lg,
+        .cernix-passport-photo--passport { width: 108px; height: 108px; font-size: 24px; }
+        .student-avatar-xl,
+        .cernix-passport-photo--profile,
+        .cernix-passport-photo--admin-detail { width: 108px; height: 108px; font-size: 26px; }
+        .cernix-passport-photo--scan-result { width: 120px; height: 120px; font-size: 30px; }
         @media (max-width: 520px) {
             .cernix-passport-photo--profile,
-            .cernix-passport-photo--admin-detail { width: 82px; height: 110px; }
-            .cernix-passport-photo--scan-result { width: 82px; height: 108px; }
+            .cernix-passport-photo--admin-detail,
+            .cernix-passport-photo--passport { width: 96px; height: 96px; }
+            .cernix-passport-photo--scan-result { width: 104px; height: 104px; }
         }
     </style>
 @endonce

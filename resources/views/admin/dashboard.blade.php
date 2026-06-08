@@ -171,7 +171,7 @@
         <div class="dash-panel-head"><h2>Recent System Activity</h2><a class="admin-action ghost" href="{{ route('admin.activity') }}">Audit Trail</a></div>
         <div class="dash-panel-body">
             <div class="dash-list">
-                @forelse($recentActivity->take(6) as $event)
+                @forelse($recentActivity->take(3) as $event)
                     <div class="dash-row">
                         <div><b>{{ $event->action ?? 'Audit activity' }}</b><span>{{ $event->actor_type ?? 'system' }} #{{ $event->actor_id ?? '-' }} / {{ $event->timestamp ?? 'No timestamp' }}</span></div>
                         <span class="dash-pill">Audit</span>
@@ -207,7 +207,7 @@
         <div class="dash-panel-head"><h2>Recent Operational Activity</h2><a class="admin-action ghost" href="{{ route('admin.scan-logs') }}">Verification Logs</a></div>
         <div class="dash-panel-body">
             <div class="dash-list">
-                @forelse($recentLogs->take(6) as $log)
+                @forelse($recentLogs->take(3) as $log)
                     <div class="dash-row">
                         <div><b>{{ $log->decision === 'DUPLICATE' ? 'REPEATED' : $log->decision }} scan - {{ $log->student_name ?? 'Student unavailable' }}</b><span class="mono">{{ $log->matric_no ?? 'No matric' }} / {{ $log->timestamp }}</span></div>
                         <a class="admin-action ghost" href="{{ route('admin.scan-logs.show', $log->log_id) }}">View</a>

@@ -70,8 +70,13 @@ class StudentPortalWebTest extends TestCase
     {
         $this->registerDemoStudent();
 
+        $this->get('/student/dashboard')
+            ->assertOk()
+            ->assertSee('Payment: Verified')
+            ->assertDontSee(route('student.payment'), false)
+            ->assertDontSee(route('student.instructions'), false);
+
         foreach ([
-            '/student/dashboard',
             '/student/profile',
             '/student/exam-access-id',
             '/student/timetable',
@@ -262,7 +267,7 @@ class StudentPortalWebTest extends TestCase
             ->assertOk()
             ->assertSee('student-history-mobile', false)
             ->assertSee('student-history-desktop', false)
-            ->assertSee('View 5 more scans')
+            ->assertSee('Showing the latest 3 of 10 access records')
             ->assertSee('Repeated scan recorded');
     }
 

@@ -109,9 +109,9 @@
         background: rgba(255,255,255,.72);
     }
     .identity-row .cernix-passport-photo--passport {
-        width: 60px;
-        height: 80px;
-        border-radius: 11px;
+        width: 68px;
+        height: 68px;
+        border-radius: 9999px;
     }
     .identity-row h2 {
         margin: 0;
@@ -227,6 +227,7 @@
         .id-head { padding: 14px 16px; }
         .id-body { padding: 13px 14px 13px; gap: 10px; }
         .identity-row { padding: 10px; }
+        .identity-row .cernix-passport-photo--passport { width: 72px; height: 72px; }
         .qr-section {
             grid-template-columns: minmax(0, 1fr);
             align-items: stretch;

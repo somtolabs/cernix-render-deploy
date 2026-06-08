@@ -3,6 +3,23 @@
 @section('admin-title', 'Examiner Detail')
 
 @section('admin-content')
+@php
+    $examinerInitials = collect(explode(' ', (string) $examiner->full_name))
+        ->filter()
+        ->take(2)
+        ->map(fn ($part) => strtoupper(substr($part, 0, 1)))
+        ->implode('') ?: 'EX';
+@endphp
+<style>
+    .examiner-id-card { display:flex; align-items:center; gap:14px; min-width:0; }
+    .examiner-avatar { width:64px; height:64px; border-radius:9999px; display:grid; place-items:center; flex:0 0 auto; background:var(--navy); color:#fff; font-weight:950; border:1px solid var(--line); }
+    .examiner-id-card h2 { margin:0; font-size:clamp(20px,4vw,28px); letter-spacing:-.035em; line-height:1.08; overflow-wrap:anywhere; }
+    .examiner-id-meta { margin-top:5px; color:var(--ink-3); }
+    @media (max-width:640px) {
+        .examiner-id-card { align-items:flex-start; }
+        .examiner-avatar { width:56px; height:56px; }
+    }
+</style>
 <div class="admin-page-head">
     <div>
         <div class="cx-eyebrow">Examiner Trace</div>
@@ -16,6 +33,18 @@
 </div>
 
 @if(session('status'))<div class="admin-section" style="margin-bottom:16px"><div class="admin-section-body">{{ session('status') }}</div></div>@endif
+
+<section class="admin-section" style="margin-bottom:16px">
+    <div class="admin-section-body">
+        <div class="examiner-id-card">
+            <span class="examiner-avatar" aria-hidden="true">{{ $examinerInitials }}</span>
+            <div style="min-width:0">
+                <h2>{{ $examiner->full_name }}</h2>
+                <div class="examiner-id-meta mono">{{ $examiner->username }} · {{ Str::headline($examiner->role) }} · {{ $examiner->is_active ? 'Active' : 'Inactive' }}</div>
+            </div>
+        </div>
+    </div>
+</section>
 
 <section class="metric-strip">
     <div class="metric-cell"><span class="metric-label">Total Scans</span><span class="metric-value">{{ $examiner->total_scans }}</span></div>
@@ -57,7 +86,7 @@
     <section class="admin-section">
         <div class="admin-section-head"><h2>Audit Activity</h2></div>
         <div class="admin-section-body">
-            @forelse($audit as $event)
+            @forelse($audit->take(3) as $event)
                 <div class="admin-info-row"><span class="admin-value">{{ $event->action }}</span><span class="muted mono">{{ $event->timestamp }}</span></div>
             @empty
                 <div class="admin-empty">No examiner audit activity yet.</div>
@@ -67,13 +96,21 @@
 </div>
 
 <section class="admin-section" style="margin-top:16px">
-    <div class="admin-section-head"><h2>Scan History</h2><span>{{ $history->count() }} recent records</span></div>
+    <div class="admin-section-head">
+        <h2>Scan History</h2>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+            <span>Latest {{ min(3, $history->count()) }} of {{ $history->count() }}</span>
+            @if($history->count() > 3)
+                <a class="admin-action ghost" href="{{ route('admin.scan-logs', ['examiner_id' => $examiner->examiner_id]) }}">View all</a>
+            @endif
+        </div>
+    </div>
     <div class="admin-section-body">
         <div class="admin-table-wrap">
             <table class="admin-table">
                 <thead><tr><th>Time</th><th>Decision</th><th>Student</th><th>Matric</th><th>Review Status</th><th>Action</th></tr></thead>
                 <tbody>
-                    @forelse($history as $row)
+                    @forelse($history->take(3) as $row)
                         <tr><td class="mono">{{ $row->timestamp }}</td><td><span class="admin-status {{ $row->decision === 'APPROVED' ? 'green' : ($row->decision === 'DUPLICATE' ? 'amber' : 'red') }}">{{ $row->decision === 'DUPLICATE' ? 'REPEATED' : $row->decision }}</span></td><td>{{ $row->student_name ?? 'Unavailable' }}</td><td class="mono">{{ $row->matric_no ?? 'Not available' }}</td><td>{{ $row->decision === 'DUPLICATE' ? 'Repeated scan needs review' : 'Recorded' }}</td><td><a class="admin-action ghost" href="{{ route('admin.scan-logs.show', $row->log_id) }}">View</a></td></tr>
                     @empty
                         <tr><td colspan="6"><div class="admin-empty">No scan history for this examiner.</div></td></tr>

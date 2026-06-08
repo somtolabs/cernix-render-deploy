@@ -5,14 +5,24 @@
 @section('admin-content')
 <style>
     .student-row-id { display:flex; align-items:center; gap:12px; min-width:240px; }
-    .student-avatar { width:42px; height:42px; border-radius:14px; display:grid; place-items:center; flex:0 0 auto; background:rgba(15,32,80,.08); color:var(--navy); font-weight:950; letter-spacing:.02em; border:1px solid var(--line); }
+    .student-avatar { width:42px; height:42px; border-radius:9999px; aspect-ratio:1 / 1; overflow:hidden; display:grid; place-items:center; flex:0 0 auto; background:var(--navy); color:#fff; font-weight:950; letter-spacing:.02em; border:1px solid var(--line); }
     .student-name { display:block; color:var(--ink); font-weight:900; line-height:1.2; overflow-wrap:anywhere; }
     .student-sub { display:block; margin-top:4px; color:var(--ink-3); font-size:12px; }
     .student-actions { display:flex; justify-content:flex-end; gap:8px; flex-wrap:wrap; }
     .student-review { display:inline-flex; width:fit-content; padding:5px 9px; border-radius:999px; background:rgba(180,83,9,.12); color:var(--amber); font-size:11px; font-weight:900; letter-spacing:.05em; text-transform:uppercase; }
     .student-review.clear { background:rgba(5,150,105,.1); color:var(--emerald); }
     @media (max-width:640px) {
-        .student-row-id { min-width:220px; }
+        .student-table-wrap { overflow:visible; border:0; background:transparent; }
+        .student-table-wrap table,
+        .student-table-wrap tbody,
+        .student-table-wrap tr,
+        .student-table-wrap td { display:block; width:100%; }
+        .student-table-wrap thead { display:none; }
+        .student-table-wrap tr { margin-bottom:10px; padding:12px; border:1px solid var(--line); border-radius:16px; background:#fff; }
+        .student-table-wrap td { border:0; padding:7px 0; }
+        .student-table-wrap td:not(.student-identity-cell) { display:flex; justify-content:space-between; gap:14px; align-items:center; }
+        .student-table-wrap td:not(.student-identity-cell)::before { content:attr(data-label); color:var(--ink-3); font-size:11px; font-weight:900; text-transform:uppercase; letter-spacing:.08em; }
+        .student-row-id { min-width:0; align-items:flex-start; }
         .student-actions { justify-content:flex-start; }
     }
 </style>
@@ -49,7 +59,7 @@
             <a class="admin-action ghost" href="{{ route('admin.students') }}">Reset</a>
         </form>
 
-        <div class="admin-table-wrap">
+        <div class="admin-table-wrap student-table-wrap">
             <table class="admin-table">
                 <thead>
                     <tr>
@@ -82,7 +92,7 @@
                             };
                         @endphp
                         <tr>
-                            <td class="safe">
+                            <td class="safe student-identity-cell">
                                 <div class="student-row-id">
                                     <span class="student-avatar" aria-hidden="true">{{ $initials }}</span>
                                     <div>
@@ -91,20 +101,20 @@
                                     </div>
                                 </div>
                             </td>
-                            <td class="mono">{{ $student->matric_no }}</td>
-                            <td>{{ $student->dept_name ?? 'Not available' }}</td>
-                            <td>{{ $student->level ?? 'Not available' }}</td>
-                            <td><span class="admin-status {{ $student->verified_at ? 'green' : 'amber' }}">{{ $student->verified_at ? 'Verified' : 'Pending' }}</span></td>
-                            <td><span class="admin-status {{ $tokenStatus === 'UNUSED' ? 'green' : ($tokenStatus === 'USED' ? 'amber' : 'red') }}">{{ $passLabel }}</span></td>
-                            <td>
+                            <td class="mono" data-label="Matric">{{ $student->matric_no }}</td>
+                            <td data-label="Department">{{ $student->dept_name ?? 'Not available' }}</td>
+                            <td data-label="Level">{{ $student->level ?? 'Not available' }}</td>
+                            <td data-label="Payment"><span class="admin-status {{ $student->verified_at ? 'green' : 'amber' }}">{{ $student->verified_at ? 'Verified' : 'Pending' }}</span></td>
+                            <td data-label="Exam Pass"><span class="admin-status {{ $tokenStatus === 'UNUSED' ? 'green' : ($tokenStatus === 'USED' ? 'amber' : 'red') }}">{{ $passLabel }}</span></td>
+                            <td data-label="Review">
                                 @if($warning)
                                     <span class="student-review">Needs Review</span>
                                 @else
                                     <span class="student-review clear">Clear</span>
                                 @endif
                             </td>
-                            <td class="mono">{{ $student->created_at ? \Carbon\Carbon::parse($student->created_at)->format('M d, Y') : 'Not available' }}</td>
-                            <td><div class="student-actions"><a class="admin-action ghost" href="{{ route('admin.students.show', ['student' => $student->matric_no]) }}">View</a></div></td>
+                            <td class="mono" data-label="Registered">{{ $student->created_at ? \Carbon\Carbon::parse($student->created_at)->format('M d, Y') : 'Not available' }}</td>
+                            <td data-label="Action"><div class="student-actions"><a class="admin-action ghost" href="{{ route('admin.students.show', ['student' => $student->matric_no]) }}">View</a></div></td>
                         </tr>
                     @empty
                         <tr><td colspan="9"><div class="admin-empty">No registered students match this filter.</div></td></tr>

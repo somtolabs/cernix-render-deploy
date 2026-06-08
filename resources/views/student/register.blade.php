@@ -311,23 +311,28 @@
         submitBtn.disabled = true;
         submitBtn.textContent = 'Opening dashboard...';
 
-        const response = await fetch('/student/register', {
-            method: 'POST',
-            headers: {
-                'Accept': 'application/json',
-                'Content-Type': 'application/json',
-                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
-            },
-            body: JSON.stringify(Object.fromEntries(new FormData(form))),
-        });
+        try {
+            const response = await fetch('/student/register', {
+                method: 'POST',
+                headers: {
+                    'Accept': 'application/json',
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
+                },
+                body: JSON.stringify(Object.fromEntries(new FormData(form))),
+            });
 
-        const result = await response.json().catch(() => ({ success: false, message: 'Registration failed.' }));
-        if (response.ok && result.success && result.redirect_url) {
-            window.location.href = result.redirect_url;
-            return;
+            const result = await response.json().catch(() => ({ success: false, message: 'Registration failed.' }));
+            if (response.ok && result.success && result.redirect_url) {
+                window.location.href = result.redirect_url;
+                return;
+            }
+
+            message.textContent = result.message || 'Registration failed. Check your details and try again.';
+        } catch (error) {
+            message.textContent = 'Registration could not reach the server. Check your connection and try again.';
         }
 
-        message.textContent = result.message || 'Registration failed. Check your details and try again.';
         submitBtn.disabled = false;
         submitBtn.textContent = 'Open my Exam Dashboard';
     });

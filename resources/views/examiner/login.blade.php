@@ -67,17 +67,24 @@
                 <div>{{ session('error') }}</div>
             </div>
         @endif
+        @if($errors->any())
+            <div class="error-box" style="display:flex;margin-bottom:16px;">
+                <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="flex-shrink:0;margin-top:1px"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                <div>{{ $errors->first() }}</div>
+            </div>
+        @endif
 
-        <form id="login-form" novalidate>
+        <form id="login-form" method="POST" action="{{ $isAdminLogin ? url('/admin/login') : url('/examiner/login') }}">
+            @csrf
             <div class="field mono">
                 <label for="username">Username</label>
-                <input id="username" type="text" class="input" placeholder="Username" autocomplete="username" required>
+                <input id="username" name="username" type="text" class="input" placeholder="Username" autocomplete="username" value="{{ old('username') }}" required>
             </div>
 
             <div class="field">
                 <label for="password">Password</label>
                 <div style="position:relative">
-                    <input id="password" type="password" class="input" placeholder="••••••••••"
+                    <input id="password" name="password" type="password" class="input" placeholder="••••••••••"
                            autocomplete="current-password" style="padding-right:48px" required>
                     <button type="button" id="toggle-pw" aria-label="Toggle password"
                         style="position:absolute;right:4px;top:50%;transform:translateY(-50%);width:40px;height:40px;display:flex;align-items:center;justify-content:center;background:none;border:none;cursor:pointer;color:var(--ink-4);transition:color .15s">
@@ -85,11 +92,6 @@
                         <svg id="eye-hide" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="display:none"><path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
                     </button>
                 </div>
-            </div>
-
-            <div id="error-box" class="error-box" style="display:none;margin-bottom:16px;">
-                <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="flex-shrink:0;margin-top:1px"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-                <div><span id="error-text"></span></div>
             </div>
 
             <button type="submit" id="submit-btn" class="btn btn-primary btn-block" style="margin-top:4px">
@@ -122,47 +124,5 @@ document.getElementById('toggle-pw').addEventListener('click', () => {
     }
 });
 
-const csrfToken = document.querySelector('meta[name="csrf-token"]').content;
-
-document.getElementById('login-form').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const btn    = document.getElementById('submit-btn');
-    const label  = document.getElementById('btn-label');
-    const icon   = document.getElementById('btn-icon');
-    const dots   = document.getElementById('btn-dots');
-    const errBox = document.getElementById('error-box');
-
-    label.textContent  = 'Signing in…';
-    icon.style.display = 'none';
-    dots.style.display = 'inline-flex';
-    btn.disabled       = true;
-    errBox.style.display = 'none';
-
-    try {
-        const resp = await fetch('{{ $isAdminLogin ? '/admin/login' : '/examiner/login' }}', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json', 'Accept': 'application/json',
-                'X-CSRF-TOKEN': csrfToken, 'X-Requested-With': 'XMLHttpRequest',
-            },
-            credentials: 'same-origin',
-            body: JSON.stringify({
-                username: document.getElementById('username').value.trim(),
-                password: document.getElementById('password').value,
-            }),
-        });
-        const data = await resp.json();
-        if (!resp.ok || data.status === 'error') throw new Error(data.message || 'Invalid credentials.');
-        window.location.href = data.redirect_url || '{{ $isAdminLogin ? '/admin/dashboard' : '/examiner/dashboard' }}';
-    } catch (ex) {
-        document.getElementById('error-text').textContent = ex.message;
-        errBox.style.display = 'flex';
-    } finally {
-        label.textContent  = 'Sign in';
-        icon.style.display = '';
-        dots.style.display = 'none';
-        btn.disabled = false;
-    }
-});
 </script>
 @endpush

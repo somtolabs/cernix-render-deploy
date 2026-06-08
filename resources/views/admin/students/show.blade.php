@@ -155,7 +155,7 @@
         <div class="admin-section-body">
             @if($timeline->count())
                 <div class="admin-timeline">
-                    @foreach($timeline as $event)
+                    @foreach($timeline->take(3) as $event)
                         <div class="timeline-item">
                             <div class="timeline-dot">T</div>
                             <div class="timeline-card"><b>{{ $event['label'] }}</b><span>{{ $event['meta'] }} | {{ $event['time'] }}</span></div>
@@ -170,13 +170,21 @@
 </div>
 
 <section class="admin-section" style="margin-top:16px">
-    <div class="admin-section-head"><h2>Scan History</h2><span>{{ $scanHistory->count() }} recent records</span></div>
+    <div class="admin-section-head">
+        <h2>Scan History</h2>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+            <span>Latest {{ min(3, $scanHistory->count()) }} of {{ $scanHistory->count() }}</span>
+            @if($scanHistory->count() > 3)
+                <a class="admin-action ghost" href="{{ route('admin.scan-logs', ['q' => $student->matric_no]) }}">View all</a>
+            @endif
+        </div>
+    </div>
     <div class="admin-section-body">
         <div class="admin-table-wrap">
             <table class="admin-table">
                 <thead><tr><th>Time</th><th>Decision</th><th>Examiner</th><th>Review Status</th><th>Action</th></tr></thead>
                 <tbody>
-                    @forelse($scanHistory as $row)
+                    @forelse($scanHistory->take(3) as $row)
                         <tr>
                             <td class="mono">{{ $row->timestamp }}</td>
                             <td><span class="admin-status {{ $row->decision === 'APPROVED' ? 'green' : ($row->decision === 'DUPLICATE' ? 'amber' : 'red') }}">{{ $row->decision === 'DUPLICATE' ? 'REPEATED' : $row->decision }}</span></td>

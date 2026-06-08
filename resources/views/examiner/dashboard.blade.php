@@ -22,6 +22,11 @@
     .scanner-state { color:#667066; font-size:13px; line-height:1.45; max-width:520px; }
     .latest-result { display:grid; gap:9px; }
     .latest-result strong { font-size:17px; }
+    .recent-scan-list { display:grid; gap:8px; margin-top:14px; padding-top:12px; border-top:1px solid #e7ebe3; }
+    .recent-scan-item { display:grid; gap:5px; padding:10px; border:1px solid #e7ebe3; border-radius:12px; background:#fff; min-width:0; }
+    .recent-scan-top { display:flex; justify-content:space-between; align-items:flex-start; gap:8px; flex-wrap:wrap; }
+    .recent-scan-top strong { color:#17201b; font-size:13px; overflow-wrap:anywhere; }
+    .recent-scan-meta { color:#667066; font-size:12px; overflow-wrap:anywhere; }
     .result-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px 12px; margin-top:8px; }
     .result-grid span { color:#667066; font-size:10px; font-weight:900; text-transform:uppercase; letter-spacing:.08em; }
     .result-grid b { display:block; color:#17201b; margin-top:2px; overflow-wrap:anywhere; }
@@ -29,7 +34,7 @@
     .pending-panel.show { display:grid; gap:8px; }
     .pending-panel b { color:#92400e; }
     .scanner-control-hidden { display:none !important; }
-    .scanner-checks { margin:0 0 10px; }
+    .scanner-checks { display:none; margin:0 0 10px; }
     .scanner-checks summary { color:#667066; cursor:pointer; font-size:12px; font-weight:800; }
     .scanner-diagnostics { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:7px; margin-top:8px; }
     .scanner-diagnostic { min-width:0; padding:8px 9px; border:1px solid #e3e8e0; border-radius:10px; background:#fff; }
@@ -38,31 +43,35 @@
     .scanner-diagnostic.ok b { color:#047857; }
     .scanner-diagnostic.warn b { color:#92400e; }
     .scanner-diagnostic.error b { color:#b91c1c; }
-    .verify-overlay { position:fixed; inset:0; z-index:1000; padding:14px; background:rgba(23,32,27,.42); overflow-y:auto; overscroll-behavior:contain; }
+    .verify-overlay { position:fixed; inset:0; z-index:1000; padding:14px; background:rgba(23,32,27,.58); overflow-x:hidden; overflow-y:auto; -webkit-overflow-scrolling:touch; overscroll-behavior:contain; display:block; }
     .verify-overlay[hidden] { display:none; }
-    .verify-document { position:relative; width:min(620px,100%); margin:4vh auto 0; border-radius:18px; border:1px solid var(--result-border); background:var(--result-bg); color:#291f16; overflow:hidden; }
+    .verify-document { position:relative; width:min(760px,100%); min-height:0; margin:0 auto; border-radius:24px; border:1px solid var(--result-border); background:var(--result-bg); color:#291f16; overflow:visible; display:block; box-shadow:0 24px 70px rgba(0,0,0,.22); }
     .verify-document.approved { --result-bg:#f0fbf4; --result-border:#86efac; --result-accent:#047857; --result-soft:#dcfce7; }
     .verify-document.rejected { --result-bg:#fff1f2; --result-border:#fda4af; --result-accent:#b91c1c; --result-soft:#fee2e2; }
     .verify-document.duplicate { --result-bg:#fff8e5; --result-border:#f5c56b; --result-accent:#92400e; --result-soft:#fef3c7; }
-    .verify-top { display:grid; grid-template-columns:auto minmax(0,1fr); gap:12px; padding:18px; align-items:center; }
-    .verify-icon { width:50px; height:50px; border-radius:14px; display:grid; place-items:center; background:var(--result-soft); color:var(--result-accent); border:1px solid var(--result-border); font-size:24px; font-weight:900; }
+    .verify-top { display:grid; gap:10px; padding:22px 18px 10px; align-items:center; justify-items:center; text-align:center; }
+    .verify-close-mini { position:absolute; top:12px; right:12px; min-height:36px; padding:0 12px; border-radius:999px; border:1px solid rgba(0,0,0,.08); background:rgba(255,255,255,.84); color:#4c2f1d; font-size:12px; font-weight:900; }
+    .verify-icon { width:58px; height:58px; border-radius:999px; display:grid; place-items:center; background:var(--result-soft); color:var(--result-accent); border:1px solid var(--result-border); font-size:28px; font-weight:900; }
     .verify-label { color:#806b59; text-transform:uppercase; letter-spacing:.12em; font-weight:900; font-size:10px; }
-    .verify-status { margin:3px 0 0; color:var(--result-accent); font-size:30px; line-height:1; font-weight:950; }
-    .verify-message { margin:5px 0 0; color:#6f5a49; font-size:14px; line-height:1.4; }
-    .verify-body { padding:0 18px 16px; display:grid; gap:11px; }
-    .verify-student { display:grid; grid-template-columns:62px minmax(0,1fr); gap:11px; align-items:center; padding:11px; border-radius:13px; background:rgba(255,255,255,.72); }
-    .verify-photo { width:62px; height:82px; object-fit:cover; object-position:center; border-radius:9px; background:#ece8df; border:1px solid rgba(0,0,0,.1); }
-    .verify-name { margin:0; font-size:19px; line-height:1.12; color:#3a2415; overflow-wrap:anywhere; }
-    .verify-meta { margin-top:4px; color:#806b59; font-weight:800; }
+    .verify-status { margin:2px 0 0; color:var(--result-accent); font-size:clamp(34px, 9vw, 62px); line-height:.92; font-weight:950; letter-spacing:-.04em; }
+    .verify-message { margin:5px auto 0; color:#6f5a49; font-size:15px; line-height:1.45; max-width:520px; }
+    .verify-body { padding:0 18px 16px; display:grid; gap:14px; align-content:start; }
+    .verify-student { display:grid; gap:12px; justify-items:center; text-align:center; padding:12px; border-radius:18px; background:rgba(255,255,255,.72); }
+    .verify-photo-wrap { position:relative; width:clamp(96px, 26vw, 128px); height:clamp(96px, 26vw, 128px); border-radius:9999px; overflow:hidden; display:grid; place-items:center; background:var(--result-accent); color:#fff; border:1px solid var(--result-border); box-shadow:inset 0 0 0 4px rgba(255,255,255,.72); font-size:32px; font-weight:950; }
+    .verify-photo { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; object-position:center; border-radius:inherit; display:block; }
+    .verify-photo[hidden] { display:none; }
+    .verify-photo-initials { position:relative; z-index:0; }
+    .verify-name { margin:0; font-size:clamp(22px,5vw,34px); line-height:1.04; color:#3a2415; overflow-wrap:anywhere; }
+    .verify-meta { margin-top:5px; color:#806b59; font-weight:800; }
     .verify-details { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:7px; }
     .verify-detail { padding:9px 10px; border-radius:10px; background:rgba(255,255,255,.64); min-width:0; }
     .verify-detail span { display:block; color:#806b59; font-size:9px; text-transform:uppercase; letter-spacing:.08em; font-weight:900; }
     .verify-detail b { display:block; margin-top:3px; color:#4c2f1d; font-size:13px; overflow-wrap:anywhere; }
-    .verify-actions { display:grid; grid-template-columns:1fr 1fr; gap:9px; padding:12px 18px 16px; border-top:1px solid rgba(0,0,0,.06); }
-    .verify-actions button, .verify-actions a { min-height:42px; border-radius:11px; border:1px solid rgba(0,0,0,.08); background:#fff; color:#4c2f1d; display:inline-flex; align-items:center; justify-content:center; text-decoration:none; font-weight:900; font-size:14px; }
+    .verify-actions { position:sticky; bottom:0; display:grid; grid-template-columns:1fr 1fr; gap:9px; padding:14px 18px calc(18px + env(safe-area-inset-bottom)); border-top:1px solid rgba(0,0,0,.06); background:rgba(255,255,255,.9); backdrop-filter:blur(10px); border-radius:0 0 24px 24px; }
+    .verify-actions button, .verify-actions a { min-height:46px; border-radius:13px; border:1px solid rgba(0,0,0,.08); background:#fff; color:#4c2f1d; display:inline-flex; align-items:center; justify-content:center; text-decoration:none; font-weight:900; font-size:14px; }
     .verify-actions a { background:var(--result-accent); color:#fff; border-color:var(--result-accent); }
     @media (min-width:980px) { .scanner-layout { grid-template-columns:minmax(0,1fr) 320px; align-items:start; } .scanner-stage { min-height:560px; } .scanner-diagnostics { grid-template-columns:repeat(4,minmax(0,1fr)); } }
-    @media (max-width:640px) { .scanner-stage { min-height:420px; } .scan-frame { width:min(320px,78%); } .scanner-controls { align-items:stretch; } .scanner-controls > div { width:100%; } .scanner-controls .ex-action { flex:1 1 auto; } .verify-overlay { padding:8px; } .verify-document { margin:8px auto 0; } .verify-top { padding:14px; } .verify-body { padding:0 14px 12px; } .verify-details { grid-template-columns:repeat(2,minmax(0,1fr)); } .verify-actions { padding:10px 14px 14px; } }
+    @media (max-width:640px) { .scanner-stage { min-height:420px; } .scan-frame { width:min(320px,78%); } .scanner-controls { align-items:stretch; } .scanner-controls > div { width:100%; } .scanner-controls .ex-action { flex:1 1 auto; } .verify-overlay { padding:8px 8px max(18px, env(safe-area-inset-bottom)); } .verify-document { min-height:0; border-radius:20px; margin:0 auto; } .verify-top { padding:52px 14px 8px; } .verify-body { padding:0 14px 12px; } .verify-details { grid-template-columns:repeat(2,minmax(0,1fr)); } .verify-actions { padding:10px 14px calc(14px + env(safe-area-inset-bottom)); grid-template-columns:1fr; border-radius:0 0 20px 20px; } }
 </style>
 
 <div class="ex-page-head">
@@ -95,7 +104,7 @@
         </details>
         <div class="scanner-panel">
             <div class="scanner-stage" id="scannerStage">
-                <video id="scannerVideo" playsinline muted></video>
+                <video id="scannerVideo" playsinline autoplay muted></video>
                 <canvas id="scannerCanvas" hidden></canvas>
                 <div class="scan-frame" aria-hidden="true"></div>
                 <div class="scanner-idle" id="scannerIdle">Camera is idle. Start the scanner and point it at an exam pass.</div>
@@ -124,11 +133,32 @@
                 <button class="ex-action secondary" type="button" id="clearPending">Clear Pending</button>
             </div>
         </div>
+        <div class="recent-scan-list" aria-label="Recent scans">
+            <div style="display:flex;justify-content:space-between;gap:10px;align-items:center">
+                <h3 style="margin:0;font-size:14px">Recent Scans</h3>
+                <a class="ex-action secondary" href="{{ route('examiner.scan-history') }}">View all</a>
+            </div>
+            @forelse(($recentRows ?? []) as $row)
+                <article class="recent-scan-item">
+                    <div class="recent-scan-top">
+                        <strong>{{ $row['student'] ?? 'Student unavailable' }}</strong>
+                        <span class="ex-badge {{ $row['decision'] ?? 'REJECTED' }}">{{ ($row['decision'] ?? '') === 'DUPLICATE' ? 'REPEATED' : ($row['decision'] ?? 'RECORDED') }}</span>
+                    </div>
+                    <div class="recent-scan-meta mono">{{ $row['matric_no'] ?? 'No matric' }} · {{ $row['time'] ?? 'No time' }}</div>
+                    @if(! empty($row['detail_url']))
+                        <a class="ex-action secondary" href="{{ $row['detail_url'] }}" style="justify-self:start">View</a>
+                    @endif
+                </article>
+            @empty
+                <p class="ex-empty">No recent scans yet.</p>
+            @endforelse
+        </div>
     </aside>
 </div>
 
 <div class="verify-overlay" id="verifyOverlay" hidden role="dialog" aria-modal="true" aria-labelledby="verifyStatus">
     <article class="verify-document duplicate" id="verifyDocument">
+        <button class="verify-close-mini" type="button" id="verifyCloseTop">Continue</button>
         <div class="verify-top">
             <div class="verify-icon" id="verifyIcon">!</div>
             <div>
@@ -139,7 +169,10 @@
         </div>
         <div class="verify-body">
             <section class="verify-student">
-                <img class="verify-photo" id="verifyPhoto" src="/aaua-logo.png" alt="Student passport">
+                <div class="verify-photo-wrap" aria-hidden="true">
+                    <span class="verify-photo-initials" id="verifyInitials">ST</span>
+                    <img class="verify-photo" id="verifyPhoto" alt="Student photo" hidden>
+                </div>
                 <div class="safe">
                     <h3 class="verify-name" id="verifyName">Student unavailable</h3>
                     <div class="verify-meta" id="verifyMatric">Unavailable</div>
@@ -157,7 +190,7 @@
             </section>
         </div>
         <div class="verify-actions">
-            <button type="button" id="verifyClose">Close</button>
+            <button type="button" id="verifyClose">Continue Scanning</button>
             <a href="{{ route('examiner.scan-history') }}" id="verifyReviewLink">Review</a>
         </div>
     </article>
@@ -189,6 +222,16 @@
     let serverReachable = true;
 
     function setState(message) { stateText.textContent = message; }
+    function showScannerError(message, diagnostic = 'Error') {
+        setState(message);
+        setDiagnostic('diagCamera', diagnostic, 'error');
+        setScannerControls('error');
+        idleText.style.display = '';
+    }
+    function resetScannerError() {
+        scanFrame.classList.remove('detected');
+        setDiagnostic('diagScan', 'Waiting for QR');
+    }
     function setDiagnostic(id, message, mode = '') {
         const element = document.getElementById(id);
         element.className = `scanner-diagnostic ${mode}`;
@@ -199,8 +242,8 @@
         setDiagnostic('diagLibrary', ready ? 'Reader ready' : 'Reader unavailable', ready ? 'ok' : 'error');
     }
     function setScannerControls(mode) {
-        startBtn.classList.toggle('scanner-control-hidden', mode === 'active' || mode === 'starting');
-        stopBtn.classList.toggle('scanner-control-hidden', mode === 'idle' || mode === 'error');
+        startBtn.classList.toggle('scanner-control-hidden', mode === 'active');
+        stopBtn.classList.toggle('scanner-control-hidden', mode !== 'active');
         retryBtn.classList.toggle('scanner-control-hidden', mode !== 'error');
     }
     function normalizeStatus(status) { return String(status || 'REJECTED').toUpperCase(); }
@@ -217,8 +260,12 @@
         return 'Verification failed. Access denied.';
     }
     function photoUrl(path) {
-        if (!path || /^https?:\/\//i.test(path) || path.includes('..')) return '/aaua-logo.png';
+        if (!path || /^https?:\/\//i.test(path) || path.includes('..')) return '';
         return `/photo-thumb/${path.replace(/^\/+/, '').split('/').map(encodeURIComponent).join('/')}`;
+    }
+    function initialsFromName(name) {
+        const parts = String(name || 'Student').trim().split(/\s+/).filter(Boolean).slice(0, 2);
+        return (parts.map(part => part.charAt(0).toUpperCase()).join('') || 'ST');
     }
     function setConnection(mode, label, sub) {
         const strip = document.getElementById('connectionStrip');
@@ -307,34 +354,50 @@
             tone(220, 0, .18); tone(170, .18, .24);
         } catch (_) {}
     }
+    async function requestCameraStream() {
+        try {
+            return await navigator.mediaDevices.getUserMedia({
+                video: {
+                    facingMode: { ideal: 'environment' },
+                    width: { ideal: 1280 },
+                    height: { ideal: 720 }
+                },
+                audio: false
+            });
+        } catch (firstError) {
+            setDiagnostic('diagCamera', 'Trying available camera', 'warn');
+            return await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+        }
+    }
+    async function playVideoPreview() {
+        video.setAttribute('playsinline', '');
+        video.setAttribute('autoplay', '');
+        video.muted = true;
+        await Promise.race([
+            video.play(),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('video_preview_timeout')), 5000))
+        ]);
+    }
     async function startScanner() {
         unlockAudio();
+        resetScannerError();
+        startBtn.disabled = true;
+        startBtn.textContent = 'Starting...';
         try {
             if (typeof window.jsQR !== 'function') {
-                setDiagnostic('diagLibrary', 'Reader unavailable', 'error');
                 throw new Error('scanner_library_unavailable');
             }
             if (!navigator.mediaDevices?.getUserMedia) {
-                setDiagnostic('diagCamera', 'Camera unavailable', 'error');
                 throw new Error('camera_api_unavailable');
             }
+            if (!window.isSecureContext && !['localhost', '127.0.0.1'].includes(window.location.hostname)) {
+                throw new Error('camera_requires_https');
+            }
             stopScanner(false);
-            setState('Starting camera...');
+            setState('Requesting camera permission...');
             setDiagnostic('diagCamera', 'Requesting permission', 'warn');
             setScannerControls('starting');
-            startBtn.disabled = true;
-            try {
-                stream = await navigator.mediaDevices.getUserMedia({
-                    video: {
-                        facingMode: { ideal: 'environment' },
-                        width: { ideal: 1920 },
-                        height: { ideal: 1080 }
-                    },
-                    audio: false
-                });
-            } catch (_) {
-                stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
-            }
+            stream = await requestCameraStream();
             const [track] = stream.getVideoTracks();
             if (track?.applyConstraints) {
                 track.applyConstraints({
@@ -346,7 +409,7 @@
                 }).catch(() => {});
             }
             video.srcObject = stream;
-            await video.play();
+            await playVideoPreview();
             idleText.style.display = 'none';
             scanning = true;
             verifying = false;
@@ -358,17 +421,23 @@
             setScannerControls('active');
             animationFrameId = requestAnimationFrame(tick);
         } catch (error) {
-            const libraryMissing = error?.message === 'scanner_library_unavailable';
-            const cameraMissing = error?.message === 'camera_api_unavailable';
-            setState(libraryMissing
-                ? 'QR reader could not load. Refresh the page and try again.'
-                : (cameraMissing
-                    ? 'Camera scanning is not supported in this browser.'
-                    : 'Camera permission denied or unavailable. Check browser permissions and retry.'));
-            if (!libraryMissing && !cameraMissing) setDiagnostic('diagCamera', 'Permission denied or unavailable', 'error');
-            setScannerControls('error');
+            stopScanner(false);
+            const message = error?.message || '';
+            if (message === 'scanner_library_unavailable') {
+                setDiagnostic('diagLibrary', 'Reader unavailable', 'error');
+                showScannerError('Scanner reader failed to load. Refresh the page and try again.', 'Reader unavailable');
+            } else if (message === 'camera_api_unavailable') {
+                showScannerError('Your browser does not support camera scanning.', 'Camera unsupported');
+            } else if (message === 'camera_requires_https') {
+                showScannerError('Camera access requires HTTPS on mobile browsers.', 'HTTPS required');
+            } else if (message === 'video_preview_timeout') {
+                showScannerError('Camera started, but the video preview could not play. Please try again.', 'Preview blocked');
+            } else {
+                showScannerError('Camera permission is required to scan exam passes.', 'Permission needed');
+            }
         } finally {
             startBtn.disabled = false;
+            startBtn.textContent = 'Start Scanner';
         }
     }
     function stopScanner(resetControls = true) {
@@ -539,14 +608,24 @@
         const student = result.student || {};
         verifyDocument.className = `verify-document ${theme}`;
         document.getElementById('verifyIcon').textContent = theme === 'approved' ? '✓' : (theme === 'duplicate' ? '!' : '×');
-        document.getElementById('verifyStatus').textContent = decisionLabel(status);
+        document.getElementById('verifyStatus').textContent = status === 'DUPLICATE' ? 'ALREADY SCANNED' : decisionLabel(status);
         document.getElementById('verifyMessage').textContent = statusMessage(status);
         if (result.reason && !['token_already_used'].includes(result.reason)) {
             document.getElementById('verifyMessage').textContent = friendlyReason(result.reason);
         }
-        document.getElementById('verifyPhoto').src = photoUrl(student.photo_path);
-        document.getElementById('verifyPhoto').onerror = () => { document.getElementById('verifyPhoto').src = '/aaua-logo.png'; };
-        document.getElementById('verifyName').textContent = student.full_name || 'Student unavailable';
+        const displayName = student.full_name || 'Student unavailable';
+        const photo = document.getElementById('verifyPhoto');
+        document.getElementById('verifyInitials').textContent = initialsFromName(displayName);
+        const src = photoUrl(student.photo_path);
+        if (src) {
+            photo.hidden = false;
+            photo.src = src;
+            photo.onerror = () => { photo.hidden = true; photo.removeAttribute('src'); };
+        } else {
+            photo.hidden = true;
+            photo.removeAttribute('src');
+        }
+        document.getElementById('verifyName').textContent = displayName;
         document.getElementById('verifyMatric').textContent = student.matric_no || 'Unavailable';
         const badge = document.getElementById('verifyBadge');
         badge.textContent = status === 'DUPLICATE' ? 'REPEATED' : status;
@@ -601,7 +680,11 @@
     window.addEventListener('online', updateConnectionStatus);
     window.addEventListener('offline', updateConnectionStatus);
     document.getElementById('verifyClose').addEventListener('click', closeOverlay);
+    document.getElementById('verifyCloseTop').addEventListener('click', closeOverlay);
     overlay.addEventListener('click', event => { if (event.target === overlay) closeOverlay(); });
+    window.addEventListener('keydown', event => {
+        if (event.key === 'Escape' && !overlay.hidden) closeOverlay();
+    });
     window.addEventListener('beforeunload', stopScanner);
     setInterval(updateConnectionStatus, 15000);
     window.addEventListener('cernix:scanner-ready', updateReaderDiagnostic);
