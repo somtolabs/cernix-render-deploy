@@ -87,7 +87,7 @@ php artisan route:clear
 php artisan view:clear
 php artisan storage:link || true
 php artisan migrate --force
-php artisan cernix:ensure-baseline-data
+php artisan cernix:registration-status
 php artisan config:cache
 php artisan route:cache
 php artisan view:cache
@@ -95,12 +95,21 @@ php artisan serve --host=0.0.0.0 --port="$APP_PORT"
 ```
 
 Runtime records must never be deleted or recreated by startup scripts. Render
-boot runs safe migrations and one baseline-data repair command. That command keeps
-registration departments available, ensures an active session when none is open, and
-repairs baseline staff access without rotating existing session keys. Verification logs,
+boot runs safe migrations and a read-only registration readiness report. Verification logs,
 audit logs, payments, exam passes, student registrations, notes, settings, and
 schedules remain in PostgreSQL across
 restarts and deploys.
+
+If the readiness report shows zero departments or no active session, explicitly run the
+insert-only baseline repair on boot by setting both:
+
+```env
+RENDER_SKIP_SEED=false
+CERNIX_BASELINE_ON_BOOT=true
+```
+
+After the log reports departments and an active session, restore both variables to their
+safe defaults. The baseline repair does not delete runtime records or rotate existing keys.
 
 For the first provisioning deploy only, you may explicitly enable insert-only
 default seed data:

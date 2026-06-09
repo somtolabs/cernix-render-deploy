@@ -13,9 +13,15 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
 
 class StudentWebController extends Controller
 {
+    public function __construct(
+        private readonly RegistrationService $registrationService,
+        private readonly MockSISService $sisService,
+    ) {}
+
     public function index()
     {
         $session = DB::table('exam_sessions')->where('is_active', true)->first();
@@ -53,6 +59,14 @@ class StudentWebController extends Controller
                 (string) $data['student_number']
             );
 
+            if (! DepartmentFees::isDemoMode()
+                && MatricNumber::hasDemoPhoto((string) $data['student_number'])
+                && ! DB::table('mock_sis')->where('matric_no', $data['matric_no'])->exists()) {
+                throw new \RuntimeException(
+                    'Sample student registration is not enabled on this deployment.'
+                );
+            }
+
             if (DepartmentFees::isDemoMode() && ! MatricNumber::hasDemoPhoto((string) $data['student_number'])) {
                 throw new \RuntimeException('Demo passport photo is only available for student numbers 001 to 014 right now.');
             }
@@ -69,8 +83,7 @@ class StudentWebController extends Controller
                 : false;
 
             if (! $existingDemoStudent) {
-                $regService = new RegistrationService(new MockSISService());
-                $regService->registerStudent([
+                $this->registrationService->registerStudent([
                     'matric_no' => $data['matric_no'],
                     'session_id' => (int) $session->session_id,
                 ]);
@@ -99,6 +112,7 @@ class StudentWebController extends Controller
                 ],
             ]);
         } catch (\Throwable $e) {
+            $this->logRegistrationFailure($e, $data, $session);
             $message = $this->registrationErrorMessage($e);
 
             if (! $request->expectsJson()) {
@@ -111,7 +125,7 @@ class StudentWebController extends Controller
 
     private function validateSelectedIdentity(array $data): void
     {
-        $sis = (new MockSISService())->getStudentByMatric($data['matric_no']);
+        $sis = $this->sisService->getStudentByMatric($data['matric_no']);
         $department = DB::table('departments')->where('dept_id', $data['department_id'])->first();
 
         if (! $department || strcasecmp((string) $department->dept_name, (string) $sis['department']) !== 0) {
@@ -183,11 +197,45 @@ class StudentWebController extends Controller
             return $exception->getMessage();
         }
 
-        Log::error('Student registration failed.', [
-            'exception' => $exception,
-        ]);
+        return 'Registration could not be completed right now. Please check your details and try again.';
+    }
 
-        return 'Registration could not be completed. Please check your details and try again.';
+    private function logRegistrationFailure(\Throwable $exception, array $data, object $session): void
+    {
+        $studentNumber = (string) ($data['student_number'] ?? '');
+        $matricNo = (string) ($data['matric_no'] ?? '');
+        $departmentId = $data['department_id'] ?? null;
+
+        try {
+            $context = [
+                'exception_class' => $exception::class,
+                'database_driver' => DB::getDriverName(),
+                'demo_mode' => DepartmentFees::isDemoMode(),
+                'is_demo_student_number' => MatricNumber::hasDemoPhoto($studentNumber),
+                'active_session_exists' => (bool) $session,
+                'department_exists' => $departmentId
+                    ? DB::table('departments')->where('dept_id', $departmentId)->exists()
+                    : false,
+                'mock_sis_record_exists' => $matricNo !== ''
+                    && Schema::hasTable('mock_sis')
+                    && DB::table('mock_sis')->where('matric_no', $matricNo)->exists(),
+                'schema' => [
+                    'departments' => Schema::hasTable('departments'),
+                    'exam_sessions' => Schema::hasTable('exam_sessions'),
+                    'mock_sis' => Schema::hasTable('mock_sis'),
+                    'students' => Schema::hasTable('students'),
+                    'students_session_id' => Schema::hasColumn('students', 'session_id'),
+                    'students_level' => Schema::hasColumn('students', 'level'),
+                ],
+            ];
+        } catch (\Throwable $diagnosticException) {
+            $context = [
+                'exception_class' => $exception::class,
+                'diagnostic_exception_class' => $diagnosticException::class,
+            ];
+        }
+
+        Log::warning('Student registration failed.', $context);
     }
 
 }

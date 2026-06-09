@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Services\ExamPassService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use RuntimeException;
 use Tests\TestCase;
 
@@ -33,6 +34,77 @@ class StudentPortalWebTest extends TestCase
             ->assertJsonPath('success', true)
             ->assertJsonPath('redirect_url', route('student.dashboard'))
             ->assertJsonPath('data.matric_no', '220404008');
+
+        $response->assertSessionHas('student_matric_no', '220404008')
+            ->assertSessionHas('student_session_id');
+    }
+
+    public function test_demo_sample_fails_cleanly_when_demo_mode_is_disabled_and_sis_record_is_missing(): void
+    {
+        $this->withoutMiddleware(\Illuminate\Foundation\Http\Middleware\ValidateCsrfToken::class);
+        config()->set('app.cernix_demo_mode', false);
+        app()->detectEnvironment(fn () => 'production');
+        DB::table('cernix_settings')->where('key', 'demo_mode_enabled')->update(['value' => 'false']);
+        DB::table('mock_sis')->where('matric_no', '220404008')->delete();
+        $departmentId = DB::table('departments')->where('dept_name', 'Computer Science')->value('dept_id');
+
+        try {
+            $this->postJson('/student/register', [
+                'faculty' => 'Faculty of Computing',
+                'department_id' => $departmentId,
+                'level' => '400',
+                'student_number' => '008',
+            ])->assertUnprocessable()
+              ->assertJsonPath('success', false)
+              ->assertJsonPath('message', 'Sample student registration is not enabled on this deployment.')
+              ->assertDontSee('SQLSTATE');
+        } finally {
+            app()->detectEnvironment(fn () => 'testing');
+        }
+    }
+
+    public function test_missing_active_session_returns_clean_error(): void
+    {
+        DB::table('exam_sessions')->update(['is_active' => false]);
+        $departmentId = DB::table('departments')->where('dept_name', 'Computer Science')->value('dept_id');
+
+        $this->postJson('/student/register', [
+            'faculty' => 'Faculty of Computing',
+            'department_id' => $departmentId,
+            'level' => '400',
+            'student_number' => '008',
+        ])->assertUnprocessable()
+          ->assertJsonPath('message', 'No active exam session found.')
+          ->assertDontSee('SQLSTATE');
+    }
+
+    public function test_registration_database_failure_is_logged_and_sanitized(): void
+    {
+        Log::spy();
+        $departmentId = DB::table('departments')->where('dept_name', 'Computer Science')->value('dept_id');
+
+        $this->mock(\App\Services\RegistrationService::class, function ($mock) {
+            $mock->shouldReceive('registerStudent')->andThrow(new RuntimeException(
+                'SQLSTATE[42703]: Undefined column: students.session_id'
+            ));
+        });
+
+        $this->postJson('/student/register', [
+            'faculty' => 'Faculty of Computing',
+            'department_id' => $departmentId,
+            'level' => '400',
+            'student_number' => '008',
+        ])->assertUnprocessable()
+          ->assertJsonPath(
+              'message',
+              'Registration could not be completed right now. Please check your details and try again.'
+          )
+          ->assertDontSee('SQLSTATE')
+          ->assertDontSee('students.session_id');
+
+        Log::shouldHaveReceived('warning')
+            ->once()
+            ->with('Student registration failed.', \Mockery::type('array'));
     }
 
     public function test_student_registration_form_uses_student_number_preview_flow(): void
