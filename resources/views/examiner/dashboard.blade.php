@@ -16,7 +16,16 @@
     .scanner-stage video, .scanner-stage canvas { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; object-position:center; }
     .scanner-idle { position:relative; z-index:3; color:#566157; text-align:center; padding:10px 12px; max-width:300px; border-radius:10px; background:rgba(255,255,255,.86); font-size:13px; line-height:1.5; }
     .scan-frame { position:relative; z-index:2; width:min(390px, 78%); aspect-ratio:1; border:2px solid rgba(23,32,27,.72); border-radius:16px; box-shadow:0 0 0 999px rgba(23,32,27,.12); pointer-events:none; overflow:hidden; }
-    .scan-frame::after { content:""; position:absolute; left:10%; right:10%; top:50%; height:2px; border-radius:999px; background:rgba(5,150,105,.72); }
+    .scan-frame::after { content:""; position:absolute; left:10%; right:10%; top:12%; height:2px; border-radius:999px; background:rgba(5,150,105,.72); opacity:0; }
+    .scanner-stage[data-state="active"] .scan-frame::after,
+    .scanner-stage[data-state="scanning"] .scan-frame::after { opacity:1; animation:scanLine 2.2s ease-in-out infinite; }
+    .scanner-stage[data-state="starting"] .scan-frame { border-color:rgba(180,83,9,.68); }
+    .scanner-stage[data-state="verifying"] .scan-frame { border-color:#059669; }
+    .scanner-live { position:absolute; z-index:4; top:14px; left:14px; display:none; align-items:center; gap:7px; padding:6px 9px; border-radius:999px; background:rgba(255,255,255,.9); color:#17201b; border:1px solid rgba(23,32,27,.12); font-size:11px; font-weight:900; }
+    .scanner-live::before { content:""; width:7px; height:7px; border-radius:999px; background:#059669; animation:livePulse 1.5s ease-in-out infinite; }
+    .scanner-stage[data-state="active"] .scanner-live,
+    .scanner-stage[data-state="scanning"] .scanner-live,
+    .scanner-stage[data-state="verifying"] .scanner-live { display:flex; }
     .scan-frame.detected { border-color:#059669; box-shadow:0 0 0 999px rgba(5,150,105,.12), 0 0 0 5px rgba(5,150,105,.12); }
     .scanner-controls { display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; padding:12px; border-top:1px solid #e7ebe3; background:#fbfcf8; }
     .scanner-state { color:#667066; font-size:13px; line-height:1.45; max-width:520px; }
@@ -45,33 +54,46 @@
     .scanner-diagnostic.error b { color:#b91c1c; }
     .verify-overlay { position:fixed; inset:0; z-index:1000; padding:14px; background:rgba(23,32,27,.58); overflow-x:hidden; overflow-y:auto; -webkit-overflow-scrolling:touch; overscroll-behavior:contain; display:block; }
     .verify-overlay[hidden] { display:none; }
-    .verify-document { position:relative; width:min(760px,100%); min-height:0; margin:0 auto; border-radius:24px; border:1px solid var(--result-border); background:var(--result-bg); color:#291f16; overflow:visible; display:block; box-shadow:0 24px 70px rgba(0,0,0,.22); }
+    .verify-document { position:relative; isolation:isolate; width:min(760px,100%); min-height:0; margin:0 auto; border-radius:24px; border:1px solid var(--result-border); background:var(--result-bg); color:#291f16; overflow:visible; display:block; box-shadow:0 24px 70px rgba(0,0,0,.22); }
+    .verify-document::before { content:""; position:absolute; inset:112px 12px 72px; z-index:-1; background-image:url('{{ $brandingLogoUrl }}'); background-repeat:no-repeat; background-position:center 42%; background-size:min(520px,84%); opacity:.15; pointer-events:none; }
     .verify-document.approved { --result-bg:#f0fbf4; --result-border:#86efac; --result-accent:#047857; --result-soft:#dcfce7; }
     .verify-document.rejected { --result-bg:#fff1f2; --result-border:#fda4af; --result-accent:#b91c1c; --result-soft:#fee2e2; }
     .verify-document.duplicate { --result-bg:#fff8e5; --result-border:#f5c56b; --result-accent:#92400e; --result-soft:#fef3c7; }
-    .verify-top { display:grid; gap:10px; padding:22px 18px 10px; align-items:center; justify-items:center; text-align:center; }
+    .verify-top { display:grid; gap:12px; padding:24px 18px 12px; align-items:center; justify-items:center; text-align:center; border-bottom:1px solid rgba(0,0,0,.06); background:rgba(255,255,255,.42); }
+    .verify-brand-head { display:flex; align-items:center; justify-content:center; gap:13px; min-width:0; }
+    .verify-brand-logo { width:clamp(68px,10vw,86px); height:clamp(68px,10vw,86px); object-fit:contain; flex:0 0 auto; }
+    .verify-brand-copy { min-width:0; text-align:left; }
+    .verify-brand-copy strong { display:block; color:#2f241b; font-size:clamp(17px,3vw,23px); letter-spacing:-.02em; }
+    .verify-brand-copy span { display:block; margin-top:3px; color:#806b59; font-size:11px; font-weight:800; }
+    .verify-decision-line { display:flex; align-items:center; justify-content:center; gap:10px; flex-wrap:wrap; }
     .verify-close-mini { position:absolute; top:12px; right:12px; min-height:36px; padding:0 12px; border-radius:999px; border:1px solid rgba(0,0,0,.08); background:rgba(255,255,255,.84); color:#4c2f1d; font-size:12px; font-weight:900; }
     .verify-icon { width:58px; height:58px; border-radius:999px; display:grid; place-items:center; background:var(--result-soft); color:var(--result-accent); border:1px solid var(--result-border); font-size:28px; font-weight:900; }
     .verify-label { color:#806b59; text-transform:uppercase; letter-spacing:.12em; font-weight:900; font-size:10px; }
-    .verify-status { margin:2px 0 0; color:var(--result-accent); font-size:clamp(34px, 9vw, 62px); line-height:.92; font-weight:950; letter-spacing:-.04em; }
+    .verify-status { margin:2px 0 0; color:var(--result-accent); font-size:clamp(32px, 7vw, 52px); line-height:.95; font-weight:950; letter-spacing:-.04em; }
     .verify-message { margin:5px auto 0; color:#6f5a49; font-size:15px; line-height:1.45; max-width:520px; }
     .verify-body { padding:0 18px 16px; display:grid; gap:14px; align-content:start; }
-    .verify-student { display:grid; gap:12px; justify-items:center; text-align:center; padding:12px; border-radius:18px; background:rgba(255,255,255,.72); }
+    .verify-student { display:grid; gap:12px; justify-items:center; text-align:center; padding:15px; border-radius:18px; border:1px solid rgba(255,255,255,.66); background:rgba(255,255,255,.78); }
     .verify-photo-wrap { position:relative; width:clamp(96px, 26vw, 128px); height:clamp(96px, 26vw, 128px); border-radius:9999px; overflow:hidden; display:grid; place-items:center; background:var(--result-accent); color:#fff; border:1px solid var(--result-border); box-shadow:inset 0 0 0 4px rgba(255,255,255,.72); font-size:32px; font-weight:950; }
     .verify-photo { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; object-position:center; border-radius:inherit; display:block; }
     .verify-photo[hidden] { display:none; }
     .verify-photo-initials { position:relative; z-index:0; }
     .verify-name { margin:0; font-size:clamp(22px,5vw,34px); line-height:1.04; color:#3a2415; overflow-wrap:anywhere; }
     .verify-meta { margin-top:5px; color:#806b59; font-weight:800; }
+    .verify-section { display:grid; gap:8px; padding:12px; border:1px solid rgba(0,0,0,.055); border-radius:16px; background:rgba(255,255,255,.55); }
+    .verify-section h4 { margin:0; color:#4c2f1d; font-size:12px; text-transform:uppercase; letter-spacing:.08em; }
     .verify-details { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:7px; }
     .verify-detail { padding:9px 10px; border-radius:10px; background:rgba(255,255,255,.64); min-width:0; }
+    .verify-detail.is-primary { border-left:3px solid var(--result-accent); background:rgba(255,255,255,.86); }
+    .verify-detail.is-primary b { font-size:15px; }
     .verify-detail span { display:block; color:#806b59; font-size:9px; text-transform:uppercase; letter-spacing:.08em; font-weight:900; }
     .verify-detail b { display:block; margin-top:3px; color:#4c2f1d; font-size:13px; overflow-wrap:anywhere; }
     .verify-actions { position:sticky; bottom:0; display:grid; grid-template-columns:1fr 1fr; gap:9px; padding:14px 18px calc(18px + env(safe-area-inset-bottom)); border-top:1px solid rgba(0,0,0,.06); background:rgba(255,255,255,.9); backdrop-filter:blur(10px); border-radius:0 0 24px 24px; }
     .verify-actions button, .verify-actions a { min-height:46px; border-radius:13px; border:1px solid rgba(0,0,0,.08); background:#fff; color:#4c2f1d; display:inline-flex; align-items:center; justify-content:center; text-decoration:none; font-weight:900; font-size:14px; }
     .verify-actions a { background:var(--result-accent); color:#fff; border-color:var(--result-accent); }
+    @keyframes scanLine { 0%,100% { top:12%; } 50% { top:86%; } }
+    @keyframes livePulse { 0%,100% { opacity:.45; } 50% { opacity:1; } }
     @media (min-width:980px) { .scanner-layout { grid-template-columns:minmax(0,1fr) 320px; align-items:start; } .scanner-stage { min-height:560px; } .scanner-diagnostics { grid-template-columns:repeat(4,minmax(0,1fr)); } }
-    @media (max-width:640px) { .scanner-stage { min-height:420px; } .scan-frame { width:min(320px,78%); } .scanner-controls { align-items:stretch; } .scanner-controls > div { width:100%; } .scanner-controls .ex-action { flex:1 1 auto; } .verify-overlay { padding:8px 8px max(18px, env(safe-area-inset-bottom)); } .verify-document { min-height:0; border-radius:20px; margin:0 auto; } .verify-top { padding:52px 14px 8px; } .verify-body { padding:0 14px 12px; } .verify-details { grid-template-columns:repeat(2,minmax(0,1fr)); } .verify-actions { padding:10px 14px calc(14px + env(safe-area-inset-bottom)); grid-template-columns:1fr; border-radius:0 0 20px 20px; } }
+    @media (max-width:640px) { .scanner-stage { min-height:420px; } .scan-frame { width:min(320px,78%); } .scanner-controls { align-items:stretch; } .scanner-controls > div { width:100%; } .scanner-controls .ex-action { flex:1 1 auto; } .verify-overlay { padding:8px 8px max(18px, env(safe-area-inset-bottom)); } .verify-document { min-height:0; border-radius:20px; margin:0 auto; } .verify-document::before { background-size:min(390px,92%); background-position:center 38%; opacity:.14; } .verify-top { padding:50px 14px 10px; } .verify-brand-head { gap:10px; } .verify-brand-copy strong { font-size:17px; } .verify-body { padding:12px 14px; } .verify-details { grid-template-columns:repeat(2,minmax(0,1fr)); } .verify-actions { padding:10px 14px calc(14px + env(safe-area-inset-bottom)); grid-template-columns:1fr; border-radius:0 0 20px 20px; } }
 </style>
 
 <div class="ex-page-head">
@@ -107,6 +129,7 @@
                 <video id="scannerVideo" playsinline autoplay muted></video>
                 <canvas id="scannerCanvas" hidden></canvas>
                 <div class="scan-frame" aria-hidden="true"></div>
+                <div class="scanner-live">Camera active</div>
                 <div class="scanner-idle" id="scannerIdle">Camera is idle. Start the scanner and point it at an exam pass.</div>
             </div>
             <div class="scanner-controls">
@@ -160,10 +183,20 @@
     <article class="verify-document duplicate" id="verifyDocument">
         <button class="verify-close-mini" type="button" id="verifyCloseTop">Continue</button>
         <div class="verify-top">
-            <div class="verify-icon" id="verifyIcon">!</div>
+            <div class="verify-brand-head">
+                <img class="verify-brand-logo" src="{{ $brandingLogoUrl }}" alt="Adekunle Ajasin University logo">
+                <div class="verify-brand-copy">
+                    <strong>Exam Access Verification</strong>
+                    <span>Adekunle Ajasin University</span>
+                </div>
+            </div>
             <div>
                 <div class="verify-label">Verification Result</div>
-                <h2 class="verify-status" id="verifyStatus">USED</h2>
+                <div class="verify-decision-line">
+                    <div class="verify-icon" id="verifyIcon">!</div>
+                    <h2 class="verify-status" id="verifyStatus">USED</h2>
+                    <span class="ex-badge DUPLICATE" id="verifyBadge">REPEATED</span>
+                </div>
                 <p class="verify-message" id="verifyMessage">This exam pass has already been scanned.</p>
             </div>
         </div>
@@ -176,17 +209,39 @@
                 <div class="safe">
                     <h3 class="verify-name" id="verifyName">Student unavailable</h3>
                     <div class="verify-meta" id="verifyMatric">Unavailable</div>
-                    <div style="margin-top:10px"><span class="ex-badge DUPLICATE" id="verifyBadge">REPEATED</span></div>
                 </div>
             </section>
-            <section class="verify-details">
-                <div class="verify-detail"><span>Department</span><b id="verifyDepartment">Not available</b></div>
-                <div class="verify-detail"><span>Level</span><b id="verifyLevel">Not available</b></div>
-                <div class="verify-detail"><span>Pass Status</span><b id="verifyQrStatus">Not available</b></div>
-                <div class="verify-detail"><span>Decision</span><b id="verifyDecision">Not available</b></div>
-                <div class="verify-detail"><span>Timestamp</span><b id="verifyTime">Not available</b></div>
-                <div class="verify-detail"><span>Examiner</span><b id="verifyExaminer">Not available</b></div>
-                <div class="verify-detail"><span>Scan Count</span><b id="verifyCount">0</b></div>
+            <section class="verify-section">
+                <h4>Exam access</h4>
+                <div class="verify-details">
+                    <div class="verify-detail is-primary"><span>Course / Paper</span><b id="verifyCourse">Course not assigned yet</b></div>
+                    <div class="verify-detail is-primary"><span>Hall / Venue</span><b id="verifyVenue">Hall not assigned yet</b></div>
+                    <div class="verify-detail"><span>Exam Date</span><b id="verifyExamDate">Timetable not assigned yet</b></div>
+                    <div class="verify-detail"><span>Exam Time</span><b id="verifyExamTime">Timetable not assigned yet</b></div>
+                    <div class="verify-detail"><span>Session</span><b id="verifySession">Not available</b></div>
+                    <div class="verify-detail"><span>Timetable</span><b id="verifyTimetable">Not assigned yet</b></div>
+                </div>
+            </section>
+            <section class="verify-section">
+                <h4>Student and clearance</h4>
+                <div class="verify-details">
+                    <div class="verify-detail"><span>Department</span><b id="verifyDepartment">Not available</b></div>
+                    <div class="verify-detail"><span>Level</span><b id="verifyLevel">Not available</b></div>
+                    <div class="verify-detail"><span>Faculty</span><b id="verifyFaculty">Not available</b></div>
+                    <div class="verify-detail"><span>Payment</span><b id="verifyPayment">Not verified</b></div>
+                    <div class="verify-detail"><span>Pass Status</span><b id="verifyQrStatus">Not available</b></div>
+                    <div class="verify-detail"><span>Seat</span><b id="verifySeat">Not assigned yet</b></div>
+                </div>
+            </section>
+            <section class="verify-section">
+                <h4>Scan record</h4>
+                <div class="verify-details">
+                    <div class="verify-detail"><span>Decision</span><b id="verifyDecision">Not available</b></div>
+                    <div class="verify-detail"><span>Timestamp</span><b id="verifyTime">Not available</b></div>
+                    <div class="verify-detail"><span>Examiner</span><b id="verifyExaminer">Not available</b></div>
+                    <div class="verify-detail"><span>Trace</span><b id="verifyTrace">Not available</b></div>
+                    <div class="verify-detail"><span>Scan Count</span><b id="verifyCount">0</b></div>
+                </div>
             </section>
         </div>
         <div class="verify-actions">
@@ -208,6 +263,7 @@
     const stopBtn = document.getElementById('stopScanner');
     const retryBtn = document.getElementById('retryScanner');
     const scanFrame = document.querySelector('.scan-frame');
+    const scannerStage = document.getElementById('scannerStage');
     const overlay = document.getElementById('verifyOverlay');
     const verifyDocument = document.getElementById('verifyDocument');
     let stream = null;
@@ -221,9 +277,12 @@
     let pendingQrData = null;
     let serverReachable = true;
 
-    function setState(message) { stateText.textContent = message; }
+    function setState(message, mode = null) {
+        stateText.textContent = message;
+        if (mode) scannerStage.dataset.state = mode;
+    }
     function showScannerError(message, diagnostic = 'Error') {
-        setState(message);
+        setState(message, 'error');
         setDiagnostic('diagCamera', diagnostic, 'error');
         setScannerControls('error');
         idleText.style.display = '';
@@ -242,11 +301,17 @@
         setDiagnostic('diagLibrary', ready ? 'Reader ready' : 'Reader unavailable', ready ? 'ok' : 'error');
     }
     function setScannerControls(mode) {
+        scannerStage.dataset.state = mode;
         startBtn.classList.toggle('scanner-control-hidden', mode === 'active');
         stopBtn.classList.toggle('scanner-control-hidden', mode !== 'active');
         retryBtn.classList.toggle('scanner-control-hidden', mode !== 'error');
     }
     function normalizeStatus(status) { return String(status || 'REJECTED').toUpperCase(); }
+    function escapeHtml(value) {
+        return String(value ?? '').replace(/[&<>"']/g, character => ({
+            '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;'
+        })[character]);
+    }
     function statusTheme(status) {
         status = normalizeStatus(status);
         if (status === 'APPROVED' || status === 'CONFIRMED') return 'approved';
@@ -394,7 +459,7 @@
                 throw new Error('camera_requires_https');
             }
             stopScanner(false);
-            setState('Requesting camera permission...');
+            setState('Camera starting. Waiting for permission...', 'starting');
             setDiagnostic('diagCamera', 'Requesting permission', 'warn');
             setScannerControls('starting');
             stream = await requestCameraStream();
@@ -415,7 +480,7 @@
             verifying = false;
             lastPayload = '';
             lastScanAt = 0;
-            setState('Scanner active. Point camera at QR code.');
+            setState('Camera active, ready to scan.', 'active');
             setDiagnostic('diagCamera', 'Ready', 'ok');
             setDiagnostic('diagScan', 'Waiting for QR');
             setScannerControls('active');
@@ -432,8 +497,12 @@
                 showScannerError('Camera access requires HTTPS on mobile browsers.', 'HTTPS required');
             } else if (message === 'video_preview_timeout') {
                 showScannerError('Camera started, but the video preview could not play. Please try again.', 'Preview blocked');
+            } else if (error?.name === 'NotAllowedError' || error?.name === 'SecurityError') {
+                showScannerError('Camera permission was denied. Allow camera access in the browser, then restart.', 'Permission denied');
+            } else if (error?.name === 'NotFoundError' || error?.name === 'OverconstrainedError') {
+                showScannerError('No usable camera is available on this device.', 'Camera unavailable');
             } else {
-                showScannerError('Camera permission is required to scan exam passes.', 'Permission needed');
+                showScannerError('The camera could not start. Check browser permissions and try again.', 'Camera unavailable');
             }
         } finally {
             startBtn.disabled = false;
@@ -454,6 +523,7 @@
         verifying = false;
         scanFrame.classList.remove('detected');
         idleText.style.display = '';
+        idleText.textContent = 'Scanner stopped. Start the camera when you are ready.';
         if (resetControls) setScannerControls('idle');
     }
     function tick() {
@@ -484,7 +554,7 @@
             lastPayload = code.data;
             verifying = true;
             scanFrame.classList.add('detected');
-            setState('QR detected. Verifying...');
+            setState('QR detected. Verifying with the server...', 'verifying');
             setDiagnostic('diagScan', 'QR detected. Checking...', 'warn');
             verifyQr(code.data);
         }
@@ -582,6 +652,7 @@
     function renderResult(result) {
         const status = normalizeStatus(result.status);
         const student = result.student || {};
+        const access = result.exam_access || {};
         const detailLink = result.detail_url
             ? `<div style="margin-top:12px"><a class="ex-action secondary" href="${result.detail_url}">View</a></div>`
             : '';
@@ -592,10 +663,10 @@
                     <span class="ex-badge ${status}">${decisionLabel(status)}</span>
                 </div>
                 <div class="result-grid">
-                    <div><span>Student</span><b>${student.full_name || 'Student unavailable'}</b></div>
-                    <div><span>Matric</span><b class="ex-mono">${student.matric_no || 'Unavailable'}</b></div>
-                    <div><span>Department</span><b>${student.department || 'Not available'}</b></div>
-                    <div><span>Pass Status</span><b>${passStatusLabel(result.token_status || status)}</b></div>
+                    <div><span>Student</span><b>${escapeHtml(student.full_name || 'Student unavailable')}</b></div>
+                    <div><span>Matric</span><b class="ex-mono">${escapeHtml(student.matric_no || 'Unavailable')}</b></div>
+                    <div><span>Course</span><b>${escapeHtml(access.course_code || 'Not assigned yet')}</b></div>
+                    <div><span>Venue</span><b>${escapeHtml(access.venue || 'Not assigned yet')}</b></div>
                     <div><span>Scans</span><b>${result.scan_count || 0}</b></div>
                     <div><span>Time</span><b>${new Date(result.timestamp || Date.now()).toLocaleString()}</b></div>
                 </div>
@@ -606,6 +677,7 @@
         const status = normalizeStatus(result.status);
         const theme = statusTheme(status);
         const student = result.student || {};
+        const access = result.exam_access || {};
         verifyDocument.className = `verify-document ${theme}`;
         document.getElementById('verifyIcon').textContent = theme === 'approved' ? '✓' : (theme === 'duplicate' ? '!' : '×');
         document.getElementById('verifyStatus').textContent = status === 'DUPLICATE' ? 'ALREADY SCANNED' : decisionLabel(status);
@@ -632,11 +704,21 @@
         badge.className = `ex-badge ${status}`;
         document.getElementById('verifyDepartment').textContent = student.department || 'Not available';
         document.getElementById('verifyLevel').textContent = student.level || 'Not available';
+        document.getElementById('verifyFaculty').textContent = student.faculty || 'Not available';
+        document.getElementById('verifySession').textContent = access.session || 'Not available';
+        document.getElementById('verifyPayment').textContent = access.payment_status || 'Not verified';
         document.getElementById('verifyQrStatus').textContent = passStatusLabel(result.token_status || status);
+        document.getElementById('verifyCourse').textContent = [access.course_code, access.course_title].filter(Boolean).join(' · ') || 'Course not assigned yet';
+        document.getElementById('verifyExamDate').textContent = access.exam_date || 'Timetable not assigned yet';
+        document.getElementById('verifyExamTime').textContent = [access.start_time, access.end_time].filter(Boolean).join(' - ') || 'Timetable not assigned yet';
+        document.getElementById('verifyVenue').textContent = access.venue || 'Hall not assigned yet';
+        document.getElementById('verifySeat').textContent = access.seat_number || 'Not assigned yet';
+        document.getElementById('verifyTimetable').textContent = access.timetable_status || 'Not assigned yet';
         document.getElementById('verifyDecision').textContent = status;
         document.getElementById('verifyTime').textContent = new Date(result.timestamp || Date.now()).toLocaleString();
         document.getElementById('verifyExaminer').textContent = result.examiner || @json($examiner['full_name'] ?? 'Examiner');
         document.getElementById('verifyCount').textContent = result.scan_count || 0;
+        document.getElementById('verifyTrace').textContent = result.trace_id ? `#${result.trace_id}` : 'Not available';
         document.getElementById('verifyReviewLink').href = result.detail_url || `{{ route('examiner.scan-history') }}${result.trace_id ? '?highlight=' + encodeURIComponent(result.trace_id) : ''}`;
         overlay.hidden = false;
         overlay.scrollTop = 0;
@@ -669,10 +751,10 @@
         verifying = false;
         lastPayload = '';
         scanFrame.classList.remove('detected');
-        if (scanning) setState('Scanner active. Point camera at QR code.');
+        if (scanning) setState('Camera active, ready to scan.', 'active');
     }
     startBtn.addEventListener('click', startScanner);
-    stopBtn.addEventListener('click', () => { stopScanner(); setState('Camera stopped.'); });
+    stopBtn.addEventListener('click', () => { stopScanner(); setState('Camera stopped. Start again when ready.', 'idle'); });
     retryBtn.addEventListener('click', startScanner);
     document.getElementById('retryPending').addEventListener('click', retryPendingVerification);
     document.getElementById('retryPendingTop').addEventListener('click', retryPendingVerification);
@@ -691,6 +773,7 @@
     window.addEventListener('load', updateReaderDiagnostic);
     updateReaderDiagnostic();
     setScannerControls('idle');
+    scannerStage.dataset.state = 'idle';
     updateConnectionStatus();
 </script>
 @endpush

@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use Database\Seeders\TimetableSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
@@ -88,5 +89,29 @@ class SeederTest extends TestCase
         ] as $matricNo) {
             $this->assertDatabaseHas('mock_sis', ['matric_no' => $matricNo]);
         }
+    }
+
+    public function test_sample_timetable_covers_every_department_and_standard_level_without_duplicates(): void
+    {
+        $sessionId = DB::table('exam_sessions')->where('is_active', true)->value('session_id');
+        $departmentIds = DB::table('departments')->pluck('dept_id');
+
+        foreach ($departmentIds as $departmentId) {
+            foreach (['100', '200', '300', '400'] as $level) {
+                $this->assertTrue(
+                    DB::table('timetables')
+                        ->where('exam_session_id', $sessionId)
+                        ->where('department_id', $departmentId)
+                        ->where('level', $level)
+                        ->whereNotNull('course_code')
+                        ->whereNotNull('venue')
+                        ->exists()
+                );
+            }
+        }
+
+        $before = DB::table('timetables')->count();
+        $this->seed(TimetableSeeder::class);
+        $this->assertSame($before, DB::table('timetables')->count());
     }
 }

@@ -4,16 +4,15 @@ namespace App\Http\Controllers\Web;
 
 use App\Http\Controllers\Controller;
 use App\Services\AuditService;
-use App\Services\CryptoService;
 use App\Services\MockSISService;
 use App\Services\RegistrationService;
-use App\Services\RemitaService;
 use App\Support\DepartmentFees;
 use App\Support\MatricNumber;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class StudentWebController extends Controller
 {
@@ -21,13 +20,12 @@ class StudentWebController extends Controller
     {
         $session = DB::table('exam_sessions')->where('is_active', true)->first();
         $departments = DB::table('departments')->orderBy('dept_name')->get();
-        $feeMap = DepartmentFees::configuredFees();
         $faculties = $departments->pluck('faculty')->filter()->unique()->values();
         if ($faculties->isEmpty()) {
             $faculties = collect([DepartmentFees::FACULTY]);
         }
 
-        return view('student.register', compact('session', 'departments', 'feeMap', 'faculties'));
+        return view('student.register', compact('session', 'departments', 'faculties'));
     }
 
     public function register(Request $request): JsonResponse|RedirectResponse
@@ -37,7 +35,6 @@ class StudentWebController extends Controller
             'department_id' => 'required|integer|exists:departments,dept_id',
             'level' => 'required|string|in:100,200,300,400',
             'student_number' => ['required', 'string', 'regex:/^\d{3}$/'],
-            'rrr_number' => ['required', 'string', 'max:50'],
         ]);
 
         $session = DB::table('exam_sessions')->where('is_active', true)->first();
@@ -60,59 +57,24 @@ class StudentWebController extends Controller
                 throw new \RuntimeException('Demo passport photo is only available for student numbers 001 to 014 right now.');
             }
 
-            $this->confirmDemoStudentIfAllowed($data, $department);
+            $this->ensureDemoStudentIfAllowed($data, $department);
             $this->validateSelectedIdentity($data);
-            $expectedAmount = DepartmentFees::amountForDepartment($department->dept_name ?? null);
+            $isDemoSample = DepartmentFees::isDemoMode()
+                && MatricNumber::hasDemoPhoto((string) $data['student_number']);
+            $existingDemoStudent = $isDemoSample
+                ? DB::table('students')
+                    ->where('matric_no', $data['matric_no'])
+                    ->where('session_id', $session->session_id)
+                    ->exists()
+                : false;
 
-            if ($expectedAmount <= 0) {
-                throw new \RuntimeException('School fee is not configured for the selected department.');
+            if (! $existingDemoStudent) {
+                $regService = new RegistrationService(new MockSISService());
+                $regService->registerStudent([
+                    'matric_no' => $data['matric_no'],
+                    'session_id' => (int) $session->session_id,
+                ]);
             }
-
-            $cryptoService = new CryptoService();
-            $regService = new RegistrationService(
-                new MockSISService(),
-                new class extends RemitaService {
-                    public function __construct() { parent::__construct(new \GuzzleHttp\Client()); }
-                    public function verifyPayment(string $rrrNumber, float $expectedAmount): array {
-                        $rrrNumber = strtoupper(trim($rrrNumber));
-
-                        if (\App\Support\DepartmentFees::startsWithTestPrefix($rrrNumber)) {
-                            if (! \App\Support\DepartmentFees::isDemoRrr($rrrNumber)) {
-                                throw new \RuntimeException('Use a valid demo RRR starting with TEST-, for example TEST-0001 or TEST-DEMO.');
-                            }
-
-                            if (! \App\Support\DepartmentFees::isDemoMode()) {
-                                throw new \RuntimeException('Test RRR values are only allowed in demo mode.');
-                            }
-
-                            $demoAmount = $expectedAmount;
-
-                            return [
-                                'status' => 'Verified Demo Payment',
-                                'amount' => (string) $demoAmount,
-                                'RRR' => $rrrNumber,
-                                'payment_type' => 'School Fees',
-                                'payment_source' => 'demo',
-                            ];
-                        }
-
-                        if (\App\Support\DepartmentFees::isDemoMode()) {
-                            throw new \RuntimeException('Use a valid demo RRR starting with TEST-, for example TEST-0001 or TEST-DEMO.');
-                        }
-
-                        return ['status' => 'Payment Successful', 'amount' => (string) $expectedAmount, 'RRR' => $rrrNumber];
-                    }
-                },
-                $cryptoService
-            );
-
-            $result = $regService->registerStudent([
-                'matric_no' => $data['matric_no'],
-                'full_name' => '',
-                'rrr_number' => $data['rrr_number'],
-                'expected_amount' => $expectedAmount,
-                'session_id' => (int) $session->session_id,
-            ]);
 
             $request->session()->put('student_matric_no', $data['matric_no']);
             $request->session()->put('student_session_id', (int) $session->session_id);
@@ -120,8 +82,8 @@ class StudentWebController extends Controller
             app(AuditService::class)->logAction(
                 $data['matric_no'],
                 'student',
-                'student.registered',
-                ['token_id' => $result['data']['token_id'], 'session_id' => $session->session_id]
+                $existingDemoStudent ? 'student.demo_session_resumed' : 'student.registered',
+                ['session_id' => $session->session_id]
             );
 
             if (! $request->expectsJson()) {
@@ -134,15 +96,16 @@ class StudentWebController extends Controller
                 'redirect_url' => route('student.dashboard'),
                 'data' => [
                     'matric_no' => $data['matric_no'],
-                    'token_id' => $result['data']['token_id'],
                 ],
             ]);
         } catch (\Throwable $e) {
+            $message = $this->registrationErrorMessage($e);
+
             if (! $request->expectsJson()) {
-                return back()->withErrors(['registration' => $e->getMessage()])->withInput();
+                return back()->withErrors(['registration' => $message])->withInput();
             }
 
-            return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
+            return response()->json(['success' => false, 'message' => $message], 422);
         }
     }
 
@@ -170,16 +133,6 @@ class StudentWebController extends Controller
             }
         }
 
-        $rrrNumber = strtoupper(trim((string) ($data['rrr_number'] ?? '')));
-
-        if (DepartmentFees::startsWithTestPrefix($rrrNumber) && ! DepartmentFees::isDemoRrr($rrrNumber)) {
-            throw new \RuntimeException('Use a valid demo RRR starting with TEST-, for example TEST-0001 or TEST-DEMO.');
-        }
-
-        if (DepartmentFees::isDemoRrr($rrrNumber) && ! DepartmentFees::isDemoMode()) {
-            throw new \RuntimeException('Test RRR values are only allowed in demo mode.');
-        }
-
         if (preg_match('/^\d{9}$/', $data['matric_no']) === 1) {
             $facultyCode = substr($data['matric_no'], 2, 2);
             $departmentCode = substr($data['matric_no'], 4, 2);
@@ -194,20 +147,10 @@ class StudentWebController extends Controller
         }
     }
 
-    private function confirmDemoStudentIfAllowed(array $data, object $department): void
+    private function ensureDemoStudentIfAllowed(array $data, object $department): void
     {
-        $rrrNumber = strtoupper(trim((string) ($data['rrr_number'] ?? '')));
-
-        if (! DepartmentFees::startsWithTestPrefix($rrrNumber)) {
-            return;
-        }
-
-        if (! DepartmentFees::isDemoRrr($rrrNumber)) {
-            throw new \RuntimeException('Use a valid demo RRR starting with TEST-, for example TEST-0001 or TEST-DEMO.');
-        }
-
         if (! DepartmentFees::isDemoMode()) {
-            throw new \RuntimeException('Test RRR values are only allowed in demo mode.');
+            return;
         }
 
         if (! MatricNumber::hasDemoPhoto((string) $data['student_number'])) {
@@ -225,6 +168,26 @@ class StudentWebController extends Controller
                 'photo_path' => MatricNumber::demoPhotoPath((string) $data['student_number']),
             ]
         );
+    }
+
+    private function registrationErrorMessage(\Throwable $exception): string
+    {
+        $message = $exception->getMessage();
+        $containsInternalDetails = preg_match(
+            '/SQLSTATE|database|table\s+\S+|column\s+\S+|stack trace|constraint/i',
+            $message
+        ) === 1;
+
+        if (! $containsInternalDetails
+            && ($exception instanceof \InvalidArgumentException || $exception instanceof \RuntimeException)) {
+            return $exception->getMessage();
+        }
+
+        Log::error('Student registration failed.', [
+            'exception' => $exception,
+        ]);
+
+        return 'Registration could not be completed. Please check your details and try again.';
     }
 
 }

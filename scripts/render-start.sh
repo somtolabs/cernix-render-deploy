@@ -45,11 +45,12 @@ fi
 # Runtime records must never be deleted or recreated during startup.
 php artisan migrate --force
 
-# Reference rows, one registration session, and baseline logins are repaired
-# idempotently without deleting runtime activity or rotating existing QR keys.
-php artisan cernix:ensure-baseline-data
+if [ "${RENDER_SKIP_SEED:-true}" != "true" ] && [ "${CERNIX_BASELINE_ON_BOOT:-false}" = "true" ]; then
+    echo "Running explicitly enabled baseline repair."
+    php artisan cernix:ensure-baseline-data
+fi
 
-if [ "${CERNIX_SEED_ON_BOOT:-false}" = "true" ]; then
+if [ "${RENDER_SKIP_SEED:-true}" != "true" ] && [ "${CERNIX_SEED_ON_BOOT:-false}" = "true" ]; then
     echo "Running explicitly enabled insert-only seeders."
     php artisan db:seed --force
 fi

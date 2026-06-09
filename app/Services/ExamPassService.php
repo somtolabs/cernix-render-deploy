@@ -1,0 +1,162 @@
+<?php
+
+namespace App\Services;
+
+use App\Support\DepartmentFees;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
+use RuntimeException;
+
+class ExamPassService
+{
+    public function __construct(
+        private readonly RemitaService $remita,
+        private readonly QrTokenService $qrTokens,
+    ) {}
+
+    public function generate(
+        string $matricNo,
+        int $sessionId,
+        int $timetableId,
+        string $rrrNumber,
+        float $expectedAmount,
+    ): array {
+        $rrrNumber = strtoupper(trim($rrrNumber));
+        $paymentReference = $this->paymentReference($rrrNumber, $matricNo);
+        if ($expectedAmount <= 0) {
+            throw new RuntimeException('School fee is not configured for this student department.');
+        }
+
+        $student = DB::table('students')
+            ->where('matric_no', $matricNo)
+            ->where('session_id', $sessionId)
+            ->first();
+
+        if (! $student) {
+            throw new RuntimeException('Student registration was not found for this exam session.');
+        }
+
+        $exam = DB::table('timetables')
+            ->where('id', $timetableId)
+            ->where('exam_session_id', $sessionId)
+            ->where('department_id', $student->department_id)
+            ->where('level', (string) $student->level)
+            ->where('status', '!=', 'cancelled')
+            ->first();
+
+        if (! $exam) {
+            throw new RuntimeException('Select a valid assigned course before generating your exam pass.');
+        }
+
+        $existingPayment = DB::table('payment_records')
+            ->where('rrr_number', $paymentReference)
+            ->first();
+
+        if (! $existingPayment && $rrrNumber === 'TEST-DEMO') {
+            $existingPayment = DB::table('payment_records')
+                ->where('rrr_number', 'TEST-DEMO')
+                ->where('student_id', $matricNo)
+                ->first();
+        }
+
+        if ($existingPayment && $existingPayment->student_id !== $matricNo) {
+            throw new RuntimeException('RRR has already been used for another payment record.');
+        }
+
+        $remitaResponse = $existingPayment
+            ? json_decode((string) $existingPayment->remita_response, true, 512, JSON_THROW_ON_ERROR)
+            : $this->verifyPayment($rrrNumber, $expectedAmount);
+
+        return DB::transaction(function () use (
+            $matricNo,
+            $sessionId,
+            $timetableId,
+            $paymentReference,
+            $expectedAmount,
+            $remitaResponse,
+            $existingPayment,
+        ) {
+            if (! $existingPayment) {
+                DB::table('payment_records')->insert([
+                    'student_id' => $matricNo,
+                    'rrr_number' => $paymentReference,
+                    'amount_declared' => $expectedAmount,
+                    'amount_confirmed' => (float) ($remitaResponse['amount'] ?? $expectedAmount),
+                    'remita_response' => json_encode($remitaResponse, JSON_THROW_ON_ERROR),
+                    'verified_at' => now(),
+                ]);
+            }
+
+            $existingTokenQuery = DB::table('qr_tokens')
+                ->where('student_id', $matricNo)
+                ->where('session_id', $sessionId)
+                ->where('status', 'UNUSED');
+
+            if (Schema::hasColumn('qr_tokens', 'timetable_id')) {
+                $existingTokenQuery->where('timetable_id', $timetableId);
+            }
+
+            $existingToken = $existingTokenQuery->orderByDesc('issued_at')->first();
+            if ($existingToken && $existingPayment) {
+                return $this->tokenResult($existingToken);
+            }
+
+            return $this->qrTokens->issue($matricNo, $sessionId, $timetableId);
+        });
+    }
+
+    private function paymentReference(string $rrrNumber, string $matricNo): string
+    {
+        if ($rrrNumber !== 'TEST-DEMO') {
+            return $rrrNumber;
+        }
+
+        return 'TEST-DEMO-' . strtoupper(substr(hash('sha256', $matricNo), 0, 16));
+    }
+
+    private function tokenResult(object $token): array
+    {
+        $tokenData = [
+            'token_id' => $token->token_id,
+            'encrypted_payload' => $token->encrypted_payload,
+            'hmac_signature' => $token->hmac_signature,
+            'session_id' => (int) $token->session_id,
+        ];
+
+        return $tokenData + [
+            'qr_content' => json_encode($tokenData, JSON_THROW_ON_ERROR),
+            'qr_svg' => $this->qrTokens->buildQrCode($tokenData),
+        ];
+    }
+
+    private function verifyPayment(string $rrrNumber, float $expectedAmount): array
+    {
+        if (DepartmentFees::startsWithTestPrefix($rrrNumber)) {
+            $isAllowedDemoReference = $rrrNumber === 'TEST-DEMO'
+                || array_key_exists($rrrNumber, DepartmentFees::DEMO_RRR_FEES)
+                || array_key_exists($rrrNumber, DepartmentFees::DEMO_RRR_MATRICS);
+
+            if (! $isAllowedDemoReference) {
+                throw new RuntimeException('Payment reference could not be verified.');
+            }
+
+            if (! DepartmentFees::isDemoMode()) {
+                throw new RuntimeException('Test RRR values are only allowed in demo mode.');
+            }
+
+            return [
+                'status' => 'Verified Demo Payment',
+                'amount' => (string) $expectedAmount,
+                'RRR' => $rrrNumber,
+                'payment_type' => 'School Fees',
+                'payment_source' => 'demo',
+            ];
+        }
+
+        if (DepartmentFees::isDemoMode()) {
+            throw new RuntimeException('Use a valid demo RRR starting with TEST-, for example TEST-0001 or TEST-DEMO.');
+        }
+
+        return $this->remita->verifyPayment($rrrNumber, $expectedAmount);
+    }
+}

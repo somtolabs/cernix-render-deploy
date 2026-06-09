@@ -117,13 +117,13 @@ class ProductionPersistenceTest extends TestCase
         $script = file_get_contents(base_path('scripts/render-start.sh'));
 
         $this->assertStringContainsString('php artisan migrate --force', $script);
-        $this->assertStringContainsString('php artisan cernix:ensure-baseline-data', $script);
+        $this->assertStringContainsString('CERNIX_BASELINE_ON_BOOT', $script);
         $this->assertStringContainsString('CERNIX_SEED_ON_BOOT', $script);
         $this->assertStringContainsString('DB_CONNECTION:-', $script);
         $this->assertStringContainsString('DATABASE_URL:-${DB_URL:-}', $script);
         $this->assertStringContainsString('APP_KEY:-', $script);
         $this->assertStringContainsString('APP_JWT_SECRET:-${JWT_SECRET:-}', $script);
-        $this->assertStringNotContainsString('RENDER_SKIP_SEED', $script);
+        $this->assertStringContainsString('RENDER_SKIP_SEED', $script);
         $this->assertStringNotContainsString('migrate:fresh', $script);
         $this->assertStringNotContainsString('migrate:refresh', $script);
         $this->assertStringNotContainsString('db:wipe', $script);

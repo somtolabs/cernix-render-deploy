@@ -6,7 +6,7 @@
 <style>
     .student-row-id { display:flex; align-items:center; gap:12px; min-width:240px; }
     .student-avatar { width:42px; height:42px; border-radius:9999px; aspect-ratio:1 / 1; overflow:hidden; display:grid; place-items:center; flex:0 0 auto; background:var(--navy); color:#fff; font-weight:950; letter-spacing:.02em; border:1px solid var(--line); }
-    .student-name { display:block; color:var(--ink); font-weight:900; line-height:1.2; overflow-wrap:anywhere; }
+    .student-name { display:block; color:var(--ink); font-weight:900; line-height:1.2; overflow-wrap:break-word; word-break:normal; }
     .student-sub { display:block; margin-top:4px; color:var(--ink-3); font-size:12px; }
     .student-actions { display:flex; justify-content:flex-end; gap:8px; flex-wrap:wrap; }
     .student-review { display:inline-flex; width:fit-content; padding:5px 9px; border-radius:999px; background:rgba(180,83,9,.12); color:var(--amber); font-size:11px; font-weight:900; letter-spacing:.05em; text-transform:uppercase; }
@@ -18,10 +18,11 @@
         .student-table-wrap tr,
         .student-table-wrap td { display:block; width:100%; }
         .student-table-wrap thead { display:none; }
-        .student-table-wrap tr { margin-bottom:10px; padding:12px; border:1px solid var(--line); border-radius:16px; background:#fff; }
+        .student-table-wrap tr { margin-bottom:10px; padding:12px; border:1px solid var(--line); border-radius:16px; background:rgba(244,247,252,.72); word-break:normal; writing-mode:horizontal-tb; }
         .student-table-wrap td { border:0; padding:7px 0; }
-        .student-table-wrap td:not(.student-identity-cell) { display:flex; justify-content:space-between; gap:14px; align-items:center; }
+        .student-table-wrap td:not(.student-identity-cell) { display:grid; grid-template-columns:minmax(88px,.38fr) minmax(0,1fr); gap:12px; align-items:start; }
         .student-table-wrap td:not(.student-identity-cell)::before { content:attr(data-label); color:var(--ink-3); font-size:11px; font-weight:900; text-transform:uppercase; letter-spacing:.08em; }
+        .student-table-wrap td:not(.student-identity-cell) > * { min-width:0; justify-self:start; }
         .student-row-id { min-width:0; align-items:flex-start; }
         .student-actions { justify-content:flex-start; }
     }

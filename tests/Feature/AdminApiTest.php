@@ -5,8 +5,8 @@ namespace Tests\Feature;
 use App\Models\User;
 use App\Services\CryptoService;
 use App\Services\MockSISService;
+use App\Services\QrTokenService;
 use App\Services\RegistrationService;
-use App\Services\RemitaService;
 use Database\Seeders\DepartmentsSeeder;
 use Database\Seeders\ExamSessionsSeeder;
 use Database\Seeders\ExaminersSeeder;
@@ -203,20 +203,14 @@ class AdminApiTest extends TestCase
         $session   = DB::table('exam_sessions')->where('is_active', true)->first();
         $feeAmount = (float) $session->fee_amount;
 
-        $mockRemita = $this->createMock(RemitaService::class);
-        $mockRemita->method('verifyPayment')
-                   ->willReturn(['status' => 'Payment Successful', 'amount' => (string) $feeAmount]);
-
-        $regService = new RegistrationService(new MockSISService(), $mockRemita, new CryptoService());
-        $result = $regService->registerStudent([
+        $regService = new RegistrationService(new MockSISService());
+        $regService->registerStudent([
             'matric_no'       => 'CSC/2021/001',
-            'full_name'       => '',
-            'rrr_number'      => '280007021192',
-            'expected_amount' => $feeAmount,
             'session_id'      => (int) $session->session_id,
         ]);
 
-        $tokenId = $result['data']['token_id'];
+        $tokenId = (new QrTokenService(new CryptoService()))
+            ->issue('CSC/2021/001', (int) $session->session_id)['token_id'];
 
         $response = $this->withToken($this->adminToken)
             ->postJson("/api/admin/tokens/{$tokenId}/revoke");

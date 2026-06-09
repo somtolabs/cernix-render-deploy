@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Services\AuditService;
 use App\Services\CryptoService;
+use App\Services\ExamPassService;
 use App\Services\MockSISService;
 use App\Services\QrTokenService;
 use App\Services\RegistrationService;
@@ -13,6 +14,7 @@ use Database\Seeders\DepartmentsSeeder;
 use Database\Seeders\ExamSessionsSeeder;
 use Database\Seeders\ExaminersSeeder;
 use Database\Seeders\MockSISSeeder;
+use Database\Seeders\TimetableSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
@@ -33,6 +35,7 @@ class EndToEndSystemTest extends TestCase
     use RefreshDatabase;
 
     private RegistrationService $registrationService;
+    private ExamPassService      $examPassService;
     private VerificationService $verificationService;
     private QrTokenService      $qrTokenService;
     private AuditService        $auditService;
@@ -52,6 +55,7 @@ class EndToEndSystemTest extends TestCase
             ExamSessionsSeeder::class,
             MockSISSeeder::class,
             ExaminersSeeder::class,
+            TimetableSeeder::class,
         ]);
 
         $session = DB::table('exam_sessions')->where('is_active', true)->first();
@@ -69,9 +73,10 @@ class EndToEndSystemTest extends TestCase
 
         $crypto = new CryptoService();
 
-        $this->registrationService = new RegistrationService(new MockSISService(), $remita, $crypto);
+        $this->registrationService = new RegistrationService(new MockSISService());
         $this->verificationService = new VerificationService($crypto);
         $this->qrTokenService      = new QrTokenService($crypto);
+        $this->examPassService     = new ExamPassService($remita, $this->qrTokenService);
         $this->auditService        = new AuditService();
     }
 
@@ -80,24 +85,24 @@ class EndToEndSystemTest extends TestCase
     // =========================================================================
 
     /**
-     * Step 2: Registration produces success + token_id + encrypted payload.
+     * Step 2: Registration creates a profile; payment then creates the pass.
      */
     public function test_registration_returns_success_with_token_and_payload(): void
     {
         $result = $this->registrationService->registerStudent([
-            'matric_no'       => $this->matricNo,
-            'full_name'       => 'Should be ignored',   // RegistrationService uses SIS value
-            'rrr_number'      => '280007021192',
-            'expected_amount' => $this->feeAmount,
-            'session_id'      => $this->sessionId,
+            'matric_no' => $this->matricNo,
+            'session_id' => $this->sessionId,
         ]);
 
         $this->assertTrue($result['success']);
         $this->assertSame('Registration successful', $result['message']);
-        $this->assertNotEmpty($result['data']['token_id']);
-        $this->assertNotEmpty($result['data']['qr_payload']);   // = encrypted_payload
         $this->assertSame('Adebayo Oluwaseun Emmanuel', $result['data']['full_name']); // from SIS
         $this->assertSame('demo-passports/student-020.jpg',        $result['data']['photo_path']); // from SIS
+        $this->assertDatabaseCount('payment_records', 0);
+        $this->assertDatabaseCount('qr_tokens', 0);
+
+        $pass = $this->generatePass('TEST-DEMO');
+        $this->assertNotEmpty($pass['token_id']);
     }
 
     /**
@@ -253,15 +258,31 @@ class EndToEndSystemTest extends TestCase
     /**
      * Run RegistrationService with valid default input and return its result.
      */
-    private function registerStudent(string $rrr = '280007021192'): array
+    private function registerStudent(string $rrr = 'TEST-DEMO'): array
     {
-        return $this->registrationService->registerStudent([
-            'matric_no'       => $this->matricNo,
-            'full_name'       => 'Adebayo Oluwaseun Emmanuel',
-            'rrr_number'      => $rrr,
-            'expected_amount' => $this->feeAmount,
-            'session_id'      => $this->sessionId,
+        $this->registrationService->registerStudent([
+            'matric_no' => $this->matricNo,
+            'session_id' => $this->sessionId,
         ]);
+
+        return ['data' => $this->generatePass($rrr)];
+    }
+
+    private function generatePass(string $rrr): array
+    {
+        DB::table('students')->where('matric_no', $this->matricNo)->update(['level' => '400']);
+        $timetableId = (int) DB::table('timetables')
+            ->where('exam_session_id', $this->sessionId)
+            ->where('course_code', 'CSC401')
+            ->value('id');
+
+        return $this->examPassService->generate(
+            $this->matricNo,
+            $this->sessionId,
+            $timetableId,
+            $rrr,
+            $this->feeAmount,
+        );
     }
 
     /**

@@ -9,7 +9,7 @@
     $steps = [
         ['label' => 'Registration', 'value' => 'Complete', 'meta' => $registeredAt],
         ['label' => 'Payment', 'value' => $payment ? 'Verified' : 'Pending', 'meta' => $paymentAt ?: 'Awaiting payment record'],
-        ['label' => 'Exam Pass', 'value' => match(strtoupper((string) ($token->status ?? ''))) { 'UNUSED' => 'Ready', 'USED' => 'Already scanned', 'REVOKED' => 'Unavailable', default => $token->status ?? 'Pending' }, 'meta' => $token?->issued_at ? 'Issued ' . \Illuminate\Support\Carbon::parse($token->issued_at)->format('d M Y, H:i') : 'Pass pending'],
+        ['label' => 'Exam Pass', 'value' => match(strtoupper((string) ($token->status ?? ''))) { 'UNUSED' => 'Ready', 'USED' => 'Already scanned', 'REVOKED' => 'Unavailable', default => 'Not generated' }, 'meta' => $token?->issued_at ? 'Issued ' . \Illuminate\Support\Carbon::parse($token->issued_at)->format('d M Y, H:i') : 'Generate after payment verification'],
         ['label' => 'Timetable', 'value' => $timetable->count() ? 'Assigned' : 'Not assigned', 'meta' => $timetable->count() ? $timetable->count() . ' exams available' : 'Check back after admin scheduling'],
     ];
     $visibleScans = $scanHistory->take(3);
@@ -65,14 +65,18 @@
                 <div class="student-status-line" style="margin-top:10px">
                     <span class="is-ok">Registration: Complete</span>
                     <span class="{{ $payment ? 'is-ok' : 'is-pending' }}">Payment: {{ $payment ? 'Verified' : 'Pending' }}</span>
-                    <span class="{{ strtoupper((string) ($token->status ?? '')) === 'UNUSED' ? 'is-ok' : 'is-pending' }}">Exam Pass: {{ match(strtoupper((string) ($token->status ?? ''))) { 'UNUSED' => 'Ready', 'USED' => 'Already scanned', 'REVOKED' => 'Unavailable', default => $token->status ?? 'Pending' } }}</span>
+                    <span class="{{ strtoupper((string) ($token->status ?? '')) === 'UNUSED' ? 'is-ok' : 'is-pending' }}">Exam Pass: {{ match(strtoupper((string) ($token->status ?? ''))) { 'UNUSED' => 'Ready', 'USED' => 'Already scanned', 'REVOKED' => 'Unavailable', default => 'Not generated' } }}</span>
                     <span class="{{ $timetable->count() ? 'is-ok' : 'is-pending' }}">{{ $timetable->count() ? $timetable->count() . ' exams assigned' : 'No timetable yet' }}</span>
                 </div>
             </div>
         </div>
         <div class="student-actions">
-            <a class="btn btn-primary btn-block" href="{{ route('student.exam-access-id') }}">View Exam Pass</a>
-            <a class="btn btn-ghost btn-block" href="{{ route('student.exam-pass') }}">Print Exam Pass</a>
+            @if($token)
+                <a class="btn btn-primary btn-block" href="{{ route('student.exam-access-id') }}">View Exam Pass</a>
+                <a class="btn btn-ghost btn-block" href="{{ route('student.exam-pass') }}">Print Exam Pass</a>
+            @else
+                <a class="btn btn-primary btn-block" href="{{ route('student.generate-exam-pass') }}">Generate Exam Pass</a>
+            @endif
             <a class="btn btn-ghost btn-block" href="{{ route('student.timetable') }}">Your Timetable</a>
         </div>
     </section>

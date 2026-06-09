@@ -2,7 +2,9 @@
 
 namespace App\Services;
 
+use App\Support\Branding;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use RuntimeException;
 use SimpleSoftwareIO\QrCode\Facades\QrCode;
@@ -28,7 +30,7 @@ class QrTokenService
      * @throws RuntimeException if student or active session not found,
      *                          or if a valid UNUSED token already exists
      */
-    public function issue(string $matricNo, int $sessionId): array
+    public function issue(string $matricNo, int $sessionId, ?int $timetableId = null): array
     {
         $student = DB::table('students')->where('matric_no', $matricNo)->first();
         if (! $student) {
@@ -43,11 +45,17 @@ class QrTokenService
             throw new RuntimeException("Active exam session [{$sessionId}] not found.");
         }
 
-        $existing = DB::table('qr_tokens')
+        $supportsTimetableBinding = Schema::hasColumn('qr_tokens', 'timetable_id');
+        $existingQuery = DB::table('qr_tokens')
             ->where('student_id', $matricNo)
             ->where('session_id', $sessionId)
-            ->where('status', 'UNUSED')
-            ->exists();
+            ->where('status', 'UNUSED');
+
+        if ($supportsTimetableBinding) {
+            $existingQuery->where('timetable_id', $timetableId);
+        }
+
+        $existing = $existingQuery->exists();
         if ($existing) {
             throw new RuntimeException(
                 "Student [{$matricNo}] already has an active token for session [{$sessionId}]."
@@ -68,7 +76,7 @@ class QrTokenService
 
         $encrypted = $this->crypto->encryptPayload($payload, $session->aes_key, $session->hmac_secret);
 
-        DB::table('qr_tokens')->insert([
+        $tokenRecord = [
             'token_id'          => $tokenId,
             'student_id'        => $matricNo,
             'session_id'        => $sessionId,
@@ -76,7 +84,13 @@ class QrTokenService
             'hmac_signature'    => $encrypted['hmac_signature'],
             'status'            => 'UNUSED',
             'issued_at'         => $issuedAt,
-        ]);
+        ];
+
+        if ($supportsTimetableBinding) {
+            $tokenRecord['timetable_id'] = $timetableId;
+        }
+
+        DB::table('qr_tokens')->insert($tokenRecord);
 
         // QR envelope — carries everything the scanner needs.
         // token_id is at the top level so the scanner can look up the token
@@ -242,7 +256,7 @@ class QrTokenService
      */
     private function injectLogoWatermark(string $svg, int $size): string
     {
-        $logoPath = public_path('aaua-logo.png');
+        $logoPath = Branding::logoAbsolutePath();
         if (! file_exists($logoPath)) {
             return $svg;
         }

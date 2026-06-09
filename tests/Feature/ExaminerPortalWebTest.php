@@ -3,7 +3,9 @@
 namespace Tests\Feature;
 
 use App\Services\CryptoService;
+use App\Services\ExamPassService;
 use App\Services\MockSISService;
+use App\Services\QrTokenService;
 use App\Services\RegistrationService;
 use App\Services\RemitaService;
 use App\Services\VerificationService;
@@ -66,6 +68,10 @@ class ExaminerPortalWebTest extends TestCase
             ->assertSee('Scanner diagnostics')
             ->assertSee('Start Scanner')
             ->assertSee('Latest Result')
+            ->assertSee('Exam Access Verification')
+            ->assertSee('Adekunle Ajasin University logo')
+            ->assertSee('verify-brand-logo')
+            ->assertSee('background-size:min(520px,84%)', false)
             ->assertSee('Reader ready')
             ->assertSee('window.jsQR')
             ->assertSee('cernix:scanner-ready')
@@ -77,10 +83,30 @@ class ExaminerPortalWebTest extends TestCase
         $token = $this->registerToken();
         $qrData = $this->qrData($token);
 
-        $this->withSession($this->examinerSession())
+        $response = $this->withSession($this->examinerSession())
             ->postJson('/examiner/verify', ['qr_data' => $qrData])
             ->assertOk()
-            ->assertJsonPath('status', 'APPROVED');
+            ->assertJsonPath('status', 'APPROVED')
+            ->assertJsonPath('student.faculty', 'Faculty of Computing')
+            ->assertJsonPath('exam_access.payment_status', 'Verified')
+            ->assertJsonStructure([
+                'exam_access' => [
+                    'session',
+                    'payment_status',
+                    'course_code',
+                    'course_title',
+                    'exam_date',
+                    'start_time',
+                    'end_time',
+                    'venue',
+                    'seat_number',
+                    'timetable_status',
+                ],
+            ]);
+
+        foreach (['token_id', 'encrypted_payload', 'hmac_signature', 'rrr_number', 'qr_data', 'ip_address'] as $field) {
+            $response->assertJsonMissingPath($field);
+        }
 
         $this->withSession($this->examinerSession())
             ->postJson('/examiner/verify', ['qr_data' => $qrData])
@@ -128,18 +154,26 @@ class ExaminerPortalWebTest extends TestCase
     private function registerToken(): object
     {
         $session = DB::table('exam_sessions')->where('is_active', true)->first();
-        $remita = $this->createMock(RemitaService::class);
-        $remita->method('verifyPayment')->willReturn(['status' => 'Payment Successful', 'amount' => (string) $session->fee_amount]);
-
-        $result = (new RegistrationService(new MockSISService(), $remita, new CryptoService()))->registerStudent([
+        (new RegistrationService(new MockSISService()))->registerStudent([
             'matric_no' => '220404008',
-            'full_name' => 'Ignored',
-            'rrr_number' => 'TEST-0002',
-            'expected_amount' => (float) $session->fee_amount,
             'session_id' => (int) $session->session_id,
         ]);
+        $timetableId = DB::table('timetables')
+            ->where('exam_session_id', $session->session_id)
+            ->where('course_code', 'CSC401')
+            ->value('id');
+        $result = (new ExamPassService(
+            $this->createMock(RemitaService::class),
+            new QrTokenService(new CryptoService()),
+        ))->generate(
+            '220404008',
+            (int) $session->session_id,
+            (int) $timetableId,
+            'TEST-DEMO',
+            100000,
+        );
 
-        return DB::table('qr_tokens')->where('token_id', $result['data']['token_id'])->first();
+        return DB::table('qr_tokens')->where('token_id', $result['token_id'])->first();
     }
 
     private function qrData(object $token): array

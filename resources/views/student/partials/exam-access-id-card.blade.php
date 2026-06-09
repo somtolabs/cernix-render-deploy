@@ -22,7 +22,8 @@
     $verifiedAt = $payment?->verified_at ? \Illuminate\Support\Carbon::parse($payment->verified_at)->format('d M, H:i') : 'Not available';
     $paymentValue = $payment ? 'Verified · ₦' . number_format($payment->amount_confirmed) : 'Not available';
     $sessionValue = trim(($session->semester ?? 'Not available') . ' ' . ($session->academic_year ?? ''));
-    $nextDate = $nextExam ? \Illuminate\Support\Carbon::parse($nextExam->exam_date)->format('d M Y') . ' · ' . substr($nextExam->start_time, 0, 5) : 'Not assigned';
+    $assignedExam = $passExam ?? $nextExam;
+    $nextDate = $assignedExam ? \Illuminate\Support\Carbon::parse($assignedExam->exam_date)->format('d M Y') . ' · ' . substr($assignedExam->start_time, 0, 5) : 'Timetable not assigned yet';
 @endphp
 <style>
     .exam-access-id-card {
@@ -39,7 +40,7 @@
         content: "";
         position: absolute;
         inset: 74px 0 52px;
-        background-image: url('/aaua-logo.png');
+        background-image: url('{{ $brandingLogoUrl }}');
         background-repeat: no-repeat;
         background-position: center;
         background-size: 90%;
@@ -51,7 +52,7 @@
         content: "";
         position: absolute;
         inset: 0;
-        background: linear-gradient(180deg, rgba(255,255,255,.84), rgba(255,255,255,.62) 50%, rgba(255,255,255,.9));
+        background: rgba(255,255,255,.78);
         pointer-events: none;
         z-index: 0;
     }
@@ -164,7 +165,7 @@
         padding: 10px 12px;
         border-radius: 15px;
         border: 1px solid rgba(20,83,45,.16);
-        background: linear-gradient(180deg, rgba(236,253,245,.78), rgba(255,255,255,.72));
+        background: rgba(236,253,245,.72);
     }
     .next-exam span,
     .detail-item span {
@@ -272,7 +273,7 @@
 
 <article id="exam-access-id-card" class="exam-access-id-card">
     <header class="id-head">
-        <img src="/aaua-logo.png" alt="AAUA logo">
+        <img src="{{ $brandingLogoUrl }}" alt="CERNIX branding">
         <div class="id-title">
             <b>Adekunle Ajasin University</b>
             <span>CERNIX Secure Exam Verification</span>
@@ -307,9 +308,10 @@
             </div>
 
             <div class="next-exam">
-                <span>Next Exam</span>
-                <b>{{ $nextExam->course_code ?? 'Not assigned' }}{{ $nextExam?->course_title ? ' · ' . $nextExam->course_title : '' }}</b>
+                <span>Assigned Paper</span>
+                <b>{{ $assignedExam->course_code ?? 'Course not assigned yet' }}{{ $assignedExam?->course_title ? ' · ' . $assignedExam->course_title : '' }}</b>
                 <p>{{ $nextDate }}</p>
+                <p>{{ $assignedExam?->venue ?: 'Hall not assigned yet' }}{{ $assignedExam?->end_time ? ' · Ends ' . substr($assignedExam->end_time, 0, 5) : '' }}</p>
             </div>
         </section>
 

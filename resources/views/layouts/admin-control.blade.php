@@ -136,13 +136,13 @@
             <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
         </button>
         <div><b>Admin Control</b><div class="muted" style="font-size:12px">CERNIX · {{ $adminRoleLabel }}</div></div>
-        <img src="/aaua-logo.png" alt="AAUA" style="width:38px;height:38px;object-fit:contain">
+        <img src="{{ $brandingLogoUrl }}" alt="CERNIX branding" style="width:38px;height:38px;object-fit:contain">
     </header>
     <div class="admin-backdrop" data-admin-close></div>
     <div class="admin-layout">
         <aside class="admin-sidebar">
             <div class="admin-brand">
-                <img src="/aaua-logo.png" alt="AAUA">
+                <img src="{{ $brandingLogoUrl }}" alt="CERNIX branding">
                 <div>
                     <b>CERNIX Admin</b>
                     <span>Adekunle Ajasin University</span>

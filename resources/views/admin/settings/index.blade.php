@@ -1,6 +1,6 @@
 @extends('layouts.admin-control')
 
-@section('admin-title', 'Admin Settings')
+@section('admin-title', 'System Settings')
 
 @section('admin-content')
 @php
@@ -9,151 +9,151 @@
     $canManageFees = $permissions['can_manage_fees'] ?? false;
     $canManageSettings = $permissions['can_manage_settings'] ?? false;
 @endphp
+<style>
+    .settings-shell { display:grid; gap:16px; }
+    .settings-nav { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }
+    .settings-nav a { min-width:0; min-height:40px; display:flex; align-items:center; padding:8px 11px; border:1px solid rgba(15,32,80,.12); border-radius:11px; background:rgba(235,241,255,.46); color:var(--ink); text-decoration:none; font-size:12px; font-weight:900; line-height:1.3; word-break:normal; }
+    .settings-group { position:relative; scroll-margin-top:20px; border:1px solid var(--line); border-radius:18px; background:rgba(255,255,255,.94); overflow:hidden; }
+    .settings-group::before { content:""; position:absolute; inset:0 auto 0 0; width:4px; background:rgba(15,32,80,.32); }
+    .settings-head { display:flex; justify-content:space-between; align-items:flex-start; gap:14px; padding:16px 18px 16px 21px; border-bottom:1px solid var(--line); background:rgba(244,247,252,.7); }
+    .settings-head h2 { margin:0; font-size:16px; }
+    .settings-head p { margin:5px 0 0; color:var(--ink-3); font-size:12px; line-height:1.5; }
+    .settings-body { padding:18px 18px 18px 21px; }
+    .settings-row { display:grid; gap:5px; padding:12px 0; border-bottom:1px solid var(--line); }
+    .settings-row:last-child { border-bottom:0; }
+    .settings-actions { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-top:14px; }
+    .branding-preview { width:min(240px,100%); min-height:116px; display:grid; place-items:center; padding:16px; border:1px solid var(--line); border-radius:14px; background:var(--bg); }
+    .branding-preview img { display:block; max-width:200px; max-height:90px; width:auto; height:auto; object-fit:contain; }
+    .settings-input { width:100%; min-height:42px; border:1px solid var(--line-2); border-radius:11px; padding:8px 11px; background:#fff; }
+    .fee-list { display:grid; border:1px solid var(--line); border-radius:14px; overflow:hidden; background:#fff; }
+    .fee-row { display:grid; gap:7px; padding:12px; border-bottom:1px solid var(--line); }
+    .fee-row:last-child { border-bottom:0; }
+    .fee-row label { font-weight:900; font-size:13px; }
+    @media (min-width:860px) {
+        .settings-shell { grid-template-columns:190px minmax(0,1fr); align-items:start; }
+        .settings-nav { position:sticky; top:24px; grid-template-columns:1fr; }
+        .settings-content { display:grid; gap:16px; }
+        .fee-row { grid-template-columns:minmax(0,1fr) 180px; align-items:center; }
+    }
+</style>
 
 <div class="admin-page-head">
     <div>
-        <div class="cx-eyebrow">Operational Controls</div>
+        <div class="cx-eyebrow">System Control</div>
         <h1>Settings</h1>
-        <p>Super Admin controls live here. Admin users can inspect the current state without changing system-wide configuration.</p>
+        <p>Review runtime health and manage system-wide controls. Destructive and global settings remain restricted to Super Admin.</p>
     </div>
     <span class="admin-status {{ $currentAdmin['is_super_admin'] ? 'green' : 'amber' }}">{{ $roleLabel }}</span>
 </div>
 
-@if(session('status'))
-    <div class="admin-section" style="margin-bottom:16px"><div class="admin-section-body">{{ session('status') }}</div></div>
-@endif
-@if($errors->any())
-    <div class="admin-section" style="margin-bottom:16px"><div class="admin-section-body" style="color:var(--red)">{{ $errors->first() }}</div></div>
-@endif
+@if(session('status'))<div class="admin-empty" style="margin-bottom:14px">{{ session('status') }}</div>@endif
+@if($errors->any())<div class="admin-empty" style="margin-bottom:14px;color:var(--red)">{{ $errors->first() }}</div>@endif
 
 @if(! $canManageSessions && ! $canManageFees && ! $canManageSettings)
-    <section class="admin-section">
-        <div class="admin-section-body">
-            <div class="admin-empty">No editable settings are available for this role.</div>
-        </div>
-    </section>
-@else
-
-<div class="admin-grid two">
-    <section class="admin-section" id="active-session">
-        <div class="admin-section-head">
-            <h2>Active Session</h2>
-            <span>{{ $canManageSessions ? 'Super Admin control enabled' : 'Read-only for Admin' }}</span>
-        </div>
-        <div class="admin-section-body">
-            @if($activeSession)
-                <div class="admin-info-list" style="margin-bottom:14px">
-                    <div class="admin-info-row"><span class="admin-label">Semester</span><span class="admin-value">{{ $activeSession->semester }}</span></div>
-                    <div class="admin-info-row"><span class="admin-label">Academic Year</span><span class="admin-value">{{ $activeSession->academic_year }}</span></div>
-                    <div class="admin-info-row"><span class="admin-label">Status</span><span class="admin-value">Active</span></div>
-                </div>
-            @else
-                <div class="admin-empty">No exam session is active.</div>
-            @endif
-
-            <div class="admin-table-wrap">
-                <table class="admin-table">
-                    <thead><tr><th>Session</th><th>Academic Year</th><th>Status</th><th>Control</th></tr></thead>
-                    <tbody>
-                        @foreach($sessions as $session)
-                            <tr>
-                                <td>{{ $session->semester }}</td>
-                                <td>{{ $session->academic_year }}</td>
-                                <td><span class="admin-status {{ $session->is_active ? 'green' : 'amber' }}">{{ $session->is_active ? 'Active' : 'Inactive' }}</span></td>
-                                <td>
-                                    @if($canManageSessions)
-                                        @if(! $session->is_active)
-                                            <form method="POST" action="{{ route('admin.sessions.activate', $session->session_id) }}">@csrf @method('PATCH')<button class="admin-action" type="submit">Set Active</button></form>
-                                        @else
-                                            <form method="POST" action="{{ route('admin.sessions.close', $session->session_id) }}">@csrf @method('PATCH')<button class="admin-action ghost" type="submit">Close Session</button></form>
-                                        @endif
-                                    @else
-                                        <span class="muted">Super Admin only</span>
-                                    @endif
-                                </td>
-                            </tr>
-                        @endforeach
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    </section>
-
-    <section class="admin-section">
-        <div class="admin-section-head">
-            <h2>Demo Mode</h2>
-            <span>{{ $canManageSettings ? 'Super Admin control enabled' : 'Read-only for Admin' }}</span>
-        </div>
-        <div class="admin-section-body">
-            <div class="admin-info-list">
-                <div class="admin-info-row"><span class="admin-label">Environment</span><span class="admin-value">{{ $demoStatus['app_env'] }}</span></div>
-                <div class="admin-info-row"><span class="admin-label">Effective Status</span><span class="admin-value">{{ $demoStatus['enabled'] ? ($demoStatus['source'] === 'Public Demo Mode Enabled' ? 'Public Demo Mode Enabled' : 'Enabled') : 'Disabled' }}</span></div>
-                <div class="admin-info-row"><span class="admin-label">Demo Source</span><span class="admin-value">{{ $demoStatus['source'] }}</span></div>
-                <div class="admin-info-row"><span class="admin-label">Environment Override</span><span class="admin-value">{{ $demoStatus['environment_demo_enabled'] ? 'Enabled by APP_ENV=' . $demoStatus['app_env'] : 'Not enabled by APP_ENV' }}</span></div>
-                <div class="admin-info-row"><span class="admin-label">Stored Switch</span><span class="admin-value">{{ $demoStatus['stored_enabled'] ? 'Enabled (does not override production env)' : 'Disabled' }}</span></div>
-            </div>
-
-            @if($canManageSettings)
-                <form method="POST" action="{{ route('admin.settings.demo.update') }}" style="margin-top:16px">
-                    @csrf @method('PATCH')
-                    <label style="display:flex;gap:10px;align-items:center;font-weight:900">
-                        <input type="checkbox" name="demo_mode_enabled" value="1" @checked($demoStatus['stored_enabled'])>
-                        Enable stored demo mode
-                    </label>
-                    <p class="muted" style="margin:8px 0 12px">Local, testing, and staging environments are demo-enabled by environment. In production, public demo mode is controlled by CERNIX_DEMO_MODE=true.</p>
-                    <button class="admin-action" type="submit">Save Demo Mode</button>
-                </form>
-            @else
-                <p class="muted" style="margin:14px 0 0">Only Super Admin can toggle stored demo mode.</p>
-            @endif
-        </div>
-    </section>
-</div>
-
-<section class="admin-section" id="fee-mapping" style="margin-top:16px">
-    <div class="admin-section-head">
-        <h2>School Fee Mapping</h2>
-        <span>{{ $canManageFees ? 'Editable by Super Admin' : 'Read-only for Admin' }}</span>
+    <div class="admin-empty" style="margin-bottom:14px">
+        <strong>No editable settings are available for this role.</strong>
+        <span>Current system values remain visible for operational reference.</span>
     </div>
-    <div class="admin-section-body">
-        @if($canManageFees)
-            <form method="POST" action="{{ route('admin.settings.fees.update') }}">
-                @csrf @method('PATCH')
-                <div class="admin-table-wrap">
-                    <table class="admin-table">
-                        <thead><tr><th>Faculty</th><th>Department</th><th>Required School Fee</th></tr></thead>
-                        <tbody>
-                            @foreach($departmentFees as $department => $fee)
-                                <tr>
-                                    <td>Faculty of Computing</td>
-                                    <td>{{ $department }}</td>
-                                    <td><input name="fees[{{ $department }}]" value="{{ number_format((float) $fee, 2, '.', '') }}" inputmode="decimal" required style="min-height:40px;border:1px solid var(--line-2);border-radius:12px;padding:0 12px"></td>
-                                </tr>
-                            @endforeach
-                        </tbody>
-                    </table>
-                </div>
-                <button class="admin-action" type="submit" style="margin-top:14px">Save Fee Mapping</button>
-            </form>
-        @else
-            <div class="admin-table-wrap">
-                <table class="admin-table">
-                    <thead><tr><th>Faculty</th><th>Department</th><th>Required School Fee</th><th>Control</th></tr></thead>
-                    <tbody>
-                        @foreach($departmentFees as $department => $fee)
-                            <tr>
-                                <td>Faculty of Computing</td>
-                                <td>{{ $department }}</td>
-                                <td class="mono">₦{{ number_format($fee, 0) }}</td>
-                                <td><span class="muted">Super Admin only</span></td>
-                            </tr>
-                        @endforeach
-                    </tbody>
-                </table>
-            </div>
-        @endif
-    </div>
-</section>
-
 @endif
+
+<div class="settings-shell">
+    <nav class="settings-nav" aria-label="Settings sections">
+        <a href="#health">System health</a>
+        <a href="#branding">Branding</a>
+        <a href="#sessions">Exam sessions</a>
+        <a href="#fees">Fee settings</a>
+        <a href="#demo">Demo mode</a>
+    </nav>
+
+    <div class="settings-content">
+        <section class="settings-group" id="health">
+            <div class="settings-head"><div><h2>System health</h2><p>Current runtime and storage readiness.</p></div></div>
+            <div class="settings-body">
+                <div class="settings-row"><span class="admin-label">Database</span><b>{{ $health['database'] ? 'Connected' : 'Unavailable' }}</b></div>
+                <div class="settings-row"><span class="admin-label">Upload storage</span><b>{{ $health['storage'] ? 'Writable' : 'Unavailable' }}</b></div>
+                <div class="settings-row"><span class="admin-label">Environment</span><b>{{ \Illuminate\Support\Str::headline($health['environment']) }}</b></div>
+                <div class="settings-row"><span class="admin-label">Settings storage</span><b>{{ $settingsStorageReady ? 'Ready' : 'Migration required' }}</b></div>
+            </div>
+        </section>
+
+        <section class="settings-group" id="branding">
+            <div class="settings-head"><div><h2>System branding</h2><p>One logo used across CERNIX portals, print views, and QR presentation.</p></div><span class="admin-status {{ $branding['custom'] ? 'green' : 'amber' }}">{{ $branding['custom'] ? 'Custom' : 'Default' }}</span></div>
+            <div class="settings-body">
+                <div class="branding-preview"><img src="{{ $branding['logo_url'] }}" alt="Current system branding"></div>
+                @if($canManageSettings)
+                    <form method="POST" action="{{ route('admin.settings.branding.update') }}" enctype="multipart/form-data">
+                        @csrf
+                        <label for="branding_logo" class="admin-label" style="margin-top:14px">Upload replacement</label>
+                        <input class="settings-input" id="branding_logo" name="branding_logo" type="file" accept=".png,.jpg,.jpeg,.webp,image/png,image/jpeg,image/webp" required>
+                        <p class="muted">PNG, JPG, JPEG, or WebP. Maximum 2 MB. Keep a transparent or plain background for best results.</p>
+                        <div class="settings-actions"><button class="admin-action" type="submit">Update Branding</button></div>
+                    </form>
+                @else
+                    <p class="muted">Only Super Admin can replace the global branding image.</p>
+                @endif
+            </div>
+        </section>
+
+        <section class="settings-group" id="sessions">
+            <div class="settings-head"><div><h2>Exam sessions</h2><p>Choose the active registration and verification session.</p></div></div>
+            <div class="settings-body">
+                @forelse($sessions as $session)
+                    <div class="settings-row">
+                        <div><b>{{ $session->semester }} · {{ $session->academic_year }}</b><div class="muted">{{ $session->is_active ? 'Currently active' : 'Inactive' }}</div></div>
+                        @if($canManageSessions)
+                            <div class="settings-actions">
+                                @if($session->is_active)
+                                    <form method="POST" action="{{ route('admin.sessions.close', $session->session_id) }}">@csrf @method('PATCH')<button class="admin-action ghost" type="submit">Close Session</button></form>
+                                @else
+                                    <form method="POST" action="{{ route('admin.sessions.activate', $session->session_id) }}">@csrf @method('PATCH')<button class="admin-action" type="submit">Set Active</button></form>
+                                @endif
+                            </div>
+                        @endif
+                    </div>
+                @empty
+                    <div class="admin-empty">No exam sessions are configured.</div>
+                @endforelse
+            </div>
+        </section>
+
+        <section class="settings-group" id="fees">
+            <div class="settings-head"><div><h2>School fee mapping</h2><p>Required payment amount for each department.</p></div></div>
+            <div class="settings-body">
+                <form method="POST" action="{{ route('admin.settings.fees.update') }}">
+                    @csrf @method('PATCH')
+                    <div class="fee-list">
+                        @foreach($departmentFees as $department => $fee)
+                            <div class="fee-row">
+                                <label for="fee-{{ $loop->index }}">{{ $department }}</label>
+                                @if($canManageFees)
+                                    <input class="settings-input" id="fee-{{ $loop->index }}" name="fees[{{ $department }}]" value="{{ number_format((float) $fee, 2, '.', '') }}" inputmode="decimal" required>
+                                @else
+                                    <b>₦{{ number_format($fee, 0) }}</b>
+                                @endif
+                            </div>
+                        @endforeach
+                    </div>
+                    @if($canManageFees)<div class="settings-actions"><button class="admin-action" type="submit">Save Fee Mapping</button></div>@endif
+                </form>
+            </div>
+        </section>
+
+        <section class="settings-group" id="demo">
+            <div class="settings-head"><div><h2>Demo mode</h2><p>Test references must never be accepted unintentionally in production.</p></div><span class="admin-status {{ $demoStatus['enabled'] ? 'amber' : 'green' }}">{{ $demoStatus['enabled'] ? 'Enabled' : 'Disabled' }}</span></div>
+            <div class="settings-body">
+                <div class="settings-row"><span class="admin-label">Source</span><b>{{ $demoStatus['source'] }}</b></div>
+                <div class="settings-row"><span class="admin-label">Mock payment behavior</span><b>{{ $demoStatus['mock_remita'] }}</b></div>
+                @if($canManageSettings)
+                    <form method="POST" action="{{ route('admin.settings.demo.update') }}">
+                        @csrf @method('PATCH')
+                        <label style="display:flex;align-items:center;gap:9px;margin-top:14px"><input type="checkbox" name="demo_mode_enabled" value="1" @checked($demoStatus['stored_enabled'])> Enable stored demo mode</label>
+                        <div class="settings-actions"><button class="admin-action" type="submit">Save Demo Mode</button></div>
+                    </form>
+                @else
+                    <p class="muted">Only Super Admin can change demo mode.</p>
+                @endif
+            </div>
+        </section>
+    </div>
+</div>
 @endsection

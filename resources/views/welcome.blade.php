@@ -22,7 +22,7 @@
     }
     .hero::after {
         content: ""; position: absolute; right: 28px; bottom: 26px;
-        width: 150px; height: 150px; background: url('/aaua-logo.png') center / contain no-repeat;
+        width: 150px; height: 150px; background: url('{{ $brandingLogoUrl }}') center / contain no-repeat;
         opacity: .2; pointer-events: none;
     }
     .logo-mark {
@@ -144,7 +144,7 @@
 
         <div style="max-width:600px; margin:0 auto;">
             <div class="logo-mark">
-                <img src="/aaua-logo.png" alt="AAUA" style="height:32px;width:auto;flex-shrink:0;display:block;">
+                <img src="{{ $brandingLogoUrl }}" alt="CERNIX branding" style="height:32px;width:auto;flex-shrink:0;display:block;">
                 <span>CERNIX &nbsp;·&nbsp; AAUA</span>
             </div>
 

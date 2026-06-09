@@ -3,13 +3,18 @@
 namespace App\Http\Controllers\Web;
 
 use App\Http\Controllers\Controller;
+use App\Services\AuditService;
 use App\Services\CryptoService;
+use App\Services\ExamPassService;
 use App\Services\QrTokenService;
+use App\Support\DepartmentFees;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use RuntimeException;
+use Throwable;
 
 class StudentDashboardController extends Controller
 {
@@ -36,6 +41,66 @@ class StudentDashboardController extends Controller
     public function payment(Request $request)
     {
         return $this->portalView($request, 'student.payment', 'payment');
+    }
+
+    public function generateExamPass(Request $request)
+    {
+        return $this->portalView($request, 'student.generate-exam-pass', 'generate-exam-pass');
+    }
+
+    public function storeExamPass(Request $request, ExamPassService $examPassService): RedirectResponse
+    {
+        $payload = $this->dashboardPayload($request);
+        if ($payload instanceof RedirectResponse) {
+            return $payload;
+        }
+
+        $data = $request->validate([
+            'rrr_number' => ['required', 'string', 'max:50'],
+            'timetable_id' => ['required', 'integer'],
+        ]);
+
+        $expectedAmount = DepartmentFees::amountForDepartment($payload['student']->dept_name ?? null);
+        if ($expectedAmount <= 0) {
+            return back()
+                ->withErrors(['rrr_number' => 'Exam pass could not be generated because your school fee is not configured.'])
+                ->withInput($request->except('rrr_number'));
+        }
+
+        try {
+            $result = $examPassService->generate(
+                $payload['student']->matric_no,
+                (int) $payload['student']->session_id,
+                (int) $data['timetable_id'],
+                $data['rrr_number'],
+                $expectedAmount,
+            );
+
+            app(AuditService::class)->logAction(
+                $payload['student']->matric_no,
+                'student',
+                'exam_pass.generated',
+                [
+                    'token_id' => $result['token_id'],
+                    'session_id' => $payload['student']->session_id,
+                    'timetable_id' => (int) $data['timetable_id'],
+                ]
+            );
+
+            return redirect()->route('student.generate-exam-pass')
+                ->with('status', 'Payment verified. Your exam pass is ready.');
+        } catch (Throwable $exception) {
+            if (! $exception instanceof RuntimeException || $this->isTechnicalExamPassFailure($exception)) {
+                report($exception);
+            }
+
+            $message = $this->safeExamPassErrorMessage($exception);
+
+            return back()
+                ->withErrors(['rrr_number' => $message])
+                ->with('exam_pass_error', $message)
+                ->withInput($request->except('rrr_number'));
+        }
     }
 
     public function instructions(Request $request)
@@ -211,11 +276,17 @@ class StudentDashboardController extends Controller
         $nextExam = $timetableEntries
             ->filter(fn ($exam) => $exam->status !== 'cancelled' && Carbon::parse($exam->exam_date . ' ' . $exam->start_time)->greaterThanOrEqualTo(now()->subMinutes(30)))
             ->first();
+        $boundTimetableId = $qrToken && Schema::hasColumn('qr_tokens', 'timetable_id')
+            ? data_get($qrToken, 'timetable_id')
+            : null;
+        $passExam = $boundTimetableId
+            ? $timetableEntries->firstWhere('id', (int) $boundTimetableId)
+            : $nextExam;
 
         $statusSummary = [
             'registration' => 'Complete',
             'payment' => $paymentRecord ? 'Verified' : 'Pending',
-            'qr' => $qrToken->status ?? 'Pending',
+            'qr' => $qrToken ? ($qrToken->status ?? 'Ready') : 'Not Generated',
             'timetable' => $timetableEntries->count() ? 'Assigned' : 'Not Assigned',
             'next_exam' => $nextExam->display_status ?? 'None',
         ];
@@ -245,6 +316,7 @@ class StudentDashboardController extends Controller
             'timetable' => $timetableEntries,
             'timetableEntries' => $timetableEntries,
             'nextExam' => $nextExam,
+            'passExam' => $passExam,
             'statusSummary' => $statusSummary,
             'scanHistory' => $scanHistory,
             'notificationUnreadCount' => $this->studentUnreadNotes($student->matric_no),
@@ -348,6 +420,53 @@ class StudentDashboardController extends Controller
         }
 
         return $start->isToday() ? 'Today' : 'Upcoming';
+    }
+
+    private function safeExamPassErrorMessage(Throwable $exception): string
+    {
+        $message = strtolower($exception->getMessage());
+
+        if ($this->isTechnicalExamPassFailure($exception)) {
+            return 'Exam pass could not be generated yet. Please try again shortly.';
+        }
+
+        if (
+            $exception instanceof RuntimeException
+            && (
+                str_contains($message, 'rrr')
+                || str_contains($message, 'payment')
+                || str_contains($message, 'remita')
+                || str_contains($message, 'demo')
+                || str_contains($message, 'reference')
+            )
+        ) {
+            return 'We could not verify this payment reference. Please check your RRR and try again.';
+        }
+
+        if (
+            $exception instanceof RuntimeException
+            && (
+                str_contains($message, 'course')
+                || str_contains($message, 'paper')
+                || str_contains($message, 'timetable')
+                || str_contains($message, 'assigned')
+            )
+        ) {
+            return 'The selected course is not available for this exam pass. Please refresh and try again.';
+        }
+
+        return 'Exam pass could not be generated yet. Please try again shortly.';
+    }
+
+    private function isTechnicalExamPassFailure(Throwable $exception): bool
+    {
+        $message = strtolower($exception->getMessage());
+
+        return str_contains($message, 'sqlstate')
+            || str_contains($message, 'database')
+            || str_contains($message, 'no column named')
+            || str_contains($message, 'unknown column')
+            || str_contains($message, 'table ');
     }
 
     private function photoUrl(?string $path): ?string

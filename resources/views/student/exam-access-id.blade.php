@@ -8,12 +8,20 @@
     <h1>Exam Access ID</h1>
     <p>This official pass contains the student identity, payment status, QR access, and next exam details.</p>
 </div>
-@include('student.partials.exam-access-id')
-<div class="no-print" style="width:min(520px,100%);margin:18px auto 0;display:flex;gap:10px;flex-wrap:wrap">
-    <button class="btn btn-primary" type="button" id="saveExamAccessId">Screenshot ID</button>
-    <a class="btn btn-primary" href="{{ route('student.exam-pass') }}">Print Pass</a>
-    <a class="btn btn-ghost" href="{{ route('student.dashboard') }}">Back to Overview</a>
-</div>
+@if($token)
+    @include('student.partials.exam-access-id')
+    <div class="no-print" style="width:min(520px,100%);margin:18px auto 0;display:flex;gap:10px;flex-wrap:wrap">
+        <button class="btn btn-primary" type="button" id="saveExamAccessId">Screenshot ID</button>
+        <a class="btn btn-primary" href="{{ route('student.exam-pass') }}">Print Pass</a>
+        <a class="btn btn-ghost" href="{{ route('student.dashboard') }}">Back to Overview</a>
+    </div>
+@else
+    <div class="cx-empty">
+        <strong>No exam pass generated yet.</strong><br>
+        Verify your payment and select an assigned paper before viewing your pass.
+        <div style="margin-top:12px"><a class="btn btn-primary" href="{{ route('student.generate-exam-pass') }}">Generate Exam Pass</a></div>
+    </div>
+@endif
 @endsection
 
 @push('student-scripts')

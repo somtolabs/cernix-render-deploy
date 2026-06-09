@@ -50,7 +50,7 @@
     .ex-badge.REJECTED { color: #b91c1c; background: #fee2e2; }
     .ex-badge.DUPLICATE, .ex-badge.USED { color: #92400e; background: #fef3c7; }
     .ex-empty { border: 1px dashed #cfd7ce; border-radius: 15px; background: #fbfcf8; color: #667066; padding: 16px; line-height: 1.6; }
-    .safe { overflow-wrap: anywhere; min-width: 0; }
+    .safe { overflow-wrap: break-word; word-break: normal; min-width: 0; }
     @media (min-width: 980px) {
         .ex-mobile-head { display: none; }
         .ex-layout { display: grid; grid-template-columns: 274px minmax(0,1fr); }
@@ -67,8 +67,9 @@
         .ex-table-wrap.mobile-list table, .ex-table-wrap.mobile-list thead, .ex-table-wrap.mobile-list tbody, .ex-table-wrap.mobile-list th, .ex-table-wrap.mobile-list td, .ex-table-wrap.mobile-list tr { display: block; }
         .ex-table-wrap.mobile-list thead { display: none; }
         .ex-table-wrap.mobile-list tr { border: 1px solid #e0e4dc; border-radius: 15px; background: #fff; padding: 12px; margin-bottom: 10px; }
-        .ex-table-wrap.mobile-list td { border: 0; padding: 7px 0; display: flex; justify-content: space-between; gap: 14px; }
-        .ex-table-wrap.mobile-list td::before { content: attr(data-label); color: #667066; font-size: 11px; text-transform: uppercase; letter-spacing: .08em; font-weight: 900; flex: 0 0 42%; }
+        .ex-table-wrap.mobile-list td { border: 0; padding: 7px 0; display: grid; grid-template-columns: minmax(96px,.42fr) minmax(0,1fr); gap: 12px; align-items:start; word-break:normal; writing-mode:horizontal-tb; }
+        .ex-table-wrap.mobile-list td::before { content: attr(data-label); color: #667066; font-size: 11px; text-transform: uppercase; letter-spacing: .08em; font-weight: 900; min-width:0; }
+        .ex-table-wrap.mobile-list td > * { min-width:0; justify-self:start; }
     }
     @media (prefers-reduced-motion: reduce) {
         *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
@@ -84,14 +85,14 @@
             <strong>{{ $examiner['full_name'] ?? 'Examiner' }}</strong>
             <div class="ex-muted" style="font-size:12px">{{ $examiner['username'] ?? 'examiner' }}</div>
         </div>
-        <img src="/aaua-logo.png" alt="AAUA" style="width:38px;height:38px;object-fit:contain">
+        <img src="{{ $brandingLogoUrl }}" alt="CERNIX branding" style="width:38px;height:38px;object-fit:contain">
     </header>
 
     <div class="ex-backdrop" data-ex-close></div>
     <div class="ex-layout">
         <aside class="ex-sidebar">
             <div class="ex-brand">
-                <img src="/aaua-logo.png" alt="AAUA">
+                <img src="{{ $brandingLogoUrl }}" alt="CERNIX branding">
                 <div>
                     <b>CERNIX Examiner</b>
                     <span>{{ $examiner['full_name'] ?? 'Examiner' }}</span>

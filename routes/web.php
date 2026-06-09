@@ -19,6 +19,8 @@ Route::get('/student/profile', [StudentDashboardController::class, 'profile'])->
 Route::get('/student/exam-access-id', [StudentDashboardController::class, 'examAccessId'])->name('student.exam-access-id');
 Route::get('/student/timetable', [StudentDashboardController::class, 'timetable'])->name('student.timetable');
 Route::get('/student/payment', [StudentDashboardController::class, 'payment'])->name('student.payment');
+Route::get('/student/generate-exam-pass', [StudentDashboardController::class, 'generateExamPass'])->name('student.generate-exam-pass');
+Route::post('/student/generate-exam-pass', [StudentDashboardController::class, 'storeExamPass'])->name('student.generate-exam-pass.store');
 Route::get('/student/instructions', [StudentDashboardController::class, 'instructions'])->name('student.instructions');
 Route::get('/student/notifications', [StudentDashboardController::class, 'notifications'])->name('student.notifications');
 Route::post('/student/notifications/{note}/acknowledge', [StudentDashboardController::class, 'acknowledgeNotification'])->name('student.notifications.acknowledge');
@@ -73,6 +75,7 @@ Route::get('/admin/activity', [AdminWebController::class, 'activity'])->name('ad
 Route::get('/admin/settings', [AdminWebController::class, 'settings'])->name('admin.settings');
 Route::patch('/admin/settings/fees', [AdminWebController::class, 'settingsFeesUpdate'])->name('admin.settings.fees.update');
 Route::patch('/admin/settings/demo-mode', [AdminWebController::class, 'settingsDemoUpdate'])->name('admin.settings.demo.update');
+Route::post('/admin/settings/branding', [AdminWebController::class, 'settingsBrandingUpdate'])->name('admin.settings.branding.update');
 Route::patch('/admin/sessions/{session}/activate', [AdminWebController::class, 'sessionActivate'])->name('admin.sessions.activate');
 Route::patch('/admin/sessions/{session}/close', [AdminWebController::class, 'sessionClose'])->name('admin.sessions.close');
 

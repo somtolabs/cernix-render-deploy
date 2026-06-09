@@ -3,7 +3,9 @@
 namespace Tests\Feature;
 
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
 class AdminRoleControlsTest extends TestCase
@@ -171,6 +173,36 @@ class AdminRoleControlsTest extends TestCase
             ->assertSee('Save Fee Mapping')
             ->assertSee('Save Demo Mode');
     }
+
+    public function test_only_super_admin_can_update_system_branding(): void
+    {
+        Storage::fake('public');
+        $admin = DB::table('examiners')->where('username', 'admin1')->first();
+        $super = DB::table('examiners')->where('username', 'superadmin')->first();
+
+        $this->withSession([
+            'examiner_id' => $admin->examiner_id,
+            'examiner_username' => $admin->username,
+            'examiner_name' => $admin->full_name,
+            'examiner_role' => $admin->role,
+        ])->post(route('admin.settings.branding.update'), [
+            'branding_logo' => UploadedFile::fake()->image('logo.png', 320, 120),
+        ])->assertSessionHasErrors('permission');
+
+        $this->withSession([
+            'examiner_id' => $super->examiner_id,
+            'examiner_username' => $super->username,
+            'examiner_name' => $super->full_name,
+            'examiner_role' => $super->role,
+        ])->post(route('admin.settings.branding.update'), [
+            'branding_logo' => UploadedFile::fake()->image('logo.png', 320, 120),
+        ])->assertSessionHas('status');
+
+        $path = DB::table('cernix_settings')->where('key', 'branding_logo_path')->value('value');
+        $this->assertNotEmpty($path);
+        Storage::disk('public')->assertExists($path);
+    }
+
     public function test_baseline_staff_accounts_can_login_through_their_expected_portals(): void
     {
         $this->postJson('/examiner/login', [

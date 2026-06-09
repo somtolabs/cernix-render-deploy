@@ -123,7 +123,19 @@ final class DepartmentFees
 
     public static function isDemoMode(): bool
     {
+        $stored = false;
+
+        try {
+            if (Schema::hasTable('cernix_settings')) {
+                $value = DB::table('cernix_settings')->where('key', 'demo_mode_enabled')->value('value');
+                $stored = in_array(strtolower((string) $value), ['1', 'true', 'yes', 'on'], true);
+            }
+        } catch (\Throwable) {
+            $stored = false;
+        }
+
         return app()->environment(['local', 'testing', 'staging'])
-            || (bool) config('app.cernix_demo_mode', false);
+            || (bool) config('app.cernix_demo_mode', false)
+            || $stored;
     }
 }

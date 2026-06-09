@@ -13,8 +13,8 @@
         ['label' => 'Risk Intelligence', 'route' => route('admin.intelligence')],
         ['label' => 'Settings', 'route' => route('admin.settings')],
         ['label' => 'User Management', 'route' => route('admin.examiners')],
-        ['label' => 'School Fee Mapping', 'route' => route('admin.settings') . '#fee-mapping'],
-        ['label' => 'Session', 'route' => route('admin.settings') . '#active-session'],
+        ['label' => 'School Fee Mapping', 'route' => route('admin.settings') . '#fees'],
+        ['label' => 'Session', 'route' => route('admin.settings') . '#sessions'],
         ['label' => 'Audit Trail', 'route' => route('admin.activity')],
         ['label' => 'Verification Logs', 'route' => route('admin.scan-logs')],
     ];
@@ -39,13 +39,13 @@
     .dash-head p { margin:8px 0 0; max-width:720px; color:var(--ink-3); line-height:1.6; }
     .dash-role { display:inline-flex; width:fit-content; padding:6px 10px; border-radius:999px; border:1px solid var(--line); background:#fff; color:var(--navy); font-size:11px; font-weight:900; letter-spacing:.08em; text-transform:uppercase; }
     .dash-strip { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); border:1px solid var(--line); border-radius:18px; overflow:hidden; background:#fff; margin-bottom:16px; }
-    .dash-strip div { padding:14px; border-right:1px solid var(--line); border-bottom:1px solid var(--line); min-width:0; }
+    .dash-strip div { padding:14px; border-right:1px solid var(--line); border-bottom:1px solid var(--line); min-width:0; background:rgba(244,247,252,.62); }
     .dash-strip div:nth-child(2n) { border-right:0; }
     .dash-strip span { display:block; color:var(--ink-4); font-size:10px; font-weight:900; letter-spacing:.13em; text-transform:uppercase; }
     .dash-strip b { display:block; margin-top:7px; color:var(--ink); font-size:18px; line-height:1.2; overflow-wrap:anywhere; }
     .dash-layout { display:grid; gap:16px; }
     .dash-panel { border:1px solid var(--line); border-radius:20px; background:#fff; box-shadow:var(--shadow-sm); overflow:hidden; animation:adminFade .24s ease both; }
-    .dash-panel-head { padding:16px 18px; border-bottom:1px solid var(--line); display:flex; justify-content:space-between; gap:12px; align-items:center; flex-wrap:wrap; }
+    .dash-panel-head { padding:16px 18px; border-bottom:1px solid var(--line); border-left:4px solid rgba(15,32,80,.32); display:flex; justify-content:space-between; gap:12px; align-items:center; flex-wrap:wrap; background:rgba(244,247,252,.62); }
     .dash-panel-head h2 { margin:0; font-size:16px; letter-spacing:-.02em; }
     .dash-panel-head span { color:var(--ink-3); font-size:12px; }
     .dash-panel-body { padding:16px 18px; }

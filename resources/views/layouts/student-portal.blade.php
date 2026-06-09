@@ -4,6 +4,7 @@
 @php
     $nav = [
         ['key' => 'overview', 'label' => 'Overview', 'route' => 'student.dashboard'],
+        ['key' => 'generate-exam-pass', 'label' => 'Generate Exam Pass', 'route' => 'student.generate-exam-pass'],
         ['key' => 'exam-access-id', 'label' => 'Exam Pass', 'route' => 'student.exam-access-id'],
         ['key' => 'timetable', 'label' => 'Timetable', 'route' => 'student.timetable'],
         ['key' => 'notifications', 'label' => 'Notifications', 'route' => 'student.notifications', 'badge' => $notificationUnreadCount ?? 0],
@@ -87,13 +88,13 @@
             <b>Student Portal</b>
             <span>{{ $student->matric_no ?? 'CERNIX' }}</span>
         </div>
-        <img src="/aaua-logo.png" alt="AAUA" style="width:38px;height:38px;object-fit:contain">
+        <img src="{{ $brandingLogoUrl }}" alt="CERNIX branding" style="width:38px;height:38px;object-fit:contain">
     </div>
     <div class="sp-backdrop" data-menu-close></div>
     <div class="sp-layout">
         <aside class="sp-sidebar">
             <div class="sp-brand">
-                <img src="/aaua-logo.png" alt="AAUA">
+                <img src="{{ $brandingLogoUrl }}" alt="CERNIX branding">
                 <div>
                     <b>CERNIX Student Portal</b>
                     <span>Adekunle Ajasin University</span>

@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Web;
 use App\Http\Controllers\Controller;
 use App\Services\AuditService;
 use App\Services\RiskIntelligenceService;
+use App\Support\Branding;
 use App\Support\DepartmentFees;
 use App\Support\Roles;
 use Illuminate\Http\RedirectResponse;
@@ -13,6 +14,7 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 
@@ -609,6 +611,11 @@ class AdminWebController extends Controller
         ];
         $accessOverview = $this->accessOverview($request);
         $settingsStorageReady = Schema::hasTable('cernix_settings');
+        $branding = [
+            'logo_url' => Branding::logoUrl(),
+            'custom' => Branding::logoPath() !== null,
+            'storage_disk' => config('filesystems.default'),
+        ];
 
         return view('admin.settings.index', compact(
             'sessions',
@@ -621,7 +628,8 @@ class AdminWebController extends Controller
             'verificationRules',
             'scannerStatus',
             'accessOverview',
-            'settingsStorageReady'
+            'settingsStorageReady',
+            'branding'
         ));
     }
 
@@ -683,6 +691,48 @@ class AdminWebController extends Controller
         ], $request);
 
         return back()->with('status', 'Demo mode setting updated.');
+    }
+
+    public function settingsBrandingUpdate(Request $request): RedirectResponse
+    {
+        if ($response = $this->guardAdmin($request)) {
+            return $response;
+        }
+
+        if (! Roles::canManageSettings($request->session()->get('examiner_role'))) {
+            return back()->withErrors(['permission' => 'Only a Super Admin can change system branding.']);
+        }
+
+        if (! Schema::hasTable('cernix_settings')) {
+            return back()->withErrors(['settings' => 'Settings storage is not ready. Run migrations first.']);
+        }
+
+        $data = $request->validate([
+            'branding_logo' => ['required', 'image', 'mimes:png,jpg,jpeg,webp', 'max:2048'],
+        ]);
+
+        $file = $data['branding_logo'];
+        $extension = strtolower($file->getClientOriginalExtension() ?: 'png');
+        $path = $file->storeAs('branding', 'cernix-logo.' . $extension, 'public');
+
+        if (! $path) {
+            return back()->withErrors(['branding_logo' => 'The branding image could not be stored.']);
+        }
+
+        $previous = Branding::logoPath();
+        $this->setSetting(Branding::SETTING_KEY, $path);
+
+        if ($previous && $previous !== $path) {
+            Storage::disk('public')->delete($previous);
+        }
+
+        $this->audit('settings.branding.updated', [
+            'entity_type' => 'setting',
+            'entity_id' => Branding::SETTING_KEY,
+            'file_type' => $extension,
+        ], $request);
+
+        return back()->with('status', 'System branding image updated.');
     }
 
     public function sessionActivate(Request $request, int $session): RedirectResponse
@@ -1145,7 +1195,7 @@ class AdminWebController extends Controller
             'course_title' => 'nullable|string|max:255',
             'exam_date' => 'required|date',
             'start_time' => 'required',
-            'end_time' => 'nullable',
+            'end_time' => 'nullable|after:start_time',
             'venue' => 'required|string|max:255',
             'status' => 'required|string|in:scheduled,active,completed,cancelled',
         ]);

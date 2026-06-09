@@ -3,13 +3,13 @@
 namespace Tests\Feature;
 
 use App\Models\User;
-use App\Services\CryptoService;
 use App\Services\MockSISService;
 use App\Services\RegistrationService;
 use App\Services\RemitaService;
 use Database\Seeders\DepartmentsSeeder;
 use Database\Seeders\ExamSessionsSeeder;
 use Database\Seeders\MockSISSeeder;
+use Database\Seeders\TimetableSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
@@ -27,7 +27,7 @@ class StudentExamApiTest extends TestCase
     {
         parent::setUp();
 
-        $this->seed([DepartmentsSeeder::class, ExamSessionsSeeder::class, MockSISSeeder::class]);
+        $this->seed([DepartmentsSeeder::class, ExamSessionsSeeder::class, MockSISSeeder::class, TimetableSeeder::class]);
 
         $session = DB::table('exam_sessions')->where('is_active', true)->first();
         $this->feeAmount = (float) $session->fee_amount;
@@ -44,18 +44,18 @@ class StudentExamApiTest extends TestCase
         $mockRemita->method('verifyPayment')
                    ->willReturn(['status' => 'Payment Successful', 'amount' => (string) $this->feeAmount]);
 
-        $this->app->bind(RegistrationService::class, fn () => new RegistrationService(
-            new MockSISService(),
-            $mockRemita,
-            new CryptoService(),
-        ));
+        $this->app->instance(RemitaService::class, $mockRemita);
+        (new RegistrationService(new MockSISService()))->registerStudent([
+            'matric_no' => 'CSC/2021/001',
+            'session_id' => (int) $session->session_id,
+        ]);
     }
 
     public function test_unauthenticated_request_returns_401(): void
     {
         $this->postJson('/api/student/register-exam', [
             'matric_no'  => 'CSC/2021/001',
-            'rrr_number' => '280007021192',
+            'rrr_number' => 'TEST-DEMO',
         ])->assertStatus(401);
     }
 
@@ -66,7 +66,7 @@ class StudentExamApiTest extends TestCase
 
         $this->withToken($token)->postJson('/api/student/register-exam', [
             'matric_no'  => 'CSC/2021/001',
-            'rrr_number' => '280007021192',
+            'rrr_number' => 'TEST-DEMO',
         ])->assertStatus(403);
     }
 
@@ -74,13 +74,13 @@ class StudentExamApiTest extends TestCase
     {
         $response = $this->withToken($this->token)->postJson('/api/student/register-exam', [
             'matric_no'  => 'CSC/2021/001',
-            'rrr_number' => '280007021192',
+            'rrr_number' => 'TEST-DEMO',
         ]);
 
         $response->assertStatus(200)
                  ->assertJsonPath('status', 'success')
                  ->assertJsonStructure([
-                     'data' => ['matric_no', 'full_name', 'token_id', 'qr_svg'],
+                     'data' => ['token_id', 'qr_svg'],
                  ]);
 
         $this->assertDatabaseHas('qr_tokens', [
@@ -91,14 +91,14 @@ class StudentExamApiTest extends TestCase
         $this->assertDatabaseHas('audit_log', [
             'actor_id'   => 'CSC/2021/001',
             'actor_type' => 'student',
-            'action'     => 'student.registered',
+            'action'     => 'exam_pass.generated',
         ]);
     }
 
     public function test_validation_requires_matric_no(): void
     {
         $this->withToken($this->token)->postJson('/api/student/register-exam', [
-            'rrr_number' => '280007021192',
+            'rrr_number' => 'TEST-DEMO',
         ])->assertStatus(422);
     }
 
@@ -113,7 +113,7 @@ class StudentExamApiTest extends TestCase
     {
         $response = $this->withToken($this->token)->postJson('/api/student/register-exam', [
             'matric_no'  => 'UNKNOWN/0000/000',
-            'rrr_number' => '280007021192',
+            'rrr_number' => 'TEST-DEMO',
         ]);
 
         $response->assertStatus(422)
@@ -125,13 +125,13 @@ class StudentExamApiTest extends TestCase
         // First registration
         $this->withToken($this->token)->postJson('/api/student/register-exam', [
             'matric_no'  => 'CSC/2021/001',
-            'rrr_number' => '280007021192',
+            'rrr_number' => 'TEST-DEMO',
         ])->assertStatus(200);
 
         // Second attempt for same session should fail
         $response = $this->withToken($this->token)->postJson('/api/student/register-exam', [
             'matric_no'  => 'CSC/2021/001',
-            'rrr_number' => '280007021193',
+            'rrr_number' => 'TEST-0001',
         ]);
 
         $response->assertStatus(422)
@@ -144,7 +144,7 @@ class StudentExamApiTest extends TestCase
 
         $response = $this->withToken($this->token)->postJson('/api/student/register-exam', [
             'matric_no'  => 'CSC/2021/001',
-            'rrr_number' => '280007021192',
+            'rrr_number' => 'TEST-DEMO',
         ]);
 
         $response->assertStatus(422)

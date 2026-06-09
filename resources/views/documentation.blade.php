@@ -471,7 +471,7 @@
         <a href="/" class="back" aria-label="Back to home">
             <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg>
         </a>
-        <img src="/aaua-logo.png" alt="AAUA" style="height:26px;width:auto;flex-shrink:0;display:block;">
+        <img src="{{ $brandingLogoUrl }}" alt="CERNIX branding" style="height:26px;width:auto;flex-shrink:0;display:block;">
         <h1>Documentation</h1>
         <span class="version">v1.0</span>
     </div>
@@ -479,7 +479,7 @@
     {{-- Hero --}}
     <div class="doc-hero">
         <div style="display:flex;align-items:center;gap:14px;margin-bottom:20px;flex-wrap:wrap">
-            <img src="/aaua-logo.png" alt="Adekunle Ajasin University" style="height:56px;width:auto;display:block;flex-shrink:0">
+            <img src="{{ $brandingLogoUrl }}" alt="CERNIX branding" style="height:56px;width:auto;display:block;flex-shrink:0">
             <div>
                 <div style="font-size:14px;font-weight:700;color:var(--ink);line-height:1.2;letter-spacing:-.01em">Adekunle Ajasin University</div>
                 <div style="font-size:11px;color:var(--ink-3);margin-top:3px">P.M.B 001, Akungba-Akoko, Ondo State, Nigeria</div>

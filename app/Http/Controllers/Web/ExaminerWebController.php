@@ -370,7 +370,9 @@ class ExaminerWebController extends Controller
                 if ($student && isset($result['student']) && is_array($result['student'])) {
                     $result['student']['level'] = $student->level;
                     $result['student']['department'] = $student->dept_name ?? ($result['student']['department'] ?? null);
+                    $result['student']['faculty'] = $student->faculty ?? null;
                     $result['student']['photo_path'] = $student->photo_path;
+                    $result['exam_access'] = $this->examAccessContext($student, $result['token_id'] ?? null);
                 }
                 $result['token_status'] = DB::table('qr_tokens')->where('token_id', $result['token_id'])->value('status');
                 $result['scan_count'] = $student
@@ -391,12 +393,13 @@ class ExaminerWebController extends Controller
                 'reason' => $result['reason'] ?? null,
             ]);
 
+            unset($result['token_id']);
+
             return response()->json($result);
         } catch (\Throwable) {
             return response()->json([
                 'status' => 'REJECTED',
                 'student' => null,
-                'token_id' => null,
                 'timestamp' => now()->toIso8601String(),
                 'reason' => 'verification_failed',
             ]);
@@ -656,6 +659,48 @@ class ExaminerWebController extends Controller
             ->whereDate('exam_date', today())
             ->orderBy('start_time')
             ->first();
+    }
+
+    private function examAccessContext(object $student, ?string $tokenId = null): array
+    {
+        $session = DB::table('exam_sessions')->where('session_id', $student->session_id)->first();
+        $payment = DB::table('payment_records')
+            ->where('student_id', $student->matric_no)
+            ->orderByDesc('verified_at')
+            ->first();
+        $exam = null;
+
+        if (DB::getSchemaBuilder()->hasTable('timetables')) {
+            $timetableId = $tokenId && DB::getSchemaBuilder()->hasColumn('qr_tokens', 'timetable_id')
+                ? DB::table('qr_tokens')->where('token_id', $tokenId)->value('timetable_id')
+                : null;
+            $examQuery = DB::table('timetables')
+                ->where('exam_session_id', $student->session_id)
+                ->where('department_id', $student->department_id)
+                ->where('level', (string) ($student->level ?? ''))
+                ->where('status', '!=', 'cancelled');
+
+            $exam = $timetableId
+                ? (clone $examQuery)->where('id', $timetableId)->first()
+                : $examQuery->whereDate('exam_date', '>=', today())
+                    ->orderBy('exam_date')
+                    ->orderBy('start_time')
+                    ->first();
+        }
+
+        return [
+            'session' => $session ? trim(($session->semester ?? '') . ' ' . ($session->academic_year ?? '')) : null,
+            'payment_status' => $payment ? 'Verified' : 'Not verified',
+            'payment_verified_at' => $payment?->verified_at,
+            'course_code' => $exam?->course_code,
+            'course_title' => $exam?->course_title,
+            'exam_date' => $exam?->exam_date,
+            'start_time' => $exam?->start_time,
+            'end_time' => $exam?->end_time,
+            'venue' => $exam?->venue,
+            'seat_number' => null,
+            'timetable_status' => $exam?->status,
+        ];
     }
 
     private function todaysExams()
