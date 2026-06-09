@@ -125,6 +125,44 @@ class ExamPassServiceTest extends TestCase
         $this->assertCount(2, DB::table('payment_records')->pluck('rrr_number')->unique());
     }
 
+    public function test_verified_session_payment_is_reused_for_another_course_without_another_rrr(): void
+    {
+        [$student, $session, $firstExam] = $this->records();
+        $service = new ExamPassService(
+            $this->createMock(RemitaService::class),
+            new QrTokenService(new CryptoService())
+        );
+
+        $service->generate($student, $session, $firstExam, 'TEST-DEMO', 10000);
+
+        $department = DB::table('students')->where('matric_no', $student)->value('department_id');
+        $secondExam = DB::table('timetables')->insertGetId([
+            'exam_session_id' => $session,
+            'department_id' => $department,
+            'level' => '400',
+            'course_code' => 'CSC402',
+            'course_title' => 'Compiler Construction',
+            'exam_date' => today()->addDays(2),
+            'start_time' => '09:00',
+            'end_time' => '12:00',
+            'venue' => 'CBT Hall B',
+            'status' => 'scheduled',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $secondPass = $service->generate($student, $session, $secondExam, null, 10000);
+
+        $this->assertDatabaseCount('payment_records', 1);
+        $this->assertDatabaseHas('qr_tokens', [
+            'token_id' => $secondPass['token_id'],
+            'student_id' => $student,
+            'session_id' => $session,
+            'timetable_id' => $secondExam,
+        ]);
+        $this->assertSame(2, DB::table('qr_tokens')->where('student_id', $student)->count());
+    }
+
     private function records(): array
     {
         $department = DB::table('departments')->insertGetId([

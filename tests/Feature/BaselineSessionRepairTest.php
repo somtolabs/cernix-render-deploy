@@ -22,7 +22,7 @@ class BaselineSessionRepairTest extends TestCase
     {
         DB::table('exam_sessions')->delete();
 
-        $this->assertSame(0, Artisan::call('cernix:ensure-baseline-data'));
+        $this->assertSame(0, Artisan::call('cernix:repair-baseline', ['--force' => true]));
 
         $this->assertDatabaseHas('exam_sessions', [
             'semester' => 'First Semester',
@@ -81,7 +81,7 @@ class BaselineSessionRepairTest extends TestCase
             'updated_at' => now(),
         ]);
 
-        Artisan::call('cernix:ensure-baseline-data');
+        Artisan::call('cernix:repair-baseline', ['--force' => true]);
 
         $this->assertDatabaseHas('admin_notes', ['note_id' => $noteId]);
     }
@@ -89,11 +89,29 @@ class BaselineSessionRepairTest extends TestCase
     public function test_registration_page_has_an_active_session_after_baseline_data_repair(): void
     {
         DB::table('exam_sessions')->update(['is_active' => false]);
-        Artisan::call('cernix:ensure-baseline-data');
+        Artisan::call('cernix:repair-baseline', ['--force' => true]);
 
         $this->get('/student/register')
             ->assertOk()
             ->assertDontSee('No active exam session is currently open.')
             ->assertSee('First Semester');
+    }
+
+    public function test_baseline_repair_restores_departments_and_missing_timetable_rows(): void
+    {
+        DB::table('timetables')->delete();
+        DB::table('departments')->delete();
+
+        $this->assertSame(0, Artisan::call('cernix:repair-baseline', ['--force' => true]));
+
+        $this->assertSame(5, DB::table('departments')->count());
+        $this->assertSame(20, DB::table('timetables')->count());
+
+        foreach (['100', '200', '300', '400'] as $level) {
+            $this->assertDatabaseHas('timetables', [
+                'level' => $level,
+                'status' => 'scheduled',
+            ]);
+        }
     }
 }

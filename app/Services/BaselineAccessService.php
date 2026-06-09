@@ -23,41 +23,43 @@ class BaselineAccessService
                     ->where('username', $account['username'])
                     ->first();
 
-                $attributes = [
+                $values = [
                     'full_name' => $account['full_name'],
                     'role' => $account['role'],
                     'is_active' => true,
+                    'password_hash' => $existing
+                        && $this->passwordMatches($account['password'], (string) $existing->password_hash)
+                            ? $existing->password_hash
+                            : Hash::make($account['password']),
                 ];
 
-                if (! $existing || ! Hash::check($account['password'], (string) $existing->password_hash)) {
-                    $attributes['password_hash'] = Hash::make($account['password']);
+                if (isset($columns['created_at'])) {
+                    $values['created_at'] = $existing?->created_at ?? now();
                 }
 
                 if (isset($columns['updated_at'])) {
-                    $attributes['updated_at'] = now();
+                    $values['updated_at'] = now();
                 }
 
-                $attributes = array_intersect_key($attributes, $columns);
-
-                if ($existing) {
-                    DB::table('examiners')
-                        ->where('username', $account['username'])
-                        ->update($attributes);
-                } else {
-                    $insert = $attributes + ['username' => $account['username']];
-
-                    if (isset($columns['created_at'])) {
-                        $insert['created_at'] = now();
-                    }
-
-                    DB::table('examiners')->insert(array_intersect_key($insert, $columns));
-                }
+                DB::table('examiners')->updateOrInsert(
+                    ['username' => $account['username']],
+                    array_intersect_key($values, $columns)
+                );
 
                 $ensured[] = $account['username'];
             }
         });
 
         return $ensured;
+    }
+
+    private function passwordMatches(string $password, string $hash): bool
+    {
+        try {
+            return $hash !== '' && Hash::check($password, $hash);
+        } catch (\Throwable) {
+            return false;
+        }
     }
 
     /**

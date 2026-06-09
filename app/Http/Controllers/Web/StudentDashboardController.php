@@ -55,8 +55,12 @@ class StudentDashboardController extends Controller
             return $payload;
         }
 
+        $hasVerifiedPayment = DB::table('payment_records')
+            ->where('student_id', $payload['student']->matric_no)
+            ->exists();
+
         $data = $request->validate([
-            'rrr_number' => ['required', 'string', 'max:50'],
+            'rrr_number' => [$hasVerifiedPayment ? 'nullable' : 'required', 'string', 'max:50'],
             'timetable_id' => ['required', 'integer'],
         ]);
 
@@ -72,7 +76,7 @@ class StudentDashboardController extends Controller
                 $payload['student']->matric_no,
                 (int) $payload['student']->session_id,
                 (int) $data['timetable_id'],
-                $data['rrr_number'],
+                $data['rrr_number'] ?? null,
                 $expectedAmount,
             );
 
@@ -88,7 +92,9 @@ class StudentDashboardController extends Controller
             );
 
             return redirect()->route('student.generate-exam-pass')
-                ->with('status', 'Payment verified. Your exam pass is ready.');
+                ->with('status', $hasVerifiedPayment
+                    ? 'Verified session payment reused. Your exam pass is ready.'
+                    : 'Payment verified. Your exam pass is ready.');
         } catch (Throwable $exception) {
             if (! $exception instanceof RuntimeException || $this->isTechnicalExamPassFailure($exception)) {
                 report($exception);

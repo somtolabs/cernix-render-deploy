@@ -52,7 +52,7 @@ Render startup runs:
 
 ```bash
 php artisan migrate --force
-php artisan cernix:ensure-baseline-data
+php artisan cernix:repair-baseline --force
 ```
 
 The baseline-data command keeps registration departments available, ensures one active

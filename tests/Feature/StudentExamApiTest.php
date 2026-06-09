@@ -120,22 +120,24 @@ class StudentExamApiTest extends TestCase
                  ->assertJsonPath('status', 'error');
     }
 
-    public function test_duplicate_registration_returns_error(): void
+    public function test_repeat_registration_reuses_verified_payment_and_active_pass(): void
     {
-        // First registration
-        $this->withToken($this->token)->postJson('/api/student/register-exam', [
+        $first = $this->withToken($this->token)->postJson('/api/student/register-exam', [
             'matric_no'  => 'CSC/2021/001',
             'rrr_number' => 'TEST-DEMO',
-        ])->assertStatus(200);
+        ])->assertOk();
 
-        // Second attempt for same session should fail
         $response = $this->withToken($this->token)->postJson('/api/student/register-exam', [
-            'matric_no'  => 'CSC/2021/001',
-            'rrr_number' => 'TEST-0001',
+            'matric_no' => 'CSC/2021/001',
         ]);
 
-        $response->assertStatus(422)
-                 ->assertJsonPath('status', 'error');
+        $response->assertOk()
+            ->assertJsonPath('status', 'success')
+            ->assertJsonPath('message', 'Verified session payment reused and exam pass generated.')
+            ->assertJsonPath('data.token_id', $first->json('data.token_id'));
+
+        $this->assertDatabaseCount('payment_records', 1);
+        $this->assertDatabaseCount('qr_tokens', 1);
     }
 
     public function test_returns_error_when_no_active_session(): void

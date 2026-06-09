@@ -39,7 +39,7 @@ class BaselineAccessRepairTest extends TestCase
 
         DB::table('examiners')->where('username', 'admin1')->update([
             'full_name' => 'Stale Admin',
-            'password_hash' => Hash::make('wrong-password'),
+            'password_hash' => 'admin123',
             'is_active' => false,
         ]);
 
@@ -86,6 +86,66 @@ class BaselineAccessRepairTest extends TestCase
         $this->assertTrue(Hash::check('superadmin123', $superAdmin->password_hash));
 
         $this->assertDatabaseHas('admin_notes', ['note_id' => $noteId]);
+    }
+
+    public function test_baseline_repair_command_creates_missing_staff_accounts(): void
+    {
+        DB::table('examiners')->whereIn('username', [
+            'examiner1',
+            'admin1',
+            'superadmin',
+        ])->delete();
+
+        $this->assertSame(0, Artisan::call('cernix:repair-baseline', ['--force' => true]));
+
+        $expected = [
+            'examiner1' => ['password123', 'examiner'],
+            'admin1' => ['admin123', 'admin'],
+            'superadmin' => ['superadmin123', 'super_admin'],
+        ];
+
+        foreach ($expected as $username => [$password, $role]) {
+            $account = DB::table('examiners')->where('username', $username)->first();
+
+            $this->assertNotNull($account);
+            $this->assertSame($role, $account->role);
+            $this->assertTrue((bool) $account->is_active);
+            $this->assertTrue(Hash::check($password, $account->password_hash));
+        }
+    }
+
+    public function test_baseline_repair_command_is_idempotent_and_does_not_duplicate_timetables(): void
+    {
+        Artisan::call('cernix:repair-baseline', ['--force' => true]);
+
+        $accountCount = DB::table('examiners')
+            ->whereIn('username', ['examiner1', 'admin1', 'superadmin'])
+            ->count();
+        $timetableCount = DB::table('timetables')->count();
+        $passwordHashes = DB::table('examiners')
+            ->whereIn('username', ['examiner1', 'admin1', 'superadmin'])
+            ->pluck('password_hash', 'username')
+            ->all();
+
+        Artisan::call('cernix:repair-baseline', ['--force' => true]);
+
+        $this->assertSame(3, $accountCount);
+        $this->assertSame($accountCount, DB::table('examiners')
+            ->whereIn('username', ['examiner1', 'admin1', 'superadmin'])
+            ->count());
+        $this->assertSame($timetableCount, DB::table('timetables')->count());
+        $this->assertSame($passwordHashes, DB::table('examiners')
+            ->whereIn('username', ['examiner1', 'admin1', 'superadmin'])
+            ->pluck('password_hash', 'username')
+            ->all());
+    }
+
+    public function test_baseline_repair_uses_update_or_insert_for_staff_accounts(): void
+    {
+        $source = file_get_contents(app_path('Services/BaselineAccessService.php'));
+
+        $this->assertStringContainsString('updateOrInsert(', $source);
+        $this->assertStringNotContainsString('firstOrCreate(', $source);
     }
 
     public function test_baseline_access_command_reports_usernames_without_printing_passwords(): void

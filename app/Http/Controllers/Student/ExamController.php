@@ -24,9 +24,13 @@ class ExamController extends Controller
             return response()->json(['status' => 'error', 'message' => 'Forbidden'], 403);
         }
 
+        $matricNo = (string) $request->input('matric_no', '');
+        $hasVerifiedPayment = $matricNo !== ''
+            && DB::table('payment_records')->where('student_id', $matricNo)->exists();
+
         $data = $request->validate([
             'matric_no'  => 'required|string|max:50',
-            'rrr_number' => 'required|string|max:50',
+            'rrr_number' => [$hasVerifiedPayment ? 'nullable' : 'required', 'string', 'max:50'],
             'timetable_id' => 'nullable|integer',
         ]);
 
@@ -66,7 +70,7 @@ class ExamController extends Controller
                 $data['matric_no'],
                 (int) $session->session_id,
                 $timetableId,
-                $data['rrr_number'],
+                $data['rrr_number'] ?? null,
                 DepartmentFees::amountForDepartment($student->dept_name),
             );
 
@@ -79,7 +83,9 @@ class ExamController extends Controller
 
             return response()->json([
                 'status'  => 'success',
-                'message' => 'Payment verified and exam pass generated.',
+                'message' => $hasVerifiedPayment
+                    ? 'Verified session payment reused and exam pass generated.'
+                    : 'Payment verified and exam pass generated.',
                 'data'    => $result,
             ]);
 

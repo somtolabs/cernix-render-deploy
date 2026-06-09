@@ -47,7 +47,7 @@
 <div class="cx-page-head">
     <div class="cx-eyebrow">Payment and Access</div>
     <h1>Generate Exam Pass</h1>
-    <p>Enter your Remita RRR to verify payment and generate your secure exam pass.</p>
+    <p>{{ $payment ? 'Your session payment is verified. Select an assigned paper to generate your secure exam pass.' : 'Enter your Remita RRR once to verify payment for this exam session.' }}</p>
 </div>
 
 <div class="pass-flow">
@@ -93,8 +93,8 @@
     @else
         <section class="pass-workspace">
             <div class="pass-workspace-head">
-                <h2>Payment verification</h2>
-                <p class="cx-muted">Select your assigned paper, then enter the RRR issued for your school fee payment.</p>
+                <h2>{{ $payment ? 'Generate another exam pass' : 'Payment verification' }}</h2>
+                <p class="cx-muted">{{ $payment ? 'Your verified session payment will be reused. Select the assigned paper for this pass.' : 'Select your assigned paper, then enter the RRR issued for your school fee payment.' }}</p>
             </div>
             <form method="POST" action="{{ route('student.generate-exam-pass.store') }}" class="pass-form">
                 @csrf
@@ -114,14 +114,21 @@
                     @error('timetable_id')<div class="cx-muted" style="margin-top:7px;color:var(--red)">{{ $message }}</div>@enderror
                 </div>
 
-                <div class="pass-field">
-                    <label for="rrr_number">Remita RRR / Payment Reference</label>
-                    <input id="rrr_number" name="rrr_number" type="text" autocomplete="off" placeholder="{{ \App\Support\DepartmentFees::isDemoMode() ? 'TEST-DEMO' : 'Enter your payment reference' }}" required>
-                    <p class="cx-muted">The reference is checked securely before payment is recorded or a pass is issued.</p>
-                    @if(! session('exam_pass_error'))
-                        @error('rrr_number')<div style="color:var(--red);font-size:13px">{{ $message }}</div>@enderror
-                    @endif
-                </div>
+                @if($payment)
+                    <div class="pass-notice is-success">
+                        <strong>Session payment verified</strong>
+                        You do not need to enter your RRR again for another assigned paper in this session.
+                    </div>
+                @else
+                    <div class="pass-field">
+                        <label for="rrr_number">Remita RRR / Payment Reference</label>
+                        <input id="rrr_number" name="rrr_number" type="text" autocomplete="off" placeholder="{{ \App\Support\DepartmentFees::isDemoMode() ? 'TEST-DEMO' : 'Enter your payment reference' }}" required>
+                        <p class="cx-muted">The reference is checked securely before payment is recorded or a pass is issued.</p>
+                        @if(! session('exam_pass_error'))
+                            @error('rrr_number')<div style="color:var(--red);font-size:13px">{{ $message }}</div>@enderror
+                        @endif
+                    </div>
+                @endif
 
                 <div class="pass-actions">
                     <a class="btn btn-ghost" href="{{ route('student.dashboard') }}">Back to Dashboard</a>

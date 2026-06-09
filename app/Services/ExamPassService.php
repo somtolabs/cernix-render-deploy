@@ -18,11 +18,10 @@ class ExamPassService
         string $matricNo,
         int $sessionId,
         int $timetableId,
-        string $rrrNumber,
+        ?string $rrrNumber,
         float $expectedAmount,
     ): array {
-        $rrrNumber = strtoupper(trim($rrrNumber));
-        $paymentReference = $this->paymentReference($rrrNumber, $matricNo);
+        $rrrNumber = strtoupper(trim((string) $rrrNumber));
         if ($expectedAmount <= 0) {
             throw new RuntimeException('School fee is not configured for this student department.');
         }
@@ -49,20 +48,33 @@ class ExamPassService
         }
 
         $existingPayment = DB::table('payment_records')
+            ->where('student_id', $matricNo)
+            ->orderByDesc('verified_at')
+            ->first();
+
+        if (! $existingPayment && $rrrNumber === '') {
+            throw new RuntimeException('Enter the RRR used for this exam session.');
+        }
+
+        $paymentReference = $existingPayment?->rrr_number
+            ?? $this->paymentReference($rrrNumber, $matricNo);
+
+        $paymentByReference = DB::table('payment_records')
             ->where('rrr_number', $paymentReference)
             ->first();
 
-        if (! $existingPayment && $rrrNumber === 'TEST-DEMO') {
+        if (! $paymentByReference && ! $existingPayment && $rrrNumber === 'TEST-DEMO') {
             $existingPayment = DB::table('payment_records')
                 ->where('rrr_number', 'TEST-DEMO')
                 ->where('student_id', $matricNo)
                 ->first();
         }
 
-        if ($existingPayment && $existingPayment->student_id !== $matricNo) {
+        if ($paymentByReference && $paymentByReference->student_id !== $matricNo) {
             throw new RuntimeException('RRR has already been used for another payment record.');
         }
 
+        $existingPayment ??= $paymentByReference;
         $remitaResponse = $existingPayment
             ? json_decode((string) $existingPayment->remita_response, true, 512, JSON_THROW_ON_ERROR)
             : $this->verifyPayment($rrrNumber, $expectedAmount);

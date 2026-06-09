@@ -329,7 +329,7 @@ class StudentPortalWebTest extends TestCase
         $this->get('/student/generate-exam-pass')
             ->assertOk()
             ->assertSee('Generate Exam Pass')
-            ->assertSee('Enter your Remita RRR to verify payment and generate your secure exam pass.')
+            ->assertSee('Enter your Remita RRR once to verify payment for this exam session.')
             ->assertSee('Assigned Course')
             ->assertSee('Payment')
             ->assertSee('Pending')
@@ -341,6 +341,32 @@ class StudentPortalWebTest extends TestCase
             ->assertOk()
             ->assertSee('Your exam pass is ready')
             ->assertSee('View Exam Pass');
+    }
+
+    public function test_verified_session_payment_does_not_request_rrr_again(): void
+    {
+        $this->registerDemoStudent();
+        $this->generateDemoPass();
+        DB::table('qr_tokens')->delete();
+
+        $response = $this->get('/student/generate-exam-pass')->assertOk();
+
+        $response->assertSee('Session payment verified')
+            ->assertSee('You do not need to enter your RRR again')
+            ->assertDontSee('name="rrr_number"', false);
+
+        $examId = DB::table('timetables')->where('course_code', 'CSC401')->value('id');
+
+        $this->post('/student/generate-exam-pass', [
+            'timetable_id' => $examId,
+        ])->assertRedirect(route('student.generate-exam-pass'))
+          ->assertSessionHas('status', 'Verified session payment reused. Your exam pass is ready.');
+
+        $this->assertDatabaseCount('payment_records', 1);
+        $this->assertDatabaseHas('qr_tokens', [
+            'student_id' => '220404008',
+            'timetable_id' => $examId,
+        ]);
     }
 
     public function test_generate_exam_pass_page_handles_missing_timetable_and_hall_cleanly(): void
