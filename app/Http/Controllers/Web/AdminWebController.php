@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Web;
 
 use App\Http\Controllers\Controller;
 use App\Services\AuditService;
+use App\Services\QrTokenService;
 use App\Services\RiskIntelligenceService;
 use App\Support\Branding;
 use App\Support\DepartmentFees;
@@ -125,18 +126,73 @@ class AdminWebController extends Controller
 
         abort_unless($student, 404);
 
-        $payment = DB::table('payment_records')->where('student_id', $matricNo)->orderByDesc('verified_at')->first();
-        $token = DB::table('qr_tokens')->where('student_id', $matricNo)->orderByDesc('issued_at')->first();
-        $timetableCount = DB::table('timetables')
+        $paymentQuery = DB::table('payment_records')->where('student_id', $matricNo);
+        if (Schema::hasColumn('payment_records', 'session_id')) {
+            $paymentQuery->where(function ($query) use ($student) {
+                $query->where('session_id', $student->session_id)
+                    ->orWhereNull('session_id');
+            });
+        }
+        $payment = $paymentQuery->orderByDesc('verified_at')->first();
+        $tokens = DB::table('qr_tokens')
+            ->where('student_id', $matricNo)
+            ->where('session_id', $student->session_id)
+            ->orderByDesc('issued_at')
+            ->get();
+        $token = $tokens->first();
+        $timetableEntries = DB::table('timetables')
             ->where('department_id', $student->department_id)
             ->where('level', (string) ($student->level ?? ''))
             ->where('exam_session_id', $student->session_id)
-            ->count();
+            ->orderBy('exam_date')
+            ->orderBy('start_time')
+            ->get();
+        $supportsTimetableBinding = Schema::hasColumn('qr_tokens', 'timetable_id');
+        $tokensByTimetable = $supportsTimetableBinding ? $tokens
+            ->filter(fn ($row) => data_get($row, 'timetable_id') !== null)
+            ->groupBy(fn ($row) => (int) $row->timetable_id)
+            ->map(fn ($group) => $group->first()) : collect();
+        $latestScansByToken = $tokens->isEmpty()
+            ? collect()
+            : DB::table('verification_logs')
+                ->whereIn('token_id', $tokens->pluck('token_id'))
+                ->orderByDesc('timestamp')
+                ->get()
+                ->groupBy('token_id')
+                ->map(fn ($group) => $group->first());
+        $courseAccess = $timetableEntries->map(function ($exam) use ($tokensByTimetable, $latestScansByToken) {
+            $exam->qr_token = $tokensByTimetable->get((int) $exam->id);
+            $latestScan = $exam->qr_token
+                ? $latestScansByToken->get($exam->qr_token->token_id)
+                : null;
+            $exam->qr_status = match (strtoupper((string) ($exam->qr_token->status ?? ''))) {
+                'UNUSED' => 'Generated / Unused',
+                'USED' => 'Used',
+                'REVOKED' => 'Unavailable',
+                default => 'Not Generated',
+            };
+            $exam->scan_status = $latestScan
+                ? ($latestScan->decision === 'DUPLICATE' ? 'Repeated' : ucfirst(strtolower($latestScan->decision)))
+                : 'Not scanned';
+            $exam->last_scan_at = $latestScan?->timestamp;
+
+            return $exam;
+        });
+        $timetableCount = $courseAccess->count();
 
         $scanBase = DB::table('verification_logs')
             ->join('qr_tokens', 'verification_logs.token_id', '=', 'qr_tokens.token_id')
             ->leftJoin('examiners', 'verification_logs.examiner_id', '=', 'examiners.examiner_id')
             ->where('qr_tokens.student_id', $matricNo);
+        if ($supportsTimetableBinding) {
+            $scanBase->leftJoin('timetables', 'qr_tokens.timetable_id', '=', 'timetables.id');
+        }
+        $scanCourseCode = $supportsTimetableBinding
+            ? 'timetables.course_code'
+            : DB::raw('NULL as course_code');
+        $scanCourseTitle = $supportsTimetableBinding
+            ? 'timetables.course_title'
+            : DB::raw('NULL as course_title');
 
         $scanCounts = (clone $scanBase)
             ->select('verification_logs.decision', DB::raw('COUNT(*) as total'))
@@ -144,12 +200,22 @@ class AdminWebController extends Controller
             ->pluck('total', 'decision');
 
         $latestScan = (clone $scanBase)
-            ->select('verification_logs.*', 'examiners.full_name as examiner_name')
+            ->select(
+                'verification_logs.*',
+                'examiners.full_name as examiner_name',
+                $scanCourseCode,
+                $scanCourseTitle
+            )
             ->orderByDesc('verification_logs.timestamp')
             ->first();
 
         $scanHistory = (clone $scanBase)
-            ->select('verification_logs.*', 'examiners.full_name as examiner_name')
+            ->select(
+                'verification_logs.*',
+                'examiners.full_name as examiner_name',
+                $scanCourseCode,
+                $scanCourseTitle
+            )
             ->orderByDesc('verification_logs.timestamp')
             ->limit(20)
             ->get();
@@ -167,7 +233,20 @@ class AdminWebController extends Controller
         $notes = $this->adminNotes('student', $matricNo);
         $studentWarning = app(RiskIntelligenceService::class)->getStudentWarning($matricNo);
 
-        return view('admin.students.show', compact('student', 'payment', 'token', 'timetableCount', 'scanHistory', 'scanCounts', 'latestScan', 'timeline', 'notes', 'studentWarning'));
+        return view('admin.students.show', compact(
+            'student',
+            'payment',
+            'token',
+            'tokens',
+            'courseAccess',
+            'timetableCount',
+            'scanHistory',
+            'scanCounts',
+            'latestScan',
+            'timeline',
+            'notes',
+            'studentWarning'
+        ));
     }
 
     public function examiners(Request $request)
@@ -195,15 +274,15 @@ class AdminWebController extends Controller
         $examiners = DB::table('examiners')
             ->leftJoinSub($scanStats, 'scan_stats', fn ($join) => $join->on('examiners.examiner_id', '=', 'scan_stats.examiner_id'))
             ->select($select)
+            ->whereRaw('UPPER(examiners.role) = ?', [Roles::EXAMINER])
             ->orderByDesc('examiners.created_at')
             ->orderByDesc('examiners.examiner_id')
             ->paginate(25);
 
         $permissions = $this->permissionSummary($request);
-        $currentAdminId = (int) $request->session()->get('examiner_id');
         $examinerWarnings = app(RiskIntelligenceService::class)->getExaminersNeedingReview();
 
-        return view('admin.examiners.index', compact('examiners', 'permissions', 'currentAdminId', 'examinerWarnings'));
+        return view('admin.examiners.index', compact('examiners', 'permissions', 'examinerWarnings'));
     }
 
     public function examinerShow(Request $request, int $examiner)
@@ -230,6 +309,7 @@ class AdminWebController extends Controller
                 DB::raw('scan_stats.last_scan_at as last_scan_at')
             )
             ->where('examiners.examiner_id', $examiner)
+            ->whereRaw('UPPER(examiners.role) = ?', [Roles::EXAMINER])
             ->first();
 
         abort_unless($record, 404);
@@ -262,29 +342,18 @@ class AdminWebController extends Controller
             return $response;
         }
 
-        $request->merge([
-            'role' => strtolower((string) $request->input('role')),
-        ]);
-
         $data = $request->validate([
             'full_name' => 'required|string|max:100',
             'username' => 'required|string|max:100|unique:examiners,username',
             'password' => 'required|string|min:8',
-            'role' => ['required', 'string', Rule::in($this->allowedExaminerRoles())],
+            'role' => ['nullable', 'string', Rule::in(['examiner'])],
         ]);
-        $role = strtolower($data['role']);
-
-        if ($role !== 'examiner' && ! Roles::canManageRoles($request->session()->get('examiner_role'))) {
-            return back()
-                ->withErrors(['role' => 'Only a Super Admin can create admin or Super Admin accounts.'])
-                ->withInput();
-        }
 
         $insert = [
             'full_name' => $data['full_name'],
             'username' => $data['username'],
             'password_hash' => Hash::make($data['password']),
-            'role' => $role,
+            'role' => 'examiner',
             'is_active' => true,
             'created_at' => now(),
         ];
@@ -297,19 +366,19 @@ class AdminWebController extends Controller
             $insert['last_active_at'] = null;
         }
 
-        $id = DB::transaction(function () use ($insert, $data, $role, $request) {
+        $id = DB::transaction(function () use ($insert, $data, $request) {
             $id = DB::table('examiners')->insertGetId($insert);
             $this->audit('user.created', [
                 'entity_type' => 'examiner',
                 'entity_id' => $id,
                 'username' => $data['username'],
-                'created_role' => $role,
+                'created_role' => 'examiner',
             ], $request);
 
             return $id;
         });
 
-        return redirect()->route('admin.examiners.show', $id)->with('status', Str::headline($role) . ' account created.');
+        return redirect()->route('admin.examiners.show', $id)->with('status', 'Examiner account created.');
     }
 
     public function examinerToggle(Request $request, int $examiner): RedirectResponse
@@ -320,6 +389,7 @@ class AdminWebController extends Controller
 
         $record = DB::table('examiners')->where('examiner_id', $examiner)->first();
         abort_unless($record, 404);
+        abort_unless(Roles::isExaminer($record->role), 404);
 
         if (! $this->canToggleExaminer($request, $record)) {
             return back()->withErrors(['permission' => 'You do not have permission to change this account status.']);
@@ -509,6 +579,70 @@ class AdminWebController extends Controller
         return view('admin.scan-logs.show', $payload + [
             'notes' => $this->adminNotes('scan', (string) $log),
         ]);
+    }
+
+    public function qrTokens(Request $request)
+    {
+        if ($response = $this->guardAdmin($request)) {
+            return $response;
+        }
+        abort_unless($this->isSuperAdminSession($request), 403);
+
+        $tokens = DB::table('qr_tokens')
+            ->leftJoin('students', 'qr_tokens.student_id', '=', 'students.matric_no')
+            ->leftJoin('timetables', 'qr_tokens.timetable_id', '=', 'timetables.id')
+            ->leftJoin('exam_sessions', 'qr_tokens.session_id', '=', 'exam_sessions.session_id')
+            ->select(
+                'qr_tokens.token_id',
+                'qr_tokens.student_id',
+                'qr_tokens.session_id',
+                'qr_tokens.timetable_id',
+                'qr_tokens.status',
+                'qr_tokens.issued_at',
+                'qr_tokens.used_at',
+                'students.full_name',
+                'timetables.course_code',
+                'timetables.course_title',
+                'timetables.venue',
+                'timetables.exam_date',
+                'exam_sessions.semester',
+                'exam_sessions.academic_year'
+            )
+            ->when($request->filled('status'), fn ($query) => $query->where('qr_tokens.status', strtoupper((string) $request->input('status'))))
+            ->when($request->filled('q'), function ($query) use ($request) {
+                $search = '%' . $request->input('q') . '%';
+                $query->where(fn ($inner) => $inner
+                    ->where('students.full_name', 'like', $search)
+                    ->orWhere('qr_tokens.student_id', 'like', $search)
+                    ->orWhere('timetables.course_code', 'like', $search));
+            })
+            ->orderByDesc('qr_tokens.issued_at')
+            ->paginate(30)
+            ->withQueryString();
+
+        $summary = DB::table('qr_tokens')
+            ->select('status', DB::raw('COUNT(*) as total'))
+            ->groupBy('status')
+            ->pluck('total', 'status');
+
+        return view('admin.qr-tokens.index', compact('tokens', 'summary'));
+    }
+
+    public function qrTokenRevoke(Request $request, string $token, QrTokenService $qrTokens): RedirectResponse
+    {
+        if ($response = $this->guardAdmin($request)) {
+            return $response;
+        }
+        abort_unless($this->isSuperAdminSession($request), 403);
+
+        try {
+            $qrTokens->revoke($token);
+            $this->audit('exam_pass.revoked', ['token_id' => $token], $request);
+
+            return back()->with('status', 'Unused course QR pass revoked.');
+        } catch (\RuntimeException) {
+            return back()->withErrors(['token' => 'Only an unused QR pass can be revoked.']);
+        }
     }
 
     public function activity(Request $request)
@@ -993,6 +1127,23 @@ class AdminWebController extends Controller
             'examiner_users' => Schema::hasTable('examiners') ? DB::table('examiners')->where('role', 'examiner')->count() : 0,
             'admin_users' => Schema::hasTable('examiners') ? DB::table('examiners')->whereIn('role', ['admin', 'super_admin'])->count() : 0,
             'departments' => $this->safeCount('departments'),
+            'pending_course_passes' => $activeSession && Schema::hasColumn('qr_tokens', 'timetable_id')
+                ? DB::table('students')
+                    ->join('timetables', function ($join) {
+                        $join->on('students.session_id', '=', 'timetables.exam_session_id')
+                            ->on('students.department_id', '=', 'timetables.department_id')
+                            ->on('students.level', '=', 'timetables.level');
+                    })
+                    ->leftJoin('qr_tokens', function ($join) {
+                        $join->on('students.matric_no', '=', 'qr_tokens.student_id')
+                            ->on('timetables.id', '=', 'qr_tokens.timetable_id')
+                            ->whereIn('qr_tokens.status', ['UNUSED', 'USED']);
+                    })
+                    ->where('timetables.exam_session_id', $activeSession->session_id)
+                    ->where('timetables.status', '!=', 'cancelled')
+                    ->whereNull('qr_tokens.token_id')
+                    ->count()
+                : 0,
         ];
 
         $riskMetrics = [
@@ -1098,6 +1249,10 @@ class AdminWebController extends Controller
 
     private function scanDetailPayload(int $logId): ?array
     {
+        $timetableSelect = Schema::hasColumn('qr_tokens', 'timetable_id')
+            ? 'qr_tokens.timetable_id'
+            : DB::raw('NULL as timetable_id');
+
         $scan = DB::table('verification_logs')
             ->leftJoin('qr_tokens', 'verification_logs.token_id', '=', 'qr_tokens.token_id')
             ->leftJoin('students', 'qr_tokens.student_id', '=', 'students.matric_no')
@@ -1109,6 +1264,7 @@ class AdminWebController extends Controller
                 'verification_logs.*',
                 'qr_tokens.student_id as matric_no',
                 'qr_tokens.status as token_status',
+                $timetableSelect,
                 'qr_tokens.issued_at',
                 'qr_tokens.used_at',
                 'students.full_name',
@@ -1139,9 +1295,16 @@ class AdminWebController extends Controller
                 ->first()
             : null;
 
-        $payment = $scan->matric_no
-            ? DB::table('payment_records')->where('student_id', $scan->matric_no)->orderByDesc('verified_at')->first()
+        $paymentQuery = $scan->matric_no
+            ? DB::table('payment_records')->where('student_id', $scan->matric_no)
             : null;
+        if ($paymentQuery && Schema::hasColumn('payment_records', 'session_id')) {
+            $paymentQuery->where(function ($query) use ($scan) {
+                $query->where('session_id', $scan->session_id)
+                    ->orWhereNull('session_id');
+            });
+        }
+        $payment = $paymentQuery?->orderByDesc('verified_at')->first();
 
         $token = $scan->token_id
             ? DB::table('qr_tokens')->where('token_id', $scan->token_id)->first()
@@ -1158,12 +1321,14 @@ class AdminWebController extends Controller
             : collect();
 
         $counts = $studentScans->groupBy('decision')->map->count();
+        $tokenTimetableId = data_get($token, 'timetable_id');
         $todayExam = $student
             ? DB::table('timetables')
                 ->where('exam_session_id', $student->session_id)
                 ->where('department_id', $student->department_id)
                 ->where('level', (string) ($student->level ?? ''))
-                ->whereDate('exam_date', today())
+                ->when($tokenTimetableId, fn ($query, $id) => $query->where('id', $id))
+                ->when(! $tokenTimetableId, fn ($query) => $query->whereDate('exam_date', today()))
                 ->orderBy('start_time')
                 ->first()
             : null;
@@ -1212,11 +1377,6 @@ class AdminWebController extends Controller
         $columns ??= Schema::getColumnListing('examiners');
 
         return in_array($column, $columns, true);
-    }
-
-    private function allowedExaminerRoles(): array
-    {
-        return ['examiner', 'admin', 'super_admin'];
     }
 
     private function isSuperAdminSession(Request $request): bool

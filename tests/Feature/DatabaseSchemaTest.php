@@ -30,5 +30,8 @@ class DatabaseSchemaTest extends TestCase
                 "Table [{$table}] does not exist."
             );
         }
+
+        $this->assertTrue(Schema::hasColumn('payment_records', 'session_id'));
+        $this->assertTrue(Schema::hasColumn('qr_tokens', 'timetable_id'));
     }
 }

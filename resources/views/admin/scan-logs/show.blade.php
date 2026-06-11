@@ -6,8 +6,8 @@
 @php
     $decisionClass = $scan->decision === 'APPROVED' ? 'green' : ($scan->decision === 'DUPLICATE' ? 'amber' : 'red');
     $passStatus = match (strtoupper((string) ($token->status ?? $scan->token_status ?? ''))) {
-        'UNUSED' => 'Ready',
-        'USED' => 'Already scanned',
+        'UNUSED' => 'Generated / Unused',
+        'USED' => 'Used',
         'REVOKED' => 'Unavailable',
         default => ($token->status ?? $scan->token_status ?? 'Not available'),
     };
@@ -15,23 +15,33 @@
 @endphp
 
 <style>
-    .scan-case { display:grid; gap:14px; }
-    .scan-case-head { background:#fff; border:1px solid var(--line); border-radius:20px; padding:16px; display:grid; gap:14px; box-shadow:var(--shadow-sm); }
+    .scan-case { display:grid; gap:24px; }
+    .scan-case-head { background:rgba(235,241,255,.28); border-left:3px solid var(--navy); padding:16px; display:grid; gap:14px; }
     .scan-id-row { display:flex; gap:14px; align-items:center; min-width:0; }
-    .scan-id-row h1 { margin:0; font-size:clamp(22px,4vw,34px); line-height:1.02; letter-spacing:-.045em; overflow-wrap:anywhere; }
+    .scan-id-row h1 { margin:0; font-size:clamp(22px,4vw,34px); line-height:1.02; letter-spacing:-.045em; overflow-wrap:break-word; word-break:normal; }
     .scan-id-row p { margin:5px 0 0; }
     .scan-case-actions { display:flex; gap:8px; flex-wrap:wrap; align-items:center; justify-content:space-between; }
-    .scan-compact-grid { display:grid; gap:12px; }
-    .scan-panel { background:#fff; border:1px solid var(--line); border-radius:18px; overflow:hidden; }
-    .scan-panel h2 { margin:0; padding:13px 14px; border-bottom:1px solid var(--line); font-size:14px; letter-spacing:-.01em; }
-    .scan-panel-body { padding:4px 14px; }
+    .scan-compact-grid { display:grid; gap:28px; }
+    .scan-panel { min-width:0; }
+    .scan-panel h2 { margin:0; padding:0 0 12px; border-bottom:1px solid var(--line); font-size:14px; letter-spacing:-.01em; }
+    .scan-panel-body { padding:4px 0; }
     .scan-row { display:grid; gap:4px; padding:10px 0; border-bottom:1px solid var(--line); }
     .scan-row:last-child { border-bottom:0; }
     .scan-history { width:100%; border-collapse:collapse; min-width:620px; }
     .scan-history th, .scan-history td { text-align:left; padding:10px 12px; border-bottom:1px solid var(--line); vertical-align:top; }
     .scan-history th { color:var(--ink-4); font-size:10px; text-transform:uppercase; letter-spacing:.12em; }
     @media (min-width:900px){ .scan-compact-grid{grid-template-columns:minmax(0,1fr) minmax(320px,.72fr);} .scan-case-head{grid-template-columns:minmax(0,1fr) auto; align-items:center;} }
-    @media (max-width:560px){ .scan-id-row{align-items:flex-start;} .scan-case-actions{display:grid;} }
+    @media (max-width:720px){
+        .scan-id-row{align-items:flex-start;}
+        .scan-case-actions{display:grid;}
+        .scan-history { min-width:0; }
+        .scan-history, .scan-history tbody, .scan-history tr, .scan-history td { display:block; width:100%; }
+        .scan-history thead { display:none; }
+        .scan-history tr { margin-bottom:4px; padding:11px 12px; border-left:3px solid rgba(15,32,80,.35); border-bottom:1px solid var(--line); background:rgba(235,241,255,.16); }
+        .scan-history td { border:0; padding:6px 0; display:grid; grid-template-columns:minmax(90px,.34fr) minmax(0,1fr); gap:10px; overflow-wrap:break-word; word-break:normal; }
+        .scan-history td::before { content:attr(data-label); color:var(--ink-3); font-size:10px; font-weight:900; letter-spacing:.08em; text-transform:uppercase; }
+    }
+    @media (max-width:390px){ .scan-history td { display:block; } .scan-history td::before { display:block; margin-bottom:4px; } }
 </style>
 
 <div class="admin-page-head">
@@ -127,11 +137,11 @@
                 <tbody>
                     @forelse($studentScans as $row)
                         <tr>
-                            <td class="mono">{{ $row->timestamp }}</td>
-                            <td><span class="admin-status {{ $row->decision === 'APPROVED' ? 'green' : ($row->decision === 'DUPLICATE' ? 'amber' : 'red') }}">{{ $row->decision === 'DUPLICATE' ? 'REPEATED' : $row->decision }}</span></td>
-                            <td>{{ $row->examiner_name ?? $row->examiner_username ?? 'Unavailable' }}</td>
-                            <td>{{ $row->decision === 'DUPLICATE' ? 'Repeated scan needs review' : 'Recorded' }}</td>
-                            <td><a class="admin-action ghost" href="{{ route('admin.scan-logs.show', $row->log_id) }}">View</a></td>
+                            <td class="mono" data-label="Time">{{ $row->timestamp }}</td>
+                            <td data-label="Decision"><span class="admin-status {{ $row->decision === 'APPROVED' ? 'green' : ($row->decision === 'DUPLICATE' ? 'amber' : 'red') }}">{{ $row->decision === 'DUPLICATE' ? 'REPEATED' : $row->decision }}</span></td>
+                            <td data-label="Examiner">{{ $row->examiner_name ?? $row->examiner_username ?? 'Unavailable' }}</td>
+                            <td data-label="Review">{{ $row->decision === 'DUPLICATE' ? 'Repeated scan needs review' : 'Recorded' }}</td>
+                            <td data-label="Action"><a class="admin-action ghost" href="{{ route('admin.scan-logs.show', $row->log_id) }}">View</a></td>
                         </tr>
                     @empty
                         <tr><td colspan="5"><div class="admin-empty">No previous scans found.</div></td></tr>

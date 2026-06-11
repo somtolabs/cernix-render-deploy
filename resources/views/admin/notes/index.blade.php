@@ -41,7 +41,7 @@
             <button class="admin-action" type="submit">Filter</button>
         </form>
 
-        <div class="admin-table-wrap">
+        <div class="admin-table-wrap mobile-list">
             <table class="admin-table">
                 <thead>
                     <tr>
@@ -56,22 +56,22 @@
                 <tbody>
                     @forelse($notes as $note)
                         <tr>
-                            <td>
+                            <td class="mobile-primary">
                                 <strong>{{ Str::headline($note->note_type ?? 'Internal') }}</strong>
                                 <div class="muted" style="margin-top:6px;line-height:1.55">{{ $note->note }}</div>
                                 <div class="muted" style="margin-top:8px;font-size:12px">Added by {{ $note->actor_name ?? 'Admin' }}</div>
                             </td>
-                            <td>
+                            <td data-label="Visibility">
                                 <span class="admin-status {{ ($note->visibility ?? 'internal') === 'internal' ? 'amber' : 'green' }}">{{ $note->visibility_label }}</span>
                             </td>
-                            <td>
+                            <td data-label="Record">
                                 @if($note->entity_url)
                                     <a href="{{ $note->entity_url }}" class="admin-action ghost">{{ $note->entity_label }}</a>
                                 @else
                                     <span class="muted">{{ $note->entity_label }}</span>
                                 @endif
                             </td>
-                            <td>
+                            <td data-label="Status">
                                 <span class="admin-status {{ $note->resolved_at ? 'green' : 'amber' }}">{{ $note->resolved_at ? 'Resolved' : 'Open' }}</span>
                                 @if($note->requires_acknowledgement)
                                     <div class="muted" style="margin-top:8px;font-size:12px">
@@ -79,8 +79,8 @@
                                     </div>
                                 @endif
                             </td>
-                            <td class="mono muted">{{ $note->created_at }}</td>
-                            <td>
+                            <td class="mono muted" data-label="Created">{{ $note->created_at }}</td>
+                            <td data-label="Action">
                                 <form method="POST" action="{{ route('admin.notes.resolve', $note->note_id) }}">
                                     @csrf
                                     @method('PATCH')

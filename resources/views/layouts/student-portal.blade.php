@@ -14,7 +14,7 @@
 <style>
     .sp-shell { min-height: 100dvh; background: var(--bg); color: var(--ink); overflow-x: clip; overflow-y: visible; }
     .sp-mobile-head { position: sticky; top: 0; z-index: 40; height: 72px; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 0 16px; background: rgba(255,255,255,.88); border-bottom: 1px solid var(--line); backdrop-filter: blur(14px); }
-    .sp-menu-btn { width: 44px; height: 44px; border-radius: 14px; border: 1px solid var(--line); background: var(--bg-2); display: grid; place-items: center; }
+    .sp-menu-btn { min-height: 40px; padding: 0 13px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg-2); font-size:12px; font-weight:800; }
     .sp-mobile-title b { display: block; font-size: 15px; }
     .sp-mobile-title span { display: block; font-size: 11px; color: var(--ink-3); margin-top: 2px; }
     .sp-layout { display: block; width: 100%; min-height: 100dvh; min-width: 0; }
@@ -29,7 +29,8 @@
     .sp-nav { display: grid; gap: 6px; }
     .sp-nav a, .sp-logout { min-height: 44px; display: flex; align-items: center; gap: 10px; padding: 0 12px; border-radius: 13px; color: var(--ink-2); text-decoration: none; font-weight: 700; font-size: 13px; border: 1px solid transparent; }
     .sp-nav a:hover, .sp-logout:hover { background: var(--bg); border-color: var(--line); }
-    .sp-nav a.active { background: var(--ink); color: #fff; }
+    .sp-nav a.active { background: var(--navy); color: #fff; }
+    .sp-nav-label { min-width:0; flex:1; }
     .sp-nav-badge { margin-left: auto; min-width: 22px; height: 22px; padding: 0 7px; border-radius: 999px; display: inline-flex; align-items: center; justify-content: center; background: rgba(5,150,105,.12); color: var(--emerald); font-size: 11px; font-weight: 900; }
     .sp-nav a.active .sp-nav-badge { background: rgba(255,255,255,.18); color: #fff; }
     .sp-logout { width: 100%; margin-top: 14px; background: var(--bg); border-color: var(--line); justify-content: center; }
@@ -37,13 +38,14 @@
     .sp-page-head { margin-bottom: 18px; }
     .sp-page-head h1 { margin: 0; font-size: clamp(28px, 7vw, 44px); letter-spacing: -.06em; line-height: 1; }
     .sp-page-head p { margin: 8px 0 0; color: var(--ink-3); line-height: 1.6; }
-    .sp-card { background: var(--bg-2); border: 1px solid var(--line); border-radius: 22px; box-shadow: var(--shadow-sm); }
-    .sp-card-pad { padding: 18px; }
+    .sp-card { min-width: 0; }
+    .sp-card-pad { padding: 18px 0; }
     .sp-grid { display: grid; gap: 16px; }
-    .metric-grid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 12px; }
-    .metric { padding: 14px; border: 1px solid var(--line); background: var(--bg-2); border-radius: 18px; min-width: 0; }
+    .metric-grid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 0; border-block: 1px solid var(--line); background: rgba(235,241,255,.2); }
+    .metric { padding: 14px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); min-width: 0; }
+    .metric:nth-child(2n) { border-right: 0; }
     .metric span { display: block; color: var(--ink-3); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; font-weight: 800; }
-    .metric b { display: block; margin-top: 8px; font-size: 18px; overflow-wrap: anywhere; }
+    .metric b { display: block; margin-top: 8px; font-size: 18px; overflow-wrap: break-word; word-break:normal; }
     .student-mini { display: flex; align-items: center; gap: 14px; min-width: 0; }
     .student-photo { width: 72px; height: 72px; border-radius: 9999px; aspect-ratio: 1 / 1; object-fit: cover; object-position: center; background: var(--bg); border: 1px solid var(--line); flex: 0 0 auto; overflow: hidden; }
     .student-fallback { width: 72px; height: 72px; border-radius: 9999px; aspect-ratio: 1 / 1; background: var(--navy); border: 1px solid var(--line); display: grid; place-items: center; color: #fff; font-weight: 800; flex: 0 0 auto; overflow: hidden; }
@@ -52,17 +54,20 @@
     .data-table th, .data-table td { text-align: left; padding: 13px 14px; border-bottom: 1px solid var(--line); vertical-align: top; }
     .data-table th { color: var(--ink-3); font-size: 11px; text-transform: uppercase; letter-spacing: .1em; }
     .mobile-list { display: grid; gap: 10px; }
-    .mobile-row { display: grid; gap: 8px; padding: 14px; border: 1px solid var(--line); border-radius: 16px; background: var(--bg-2); }
+    .mobile-row { display: grid; gap: 8px; padding: 14px; border-left: 3px solid rgba(15,32,80,.32); border-bottom: 1px solid var(--line); background: rgba(235,241,255,.18); }
     .muted { color: var(--ink-3); }
-    .safe-wrap { overflow-wrap: anywhere; word-break: break-word; }
+    .safe-wrap { overflow-wrap: break-word; word-break: normal; min-width: 0; }
     @media (min-width: 760px) {
         .sp-mobile-head { display: none; }
         .sp-layout { display: grid; grid-template-columns: 272px minmax(0, 1fr); }
         .sp-sidebar { position: sticky; top: 0; transform: none; z-index: 1; height: 100vh; width: auto; }
         .sp-backdrop { display: none; }
         .sp-main { padding: 36px 28px 64px; }
-        .sp-card-pad { padding: 24px; }
+        .sp-card-pad { padding: 22px 0; }
         .metric-grid { grid-template-columns: repeat(5, minmax(0,1fr)); }
+        .metric { border-bottom: 0; }
+        .metric:nth-child(2n) { border-right: 1px solid var(--line); }
+        .metric:last-child { border-right: 0; }
         .sp-grid.two { grid-template-columns: minmax(0, 1fr) minmax(320px, .8fr); }
     }
     @media (max-width: 640px) {
@@ -82,7 +87,7 @@
 <div class="sp-shell" id="studentShell">
     <div class="sp-mobile-head">
         <button class="sp-menu-btn" type="button" data-menu-toggle aria-label="Open portal menu">
-            <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+            Menu
         </button>
         <div class="sp-mobile-title">
             <b>Student Portal</b>
@@ -103,7 +108,7 @@
             <nav class="sp-nav" aria-label="Student portal">
                 @foreach($nav as $item)
                     <a href="{{ route($item['route']) }}" class="{{ $activePortal === $item['key'] ? 'active' : '' }}">
-                        <span>{{ $item['label'] }}</span>
+                        <span class="sp-nav-label">{{ $item['label'] }}</span>
                         @if(($item['badge'] ?? 0) > 0)
                             <span class="sp-nav-badge">{{ $item['badge'] }}</span>
                         @endif

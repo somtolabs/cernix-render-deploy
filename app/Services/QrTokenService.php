@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Support\Branding;
+use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
@@ -46,19 +47,38 @@ class QrTokenService
         }
 
         $supportsTimetableBinding = Schema::hasColumn('qr_tokens', 'timetable_id');
+        if ($supportsTimetableBinding && $timetableId !== null) {
+            $exam = DB::table('timetables')
+                ->where('id', $timetableId)
+                ->where('exam_session_id', $sessionId)
+                ->where('department_id', $student->department_id)
+                ->where('level', (string) ($student->level ?? ''))
+                ->where('status', '!=', 'cancelled')
+                ->first();
+
+            if (! $exam) {
+                throw new RuntimeException('The selected course is not assigned to this student.');
+            }
+        }
+
         $existingQuery = DB::table('qr_tokens')
             ->where('student_id', $matricNo)
-            ->where('session_id', $sessionId)
-            ->where('status', 'UNUSED');
+            ->where('session_id', $sessionId);
 
         if ($supportsTimetableBinding) {
             $existingQuery->where('timetable_id', $timetableId);
         }
 
+        if (! $supportsTimetableBinding || $timetableId === null) {
+            $existingQuery->where('status', 'UNUSED');
+        }
+
         $existing = $existingQuery->exists();
         if ($existing) {
             throw new RuntimeException(
-                "Student [{$matricNo}] already has an active token for session [{$sessionId}]."
+                $supportsTimetableBinding && $timetableId !== null
+                    ? 'An exam pass has already been generated for this course.'
+                    : 'Student already has an active token for this session.'
             );
         }
 
@@ -71,6 +91,7 @@ class QrTokenService
             'full_name'  => $student->full_name,
             'photo_path' => $student->photo_path,
             'session_id' => $sessionId,
+            'timetable_id' => $supportsTimetableBinding ? $timetableId : null,
             'issued_at'  => $issuedAt->toISOString(),
         ];
 
@@ -90,7 +111,18 @@ class QrTokenService
             $tokenRecord['timetable_id'] = $timetableId;
         }
 
-        DB::table('qr_tokens')->insert($tokenRecord);
+        try {
+            DB::table('qr_tokens')->insert($tokenRecord);
+        } catch (QueryException $exception) {
+            if ($supportsTimetableBinding && $timetableId !== null) {
+                throw new RuntimeException(
+                    'An exam pass has already been generated for this course.',
+                    previous: $exception
+                );
+            }
+
+            throw $exception;
+        }
 
         // QR envelope — carries everything the scanner needs.
         // token_id is at the top level so the scanner can look up the token
@@ -162,6 +194,43 @@ class QrTokenService
         $token = DB::table('qr_tokens')->where('token_id', $tokenId)->first();
         if (! $token) {
             throw new RuntimeException("Token [{$tokenId}] not found in database.");
+        }
+
+        if (
+            ! hash_equals((string) $token->encrypted_payload, (string) $data['encrypted_payload'])
+            || ! hash_equals((string) $token->hmac_signature, (string) $data['hmac_signature'])
+        ) {
+            throw new RuntimeException('QR token does not match the stored record.');
+        }
+
+        $tokenTimetableId = property_exists($token, 'timetable_id') && $token->timetable_id !== null
+            ? (int) $token->timetable_id
+            : null;
+        $payloadTokenMatches = isset($payload['token_id'])
+            ? hash_equals((string) $token->token_id, (string) $payload['token_id'])
+            : $tokenTimetableId === null;
+        $identityMatches = $payloadTokenMatches
+            && hash_equals((string) $token->student_id, (string) ($payload['matric_no'] ?? ''))
+            && (int) $token->session_id === (int) ($payload['session_id'] ?? 0)
+            && (int) $token->session_id === (int) $data['session_id'];
+
+        if (! $identityMatches) {
+            throw new RuntimeException('QR token identity does not match the stored record.');
+        }
+
+        if ($tokenTimetableId !== null) {
+            $exam = DB::table('timetables')
+                ->join('students', 'timetables.department_id', '=', 'students.department_id')
+                ->where('timetables.id', $tokenTimetableId)
+                ->where('timetables.exam_session_id', $token->session_id)
+                ->where('students.matric_no', $token->student_id)
+                ->whereColumn('timetables.level', 'students.level')
+                ->where('timetables.status', '!=', 'cancelled')
+                ->exists();
+
+            if ((int) ($payload['timetable_id'] ?? 0) !== $tokenTimetableId || ! $exam) {
+                throw new RuntimeException('QR token course does not match the assigned timetable.');
+            }
         }
 
         $decision = match ($token->status) {

@@ -28,9 +28,9 @@ class StudentDashboardController extends Controller
         return $this->portalView($request, 'student.profile', 'profile');
     }
 
-    public function examAccessId(Request $request)
+    public function examAccessId(Request $request, ?int $timetable = null)
     {
-        return $this->portalView($request, 'student.exam-access-id', 'exam-access-id', true);
+        return $this->portalView($request, 'student.exam-access-id', 'exam-access-id', true, $timetable);
     }
 
     public function timetable(Request $request)
@@ -55,9 +55,10 @@ class StudentDashboardController extends Controller
             return $payload;
         }
 
-        $hasVerifiedPayment = DB::table('payment_records')
-            ->where('student_id', $payload['student']->matric_no)
-            ->exists();
+        $hasVerifiedPayment = $this->paymentQuery(
+            $payload['student']->matric_no,
+            (int) $payload['student']->session_id
+        )->exists();
 
         $data = $request->validate([
             'rrr_number' => [$hasVerifiedPayment ? 'nullable' : 'required', 'string', 'max:50'],
@@ -158,9 +159,9 @@ class StudentDashboardController extends Controller
         return back()->with('status', 'Notification acknowledged.');
     }
 
-    public function printPass(Request $request)
+    public function printPass(Request $request, ?int $timetable = null)
     {
-        return $this->portalView($request, 'student.exam-pass', 'print', true);
+        return $this->portalView($request, 'student.exam-pass', 'print', true, $timetable);
     }
 
     public function scanDetail(Request $request, int $log)
@@ -206,9 +207,15 @@ class StudentDashboardController extends Controller
         return redirect()->route('student.register');
     }
 
-    private function portalView(Request $request, string $view, string $active, bool $includeQrSvg = false)
+    private function portalView(
+        Request $request,
+        string $view,
+        string $active,
+        bool $includeQrSvg = false,
+        ?int $selectedTimetableId = null
+    )
     {
-        $payload = $this->dashboardPayload($request, $includeQrSvg);
+        $payload = $this->dashboardPayload($request, $includeQrSvg, $selectedTimetableId);
         if ($payload instanceof RedirectResponse) {
             return $payload;
         }
@@ -216,7 +223,11 @@ class StudentDashboardController extends Controller
         return view($view, array_merge($payload, ['activePortal' => $active]));
     }
 
-    private function dashboardPayload(Request $request, bool $includeQrSvg = false): array|RedirectResponse
+    private function dashboardPayload(
+        Request $request,
+        bool $includeQrSvg = false,
+        ?int $selectedTimetableId = null
+    ): array|RedirectResponse
     {
         $matricNo = $request->session()->get('student_matric_no');
         $sessionId = $request->session()->get('student_session_id');
@@ -243,13 +254,15 @@ class StudentDashboardController extends Controller
         }
 
         $activeSession = DB::table('exam_sessions')->where('session_id', $sessionId)->first();
-        $qrToken = DB::table('qr_tokens')
+        $tokens = DB::table('qr_tokens')
             ->where('student_id', $student->matric_no)
             ->where('session_id', $sessionId)
             ->orderByDesc('issued_at')
-            ->first();
-        $paymentRecord = DB::table('payment_records')
-            ->where('student_id', $student->matric_no)
+            ->get();
+        $qrToken = $selectedTimetableId
+            ? $tokens->first(fn ($candidate) => (int) ($candidate->timetable_id ?? 0) === $selectedTimetableId)
+            : $tokens->first();
+        $paymentRecord = $this->paymentQuery($student->matric_no, (int) $sessionId)
             ->orderByDesc('verified_at')
             ->first();
 
@@ -288,11 +301,31 @@ class StudentDashboardController extends Controller
         $passExam = $boundTimetableId
             ? $timetableEntries->firstWhere('id', (int) $boundTimetableId)
             : $nextExam;
+        $tokensByTimetable = $tokens
+            ->filter(fn ($candidate) => data_get($candidate, 'timetable_id') !== null)
+            ->groupBy(fn ($candidate) => (int) $candidate->timetable_id)
+            ->map(fn ($group) => $group->first());
+        $coursePasses = $timetableEntries->map(function ($exam) use ($tokensByTimetable) {
+            $exam->qr_token = $tokensByTimetable->get((int) $exam->id);
+            $exam->qr_status = match (strtoupper((string) ($exam->qr_token->status ?? ''))) {
+                'UNUSED' => 'Generated / Unused',
+                'USED' => 'Used',
+                'REVOKED' => 'Unavailable',
+                default => 'Not Generated',
+            };
+
+            return $exam;
+        });
 
         $statusSummary = [
             'registration' => 'Complete',
             'payment' => $paymentRecord ? 'Verified' : 'Pending',
-            'qr' => $qrToken ? ($qrToken->status ?? 'Ready') : 'Not Generated',
+            'qr' => match (strtoupper((string) ($qrToken->status ?? ''))) {
+                'UNUSED' => 'Generated / Unused',
+                'USED' => 'Used',
+                'REVOKED' => 'Unavailable',
+                default => 'Not Generated',
+            },
             'timetable' => $timetableEntries->count() ? 'Assigned' : 'Not Assigned',
             'next_exam' => $nextExam->display_status ?? 'None',
         ];
@@ -316,11 +349,13 @@ class StudentDashboardController extends Controller
             'activeSession' => $activeSession,
             'token' => $qrToken,
             'qrToken' => $qrToken,
+            'tokens' => $tokens,
             'payment' => $paymentRecord,
             'paymentRecord' => $paymentRecord,
             'qrSvg' => $qrSvg,
             'timetable' => $timetableEntries,
             'timetableEntries' => $timetableEntries,
+            'coursePasses' => $coursePasses,
             'nextExam' => $nextExam,
             'passExam' => $passExam,
             'statusSummary' => $statusSummary,
@@ -329,6 +364,20 @@ class StudentDashboardController extends Controller
             'generatedAt' => now(),
             'photoUrl' => $this->photoUrl($student->photo_path ?? null),
         ];
+    }
+
+    private function paymentQuery(string $matricNo, int $sessionId)
+    {
+        $query = DB::table('payment_records')->where('student_id', $matricNo);
+
+        if (Schema::hasColumn('payment_records', 'session_id')) {
+            $query->where(function ($inner) use ($sessionId) {
+                $inner->where('session_id', $sessionId)
+                    ->orWhereNull('session_id');
+            });
+        }
+
+        return $query;
     }
 
     private function studentNotes(string $matricNo)
@@ -434,6 +483,17 @@ class StudentDashboardController extends Controller
 
         if ($this->isTechnicalExamPassFailure($exception)) {
             return 'Exam pass could not be generated yet. Please try again shortly.';
+        }
+
+        if (
+            $exception instanceof RuntimeException
+            && (
+                str_contains($message, 'already generated')
+                || str_contains($message, 'already been used')
+                || str_contains($message, 'cannot be generated again')
+            )
+        ) {
+            return $exception->getMessage();
         }
 
         if (

@@ -9,17 +9,17 @@
 
 <style>
     .access-case { display:grid; gap:14px; }
-    .access-head { background:var(--bg-2); border:1px solid var(--line); border-radius:20px; padding:16px; display:grid; gap:14px; box-shadow:var(--shadow-sm); }
+    .access-head { background:rgba(235,241,255,.3); border-left:3px solid var(--navy); padding:16px; display:grid; gap:14px; }
     .access-person { display:flex; gap:14px; align-items:center; min-width:0; }
-    .access-person h1 { margin:0; font-size:clamp(22px,5vw,34px); line-height:1.02; letter-spacing:-.045em; overflow-wrap:anywhere; }
+    .access-person h1 { margin:0; font-size:clamp(22px,5vw,34px); line-height:1.02; letter-spacing:-.045em; overflow-wrap:break-word; word-break:normal; }
     .access-person p { margin:5px 0 0; }
-    .access-panel { background:var(--bg-2); border:1px solid var(--line); border-radius:18px; overflow:hidden; }
-    .access-panel h2 { margin:0; padding:13px 14px; border-bottom:1px solid var(--line); font-size:14px; }
-    .access-panel-body { padding:4px 14px; }
+    .access-panel { min-width:0; }
+    .access-panel h2 { margin:0; padding:0 0 12px; border-bottom:1px solid var(--line); font-size:14px; }
+    .access-panel-body { padding:4px 0; }
     .access-row { display:grid; gap:4px; padding:10px 0; border-bottom:1px solid var(--line); }
     .access-row:last-child { border-bottom:0; }
     .access-label { color:var(--ink-3); font-size:10px; font-weight:900; letter-spacing:.12em; text-transform:uppercase; }
-    .access-value { color:var(--ink); font-weight:800; overflow-wrap:anywhere; }
+    .access-value { color:var(--ink); font-weight:800; overflow-wrap:break-word; word-break:normal; }
     .access-actions { display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-start; }
     @media (min-width:760px){ .access-head{grid-template-columns:minmax(0,1fr) auto; align-items:center;} .access-panel{max-width:760px;} }
 </style>
@@ -48,7 +48,7 @@
             <div class="access-row"><span class="access-label">Decision</span><span class="access-value">{{ $scan->decision === 'DUPLICATE' ? 'Repeated scan' : \Illuminate\Support\Str::headline(strtolower((string) $scan->decision)) }}</span></div>
             <div class="access-row"><span class="access-label">Scan Time</span><span class="access-value mono">{{ $scan->timestamp }}</span></div>
             <div class="access-row"><span class="access-label">Examiner</span><span class="access-value">{{ $scan->examiner_name ?? $scan->examiner_username ?? 'Not available' }}</span></div>
-            <div class="access-row"><span class="access-label">Exam Pass</span><span class="access-value">{{ match(strtoupper((string) ($scan->token_status ?? ''))) { 'UNUSED' => 'Ready', 'USED' => 'Already scanned', 'REVOKED' => 'Unavailable', default => $scan->token_status ?? 'Not available' } }}</span></div>
+            <div class="access-row"><span class="access-label">Exam Pass</span><span class="access-value">{{ match(strtoupper((string) ($scan->token_status ?? ''))) { 'UNUSED' => 'Generated / Unused', 'USED' => 'Used', 'REVOKED' => 'Unavailable', default => $scan->token_status ?? 'Not available' } }}</span></div>
             <div class="access-row"><span class="access-label">Review Status</span><span class="access-value">{{ $scan->decision === 'DUPLICATE' ? 'Repeated scan recorded' : 'Recorded' }}</span></div>
             <div class="access-row">
                 <div class="access-actions">

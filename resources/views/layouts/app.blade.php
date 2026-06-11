@@ -34,12 +34,7 @@
                         Admin Portal
                     </a>
                 </div>
-                <!-- Mobile menu button -->
-                <button id="nav-toggle" class="sm:hidden p-2 rounded hover:bg-white/10">
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
-                    </svg>
-                </button>
+                <button id="nav-toggle" class="sm:hidden px-3 py-2 rounded hover:bg-white/10 text-sm font-semibold">Menu</button>
             </div>
             <!-- Mobile nav -->
             <div id="nav-mobile" class="hidden sm:hidden pb-3 text-sm">

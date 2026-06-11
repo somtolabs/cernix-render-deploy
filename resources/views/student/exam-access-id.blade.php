@@ -6,19 +6,19 @@
 <div class="cx-page-head">
     <div class="cx-eyebrow">Official Pass</div>
     <h1>Exam Access ID</h1>
-    <p>This official pass contains the student identity, payment status, QR access, and next exam details.</p>
+    <p>This official pass is valid for the course and timetable entry shown below.</p>
 </div>
 @if($token)
     @include('student.partials.exam-access-id')
     <div class="no-print" style="width:min(520px,100%);margin:18px auto 0;display:flex;gap:10px;flex-wrap:wrap">
         <button class="btn btn-primary" type="button" id="saveExamAccessId">Screenshot ID</button>
-        <a class="btn btn-primary" href="{{ route('student.exam-pass') }}">Print Pass</a>
-        <a class="btn btn-ghost" href="{{ route('student.dashboard') }}">Back to Overview</a>
+        <a class="btn btn-primary" href="{{ $passExam ? route('student.exam-pass.course', ['timetable' => $passExam->id]) : route('student.exam-pass') }}">Print Pass</a>
+        <a class="btn btn-ghost" href="{{ route('student.generate-exam-pass') }}">All Course Passes</a>
     </div>
 @else
     <div class="cx-empty">
         <strong>No exam pass generated yet.</strong><br>
-        Verify your payment and select an assigned paper before viewing your pass.
+        Generate the QR pass for an assigned course before viewing it.
         <div style="margin-top:12px"><a class="btn btn-primary" href="{{ route('student.generate-exam-pass') }}">Generate Exam Pass</a></div>
     </div>
 @endif

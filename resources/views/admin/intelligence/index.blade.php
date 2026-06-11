@@ -25,14 +25,14 @@
     .intel-actions { display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-end; }
     .intel-actions .admin-action { flex-shrink:0; }
     .intel-source { display:inline-flex; width:fit-content; padding:6px 10px; border-radius:999px; background:{{ $isPython ? 'rgba(5,150,105,.12)' : 'rgba(180,83,9,.12)' }}; color:{{ $isPython ? 'var(--emerald)' : 'var(--amber)' }}; font-size:11px; font-weight:900; letter-spacing:.08em; text-transform:uppercase; }
-    .intel-notice { border:1px solid var(--line); border-radius:16px; background:#fff; padding:12px 14px; color:var(--ink-2); line-height:1.55; }
-    .intel-metrics { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); border:1px solid var(--line); border-radius:18px; overflow:hidden; background:#fff; }
+    .intel-notice { border-left:3px solid var(--amber); background:rgba(180,83,9,.055); padding:12px 14px; color:var(--ink-2); line-height:1.55; }
+    .intel-metrics { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); border-block:1px solid var(--line); background:rgba(235,241,255,.2); }
     .intel-metrics .metric-cell { padding:13px; border-right:1px solid var(--line); border-bottom:1px solid var(--line); min-width:0; }
     .intel-metrics .metric-cell:nth-child(2n) { border-right:0; }
-    .intel-metrics .metric-value { overflow-wrap:anywhere; }
+    .intel-metrics .metric-value { overflow-wrap:break-word; word-break:normal; }
     .intel-list { margin:0; padding-left:18px; color:var(--ink-2); line-height:1.65; }
     .intel-list li + li { margin-top:4px; }
-    .intel-more { border:1px solid var(--line); border-radius:16px; background:#fff; overflow:hidden; }
+    .intel-more { border-block:1px solid var(--line); background:rgba(255,255,255,.32); }
     .intel-more summary { cursor:pointer; padding:12px 14px; font-weight:900; display:flex; justify-content:space-between; gap:10px; }
     .intel-more-body { padding:0 14px 14px; color:var(--ink-2); line-height:1.55; }
     .intel-issue { max-width:380px; line-height:1.45; }
@@ -40,12 +40,12 @@
     .intel-issue summary { cursor:pointer; color:var(--navy); font-size:12px; font-weight:900; }
     .intel-table .admin-table { min-width:900px; }
     .intel-mobile-cards { display:none; }
-    .intel-review-card { border:1px solid var(--line); border-radius:16px; background:#fff; padding:14px; display:grid; gap:10px; }
+    .intel-review-card { border-left:3px solid rgba(15,32,80,.28); border-bottom:1px solid var(--line); background:rgba(235,241,255,.16); padding:13px 14px; display:grid; gap:10px; }
     .intel-review-top { display:flex; justify-content:space-between; gap:10px; align-items:flex-start; flex-wrap:wrap; }
-    .intel-review-name { display:block; color:var(--ink); font-weight:950; line-height:1.15; overflow-wrap:anywhere; }
+    .intel-review-name { display:block; color:var(--ink); font-weight:950; line-height:1.15; overflow-wrap:break-word; word-break:normal; }
     .intel-review-meta { display:block; margin-top:4px; color:var(--ink-3); font-size:12px; line-height:1.45; overflow-wrap:normal; }
     .intel-review-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }
-    .intel-review-grid div { border:1px solid var(--line); border-radius:12px; padding:9px; background:rgba(244,244,239,.55); }
+    .intel-review-grid div { padding:8px 0; border-bottom:1px solid var(--line); }
     .intel-review-grid span { display:block; color:var(--ink-4); font-size:10px; font-weight:900; text-transform:uppercase; letter-spacing:.08em; }
     .intel-review-grid b { display:block; margin-top:4px; color:var(--ink); }
     .intel-review-copy { display:grid; gap:4px; color:var(--ink-2); line-height:1.55; }

@@ -20,9 +20,9 @@
 @if($results->count())
 <section class="admin-section">
     <div class="admin-section-head"><h2>Matches</h2><span>{{ $results->count() }} shown</span></div>
-    <div class="admin-section-body"><div class="admin-table-wrap"><table class="admin-table"><thead><tr><th>Name</th><th>Matric</th><th>Department</th><th>Level</th><th>Exam Pass</th><th>Action</th></tr></thead><tbody>
+    <div class="admin-section-body"><div class="admin-table-wrap mobile-list"><table class="admin-table"><thead><tr><th>Name</th><th>Matric</th><th>Department</th><th>Level</th><th>Exam Pass</th><th>Action</th></tr></thead><tbody>
         @foreach($results as $row)
-            <tr><td>{{ $row->full_name }}</td><td class="mono">{{ $row->matric_no }}</td><td>{{ $row->dept_name ?? 'Not available' }}</td><td>{{ $row->level }}</td><td>{{ match(strtoupper((string) ($row->token_status ?? ''))) { 'UNUSED' => 'Ready', 'USED' => 'Already scanned', 'REVOKED' => 'Unavailable', default => $row->token_status ?? 'Missing' } }}</td><td><a class="admin-action ghost" href="{{ route('admin.student-trace', ['q' => $queryText, 'student' => $row->matric_no]) }}">Trace</a></td></tr>
+                    <tr><td class="mobile-primary"><strong>{{ $row->full_name }}</strong></td><td class="mono" data-label="Matric">{{ $row->matric_no }}</td><td data-label="Department">{{ $row->dept_name ?? 'Not available' }}</td><td data-label="Level">{{ $row->level }} Level</td><td data-label="Exam Pass">{{ match(strtoupper((string) ($row->token_status ?? ''))) { 'UNUSED' => 'Generated / Unused', 'USED' => 'Used', 'REVOKED' => 'Unavailable', default => $row->token_status ?? 'Missing' } }}</td><td data-label="Action"><a class="admin-action ghost" href="{{ route('admin.student-trace', ['q' => $queryText, 'student' => $row->matric_no]) }}">Trace</a></td></tr>
         @endforeach
     </tbody></table></div></div>
 </section>
@@ -55,7 +55,7 @@
         <div class="admin-section-head"><h2>Access Summary</h2></div>
         <div class="admin-section-body"><div class="admin-info-list">
             <div class="admin-info-row"><span class="admin-label">Payment</span><span class="admin-value">{{ $payment ? 'Verified' : 'No payment record' }}</span></div>
-            <div class="admin-info-row"><span class="admin-label">Exam Pass</span><span class="admin-value">{{ $token ? match(strtoupper((string) $token->status)) { 'UNUSED' => 'Ready', 'USED' => 'Already scanned', 'REVOKED' => 'Unavailable', default => $token->status } : 'Not issued' }}</span></div>
+                <div class="admin-info-row"><span class="admin-label">Exam Pass</span><span class="admin-value">{{ $token ? match(strtoupper((string) $token->status)) { 'UNUSED' => 'Generated / Unused', 'USED' => 'Used', 'REVOKED' => 'Unavailable', default => $token->status } : 'Not issued' }}</span></div>
             <div class="admin-info-row"><span class="admin-label">Next Exam</span><span class="admin-value">{{ $nextExam ? ($nextExam->course_code.' · '.$nextExam->course_title.' · '.$nextExam->venue) : 'No upcoming exam found' }}</span></div>
         </div></div>
     </section>
@@ -72,7 +72,7 @@
     <div class="admin-section-head"><h2>Scan Timeline</h2></div>
     <div class="admin-section-body">
         @forelse($scans as $scan)
-            <div class="admin-info-row" style="grid-template-columns:auto 1fr auto;align-items:center">
+            <div class="admin-info-row trace-row">
                 <span class="admin-status {{ $scan->decision === 'APPROVED' ? 'green' : ($scan->decision === 'DUPLICATE' ? 'amber' : 'red') }}">{{ $scan->decision === 'DUPLICATE' ? 'REPEATED' : $scan->decision }}</span>
                 <span class="muted">{{ $scan->timestamp }} · {{ $scan->examiner_name ?? 'Examiner unavailable' }}</span>
                 <a class="admin-action ghost" href="{{ route('admin.scan-logs.show', $scan->log_id) }}">View</a>

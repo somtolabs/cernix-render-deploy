@@ -17,6 +17,9 @@ Route::get('/student/login', fn () => redirect()->route('student.register'))->na
 Route::get('/student/dashboard', [StudentDashboardController::class, 'index'])->name('student.dashboard');
 Route::get('/student/profile', [StudentDashboardController::class, 'profile'])->name('student.profile');
 Route::get('/student/exam-access-id', [StudentDashboardController::class, 'examAccessId'])->name('student.exam-access-id');
+Route::get('/student/exam-access-id/{timetable}', [StudentDashboardController::class, 'examAccessId'])
+    ->whereNumber('timetable')
+    ->name('student.exam-access-id.course');
 Route::get('/student/timetable', [StudentDashboardController::class, 'timetable'])->name('student.timetable');
 Route::get('/student/payment', [StudentDashboardController::class, 'payment'])->name('student.payment');
 Route::get('/student/generate-exam-pass', [StudentDashboardController::class, 'generateExamPass'])->name('student.generate-exam-pass');
@@ -27,6 +30,9 @@ Route::post('/student/notifications/{note}/acknowledge', [StudentDashboardContro
 Route::get('/student/scans/{log}', [StudentDashboardController::class, 'scanDetail'])->name('student.scans.show');
 Route::get('/student/exam-pass', [StudentDashboardController::class, 'printPass'])->name('student.exam-pass');
 Route::get('/student/exam-pass/print', [StudentDashboardController::class, 'printPass'])->name('student.pass.print');
+Route::get('/student/exam-pass/{timetable}/print', [StudentDashboardController::class, 'printPass'])
+    ->whereNumber('timetable')
+    ->name('student.exam-pass.course');
 Route::post('/student/logout', [StudentDashboardController::class, 'logout'])->name('student.logout');
 
 // Examiner portal (login-gated — NO registration)
@@ -71,6 +77,8 @@ Route::put('/admin/timetable/{entry}', [AdminWebController::class, 'timetableUpd
 Route::delete('/admin/timetable/{entry}', [AdminWebController::class, 'timetableDestroy'])->name('admin.timetable.destroy');
 Route::get('/admin/scan-logs', [AdminWebController::class, 'scanLogs'])->name('admin.scan-logs');
 Route::get('/admin/scan-logs/{log}', [AdminWebController::class, 'scanLogShow'])->name('admin.scan-logs.show');
+Route::get('/admin/qr-tokens', [AdminWebController::class, 'qrTokens'])->name('admin.qr-tokens');
+Route::patch('/admin/qr-tokens/{token}/revoke', [AdminWebController::class, 'qrTokenRevoke'])->name('admin.qr-tokens.revoke');
 Route::get('/admin/activity', [AdminWebController::class, 'activity'])->name('admin.activity');
 Route::get('/admin/settings', [AdminWebController::class, 'settings'])->name('admin.settings');
 Route::patch('/admin/settings/fees', [AdminWebController::class, 'settingsFeesUpdate'])->name('admin.settings.fees.update');

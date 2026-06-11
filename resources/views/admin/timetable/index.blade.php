@@ -13,12 +13,12 @@
     .tt-filter { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:9px; margin-bottom:16px; }
     .tt-filter-actions { display:flex; align-items:end; gap:8px; flex-wrap:wrap; }
     .tt-mobile-list { display:none; gap:10px; }
-    .tt-card { padding:14px; border:1px solid var(--line); border-radius:16px; background:rgba(235,241,255,.42); display:grid; gap:10px; min-width:0; word-break:normal; writing-mode:horizontal-tb; }
+    .tt-card { padding:14px; border-left:3px solid rgba(15,32,80,.38); border-bottom:1px solid var(--line); background:rgba(235,241,255,.18); display:grid; gap:12px; min-width:0; word-break:normal; }
     .tt-card-head { display:flex; justify-content:space-between; align-items:flex-start; gap:10px; }
     .tt-card h3 { margin:0; font-size:15px; }
     .tt-card p { margin:4px 0 0; color:var(--ink-3); font-size:12px; line-height:1.5; }
     .tt-card-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }
-    .tt-card-detail { padding:9px; border-radius:11px; background:var(--bg); }
+    .tt-card-detail { padding:7px 0; border-bottom:1px solid rgba(15,32,80,.08); }
     .tt-card-detail span { display:block; color:var(--ink-3); font-size:9px; font-weight:900; text-transform:uppercase; letter-spacing:.07em; }
     .tt-card-detail b { display:block; margin-top:3px; font-size:12px; overflow-wrap:break-word; word-break:normal; }
     .tt-card-actions { display:flex; justify-content:flex-end; gap:8px; flex-wrap:wrap; }
@@ -32,6 +32,7 @@
         .tt-form-grid, .tt-filter { grid-template-columns:1fr; }
         .tt-span-2, .tt-actions { grid-column:1; }
         .tt-actions .admin-action, .tt-filter-actions .admin-action { flex:1; }
+        .tt-card-grid { grid-template-columns:1fr; }
     }
 </style>
 <div class="admin-page-head"><div><div class="cx-eyebrow">Exam Schedule</div><h1>Timetable</h1><p>Create, edit, cancel, and filter exam timetable entries. Venue is one hall per course/department/level.</p></div></div>

@@ -6,12 +6,9 @@
 @php
     $registeredAt = $student->created_at ? \Illuminate\Support\Carbon::parse($student->created_at)->format('d M Y, H:i') : 'Not available';
     $paymentAt = $payment?->verified_at ? \Illuminate\Support\Carbon::parse($payment->verified_at)->format('d M Y, H:i') : null;
-    $steps = [
-        ['label' => 'Registration', 'value' => 'Complete', 'meta' => $registeredAt],
-        ['label' => 'Payment', 'value' => $payment ? 'Verified' : 'Pending', 'meta' => $paymentAt ?: 'Awaiting payment record'],
-        ['label' => 'Exam Pass', 'value' => match(strtoupper((string) ($token->status ?? ''))) { 'UNUSED' => 'Ready', 'USED' => 'Already scanned', 'REVOKED' => 'Unavailable', default => 'Not generated' }, 'meta' => $token?->issued_at ? 'Issued ' . \Illuminate\Support\Carbon::parse($token->issued_at)->format('d M Y, H:i') : 'Generate after payment verification'],
-        ['label' => 'Timetable', 'value' => $timetable->count() ? 'Assigned' : 'Not assigned', 'meta' => $timetable->count() ? $timetable->count() . ' exams available' : 'Check back after admin scheduling'],
-    ];
+    $notGeneratedCount = $coursePasses->where('qr_status', 'Not Generated')->count();
+    $unusedCount = $coursePasses->where('qr_status', 'Generated / Unused')->count();
+    $usedCount = $coursePasses->where('qr_status', 'Used')->count();
     $visibleScans = $scanHistory->take(3);
     $additionalScans = $scanHistory->slice(3);
 @endphp
@@ -23,34 +20,51 @@
 </div>
 
 <style>
-    .student-compact { display:grid; gap:14px; }
-    .student-identity { border:1px solid var(--line); border-radius:20px; background:#fff; padding:18px; display:grid; gap:13px; justify-items:center; text-align:center; box-shadow:var(--shadow-sm); }
+    .student-compact { display:grid; gap:24px; }
+    .student-identity { border-left:3px solid rgba(51,71,95,.38); background:rgba(95,112,130,.045); padding:20px; display:grid; gap:16px; justify-items:center; text-align:center; }
     .student-id-main { display:grid; gap:10px; justify-items:center; min-width:0; width:100%; max-width:720px; }
     .student-id-main > div { min-width:0; width:100%; }
-    .student-id-main h2 { margin:0; font-size:clamp(22px,5vw,30px); letter-spacing:-.025em; line-height:1.08; overflow-wrap:anywhere; }
+    .student-id-main h2 { margin:0; font-size:clamp(22px,5vw,30px); letter-spacing:-.025em; line-height:1.08; overflow-wrap:break-word; word-break:normal; }
     .student-id-main p { margin:5px 0 0; }
-    .student-detail-line { letter-spacing:0; line-height:1.45; overflow-wrap:anywhere; }
+    .student-detail-line { letter-spacing:0; line-height:1.45; overflow-wrap:break-word; word-break:normal; }
     .student-status-line { display:flex; flex-wrap:wrap; gap:7px; justify-content:center; }
-    .student-status-line span { display:inline-flex; align-items:center; min-height:28px; padding:0 9px; border-radius:999px; border:1px solid var(--line); background:rgba(244,244,239,.72); font-size:11px; font-weight:900; }
-    .student-status-line .is-ok { color:var(--emerald); background:rgba(5,150,105,.1); border-color:rgba(5,150,105,.18); }
-    .student-status-line .is-pending { color:var(--amber); background:rgba(180,83,9,.1); border-color:rgba(180,83,9,.18); }
+    .student-status-line span { display:inline-flex; align-items:center; min-height:28px; padding:0 9px; border-radius:999px; background:rgba(244,244,239,.72); font-size:11px; font-weight:900; }
+    .student-status-line .is-ok { color:var(--emerald); background:rgba(85,117,101,.1); }
+    .student-status-line .is-pending { color:var(--amber); background:rgba(138,117,85,.1); }
     .student-actions { display:grid; gap:8px; width:100%; max-width:360px; }
-    .student-next { border:1px solid var(--line); border-radius:18px; background:#fff; padding:14px 16px; display:grid; gap:6px; }
+    .student-next { border-left:3px solid var(--navy-2); background:rgba(95,112,130,.045); padding:14px 16px; display:grid; gap:6px; }
     .student-next h2 { margin:0; font-size:18px; letter-spacing:-.02em; }
-    .student-activity { min-width:0; border:1px solid var(--line); border-radius:18px; background:#fff; padding:14px 16px; }
+    .student-activity { min-width:0; border-top:1px solid var(--line); padding:18px 0 0; }
     .student-history-mobile { display:grid; gap:8px; }
-    .student-history-row { display:grid; gap:7px; padding:12px; border:1px solid var(--line); border-radius:14px; background:rgba(244,244,239,.54); min-width:0; }
+    .student-history-row { display:grid; gap:7px; padding:12px 4px; border-bottom:1px solid var(--line); min-width:0; }
     .student-history-row-head { display:flex; justify-content:space-between; align-items:flex-start; gap:8px; flex-wrap:wrap; }
-    .student-history-row p { margin:0; color:var(--ink-3); font-size:12px; line-height:1.45; overflow-wrap:anywhere; }
+    .student-history-row p { margin:0; color:var(--ink-3); font-size:12px; line-height:1.45; overflow-wrap:break-word; word-break:normal; }
     .student-history-row .btn { justify-self:start; min-height:36px; padding:0 12px; font-size:12px; }
     .student-history-desktop { display:none; }
-    .student-more { border:1px solid var(--line); border-radius:16px; background:#fff; overflow:hidden; }
-    .student-more summary { cursor:pointer; padding:12px 14px; font-weight:900; }
-    .student-more-body { padding:0 14px 14px; }
+    .student-more { border-top:1px solid var(--line); }
+    .student-more summary { cursor:pointer; padding:14px 0; font-weight:900; }
+    .student-more-body { padding:0 0 14px; }
+    .student-more .cx-step { border:0; border-bottom:1px solid var(--line); border-radius:0; background:transparent; }
     .student-preview-note { margin:10px 0 0; color:var(--ink-3); font-size:12px; text-align:center; }
+    .course-access { border-top:1px solid var(--line); padding-top:18px; }
+    .course-access-list { display:grid; }
+    .course-access-row { display:grid; gap:10px; padding:14px 0; border-bottom:1px solid var(--line); min-width:0; }
+    .course-access-row h3 { margin:0; font-size:14px; overflow-wrap:break-word; word-break:normal; }
+    .course-access-row p { margin:5px 0 0; color:var(--ink-3); font-size:12px; line-height:1.5; overflow-wrap:break-word; word-break:normal; }
+    .course-access-actions { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+    .course-summary { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); border-block:1px solid var(--line); background:rgba(95,112,130,.035); }
+    .course-summary div { padding:12px; border-right:1px solid var(--line); min-width:0; }
+    .course-summary div:last-child { border-right:0; }
+    .course-summary span { display:block; color:var(--ink-3); font-size:10px; font-weight:900; letter-spacing:.08em; text-transform:uppercase; }
+    .course-summary b { display:block; margin-top:5px; }
     @media (min-width:680px) {
         .student-history-desktop { display:block; }
         .student-history-mobile { display:none; }
+        .course-access-row { grid-template-columns:minmax(0,1fr) auto; align-items:center; }
+        .course-access-actions { justify-content:flex-end; }
+    }
+    @media (max-width:520px) {
+        .course-access-actions .btn { width:100%; }
     }
 </style>
 
@@ -65,19 +79,51 @@
                 <div class="student-status-line" style="margin-top:10px">
                     <span class="is-ok">Registration: Complete</span>
                     <span class="{{ $payment ? 'is-ok' : 'is-pending' }}">Payment: {{ $payment ? 'Verified' : 'Pending' }}</span>
-                    <span class="{{ strtoupper((string) ($token->status ?? '')) === 'UNUSED' ? 'is-ok' : 'is-pending' }}">Exam Pass: {{ match(strtoupper((string) ($token->status ?? ''))) { 'UNUSED' => 'Ready', 'USED' => 'Already scanned', 'REVOKED' => 'Unavailable', default => 'Not generated' } }}</span>
+                    <span class="{{ $unusedCount > 0 ? 'is-ok' : 'is-pending' }}">Course QR: {{ $unusedCount }} unused</span>
                     <span class="{{ $timetable->count() ? 'is-ok' : 'is-pending' }}">{{ $timetable->count() ? $timetable->count() . ' exams assigned' : 'No timetable yet' }}</span>
                 </div>
             </div>
         </div>
         <div class="student-actions">
-            @if($token)
-                <a class="btn btn-primary btn-block" href="{{ route('student.exam-access-id') }}">View Exam Pass</a>
-                <a class="btn btn-ghost btn-block" href="{{ route('student.exam-pass') }}">Print Exam Pass</a>
-            @else
-                <a class="btn btn-primary btn-block" href="{{ route('student.generate-exam-pass') }}">Generate Exam Pass</a>
-            @endif
+            <a class="btn btn-primary btn-block" href="{{ route('student.generate-exam-pass') }}">{{ $notGeneratedCount > 0 ? 'Manage Course Exam Passes' : 'View Course Exam Passes' }}</a>
             <a class="btn btn-ghost btn-block" href="{{ route('student.timetable') }}">Your Timetable</a>
+        </div>
+    </section>
+
+    <section class="course-access">
+        <div class="cx-section-title"><h2>Course QR Access</h2><span>{{ $coursePasses->count() }} assigned</span></div>
+        <div class="course-summary" aria-label="Course QR status summary">
+            <div><span>Not Generated</span><b>{{ $notGeneratedCount }}</b></div>
+            <div><span>Generated / Unused</span><b>{{ $unusedCount }}</b></div>
+            <div><span>Used</span><b>{{ $usedCount }}</b></div>
+        </div>
+        <div class="course-access-list">
+            @forelse($coursePasses as $exam)
+                @php
+                    $statusClass = match($exam->qr_status) {
+                        'Generated / Unused' => 'emerald',
+                        'Used' => 'amber',
+                        'Unavailable' => 'red',
+                        default => '',
+                    };
+                @endphp
+                <article class="course-access-row">
+                    <div>
+                        <h3>{{ $exam->course_code }} · {{ $exam->course_title ?: 'Course title not assigned yet' }}</h3>
+                        <p>{{ \Illuminate\Support\Carbon::parse($exam->exam_date)->format('D, d M Y') }} · {{ substr($exam->start_time, 0, 5) }}{{ $exam->end_time ? ' - ' . substr($exam->end_time, 0, 5) : '' }} · {{ $exam->venue ?: 'Hall not assigned yet' }}</p>
+                    </div>
+                    <div class="course-access-actions">
+                        <span class="chip {{ $statusClass }}">{{ $exam->qr_status }}</span>
+                        @if($exam->qr_status === 'Not Generated')
+                            <a class="btn btn-primary" href="{{ route('student.generate-exam-pass') }}">Generate</a>
+                        @elseif($exam->qr_token && in_array($exam->qr_status, ['Generated / Unused', 'Used'], true))
+                            <a class="btn btn-ghost" href="{{ route('student.exam-access-id.course', ['timetable' => $exam->id]) }}">View</a>
+                        @endif
+                    </div>
+                </article>
+            @empty
+                <div class="cx-empty">No exam timetable assigned yet.</div>
+            @endforelse
         </div>
     </section>
 
@@ -129,20 +175,6 @@
         <div class="cx-empty">No scan activity has been recorded for your access ID yet.</div>
     @endif
 </section>
-
-<details class="student-more">
-    <summary>View readiness details</summary>
-    <div class="student-more-body">
-        <div class="cx-timeline">
-            @foreach($steps as $index => $step)
-                <article class="cx-step">
-                    <div class="cx-step-dot">{{ $index + 1 }}</div>
-                    <div><b>{{ $step['label'] }} · {{ $step['value'] }}</b><span>{{ $step['meta'] }}</span></div>
-                </article>
-            @endforeach
-        </div>
-    </div>
-</details>
 
 <details class="student-more">
     <summary>View timetable preview</summary>

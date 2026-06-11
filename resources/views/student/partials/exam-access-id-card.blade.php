@@ -13,8 +13,8 @@
         default => 'is-pending',
     };
     $passStatus = match ($status) {
-        'UNUSED' => 'Ready',
-        'USED' => 'Already scanned',
+        'UNUSED' => 'Generated / Unused',
+        'USED' => 'Used',
         'REVOKED' => 'Unavailable',
         default => 'Pending',
     };
@@ -33,8 +33,8 @@
         margin: 0 auto;
         background: rgba(255, 255, 255, .96);
         border: 1px solid var(--line, #dfddd4);
-        border-radius: 22px;
-        box-shadow: 0 18px 44px rgba(14, 18, 38, .11);
+        border-radius: 14px;
+        box-shadow: 0 8px 20px rgba(14, 18, 38, .06);
     }
     .exam-access-id-card::before {
         content: "";
@@ -44,7 +44,7 @@
         background-repeat: no-repeat;
         background-position: center;
         background-size: 90%;
-        opacity: .22;
+        opacity: .1;
         pointer-events: none;
         z-index: 0;
     }
@@ -104,10 +104,8 @@
         grid-template-columns: auto minmax(0, 1fr);
         align-items: center;
         gap: 12px;
-        padding: 9px;
-        border: 1px solid rgba(223,221,212,.8);
-        border-radius: 16px;
-        background: rgba(255,255,255,.72);
+        padding: 9px 0 12px;
+        border-bottom: 1px solid rgba(223,221,212,.8);
     }
     .identity-row .cernix-passport-photo--passport {
         width: 68px;
@@ -120,7 +118,8 @@
         font-size: clamp(16px, 4.2vw, 20px);
         line-height: 1.08;
         letter-spacing: -.025em;
-        overflow-wrap: anywhere;
+        overflow-wrap: break-word;
+        word-break: normal;
     }
     .identity-meta {
         margin-top: 6px;
@@ -139,10 +138,7 @@
     }
     .qr-shell {
         text-align: center;
-        padding: 9px;
-        border: 1px solid rgba(223,221,212,.82);
-        border-radius: 16px;
-        background: rgba(255,255,255,.78);
+        padding: 9px 0;
     }
     .qr-box {
         width: min(260px, 78vw);
@@ -150,8 +146,7 @@
         padding: 9px;
         background: #fff;
         border: 1px solid var(--line-2, #d7d4c8);
-        border-radius: 14px;
-        box-shadow: 0 8px 22px rgba(14,18,38,.08);
+        border-radius: 8px;
     }
     .qr-box svg { width: 100%; height: auto; display: block; }
     .qr-missing { min-height: 190px; display: grid; place-items: center; color: var(--ink-3, #6b7085); font-weight: 800; }
@@ -163,8 +158,7 @@
     }
     .next-exam {
         padding: 10px 12px;
-        border-radius: 15px;
-        border: 1px solid rgba(20,83,45,.16);
+        border-left: 3px solid rgba(20,83,45,.28);
         background: rgba(236,253,245,.72);
     }
     .next-exam span,
@@ -195,17 +189,16 @@
     }
     .detail-item {
         min-width: 0;
-        padding: 9px 10px;
-        border: 1px solid rgba(223,221,212,.8);
-        border-radius: 12px;
-        background: rgba(255,255,255,.72);
+        padding: 9px 4px;
+        border-bottom: 1px solid rgba(223,221,212,.8);
     }
     .detail-item b {
         display: block;
         color: var(--ink, #141827);
         font-size: 11.5px;
         line-height: 1.25;
-        overflow-wrap: anywhere;
+        overflow-wrap: break-word;
+        word-break: normal;
     }
     .detail-item.is-wide { grid-column: 1 / -1; }
     .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }

@@ -6,27 +6,27 @@
 @endphp
 
 <style>
-    .scan-case { display:grid; gap:14px; }
-    .scan-head { background:#fff; border:1px solid var(--line); border-radius:20px; padding:16px; display:grid; gap:14px; box-shadow:var(--shadow-sm); }
+    .scan-case { display:grid; gap:24px; }
+    .scan-head { background:rgba(236,246,239,.62); border-left:3px solid #64756a; padding:16px; display:grid; gap:14px; }
     .scan-person { display:flex; gap:14px; align-items:center; min-width:0; }
-    .scan-person h1 { margin:0; font-size:clamp(22px,5vw,34px); line-height:1.02; letter-spacing:-.045em; overflow-wrap:anywhere; }
+    .scan-person h1 { margin:0; font-size:clamp(22px,5vw,34px); line-height:1.02; letter-spacing:-.045em; overflow-wrap:break-word; word-break:normal; }
     .scan-person p { margin:5px 0 0; }
     .scan-status { display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; }
-    .scan-panels { display:grid; gap:12px; }
-    .scan-panel { background:#fff; border:1px solid var(--line); border-radius:18px; overflow:hidden; }
-    .scan-panel h2 { margin:0; padding:13px 14px; border-bottom:1px solid var(--line); font-size:14px; }
-    .scan-panel-body { padding:4px 14px; }
+    .scan-panels { display:grid; gap:28px; }
+    .scan-panel { min-width:0; }
+    .scan-panel h2 { margin:0; padding:0 0 12px; border-bottom:1px solid var(--line); font-size:14px; }
+    .scan-panel-body { padding:4px 0; }
     .scan-row { display:grid; gap:4px; padding:10px 0; border-bottom:1px solid var(--line); }
     .scan-row:last-child { border-bottom:0; }
     .scan-label { color:var(--ink-3); font-size:10px; font-weight:900; letter-spacing:.12em; text-transform:uppercase; }
-    .scan-value { color:var(--ink); font-weight:800; overflow-wrap:anywhere; }
-    .scan-strip { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); border:1px solid var(--line); border-radius:18px; overflow:hidden; background:#fff; }
+    .scan-value { color:var(--ink); font-weight:800; overflow-wrap:break-word; word-break:normal; }
+    .scan-strip { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); border-block:1px solid var(--line); background:rgba(236,246,239,.3); }
     .scan-strip div { padding:12px; border-right:1px solid var(--line); border-bottom:1px solid var(--line); }
     .scan-strip div:nth-child(2n){ border-right:0; }
     .scan-strip span { display:block; color:var(--ink-3); font-size:10px; font-weight:900; letter-spacing:.12em; text-transform:uppercase; }
     .scan-strip b { display:block; margin-top:6px; font-family:'JetBrains Mono',ui-monospace,monospace; font-size:18px; }
     .scan-history { display:grid; gap:8px; }
-    .scan-history-row { border:1px solid var(--line); border-radius:14px; padding:10px 12px; display:grid; gap:6px; }
+    .scan-history-row { border-bottom:1px solid var(--line); padding:10px 0 12px; display:grid; gap:6px; }
     .scan-history-top { display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; }
     @media (min-width:900px){ .scan-head{grid-template-columns:minmax(0,1fr) auto; align-items:center;} .scan-panels{grid-template-columns:minmax(0,1fr) minmax(300px,.78fr);} .scan-strip{grid-template-columns:repeat(4,minmax(0,1fr));}.scan-strip div:nth-child(2n){border-right:1px solid var(--line)}.scan-strip div:nth-child(4n){border-right:0} }
 </style>
@@ -84,7 +84,7 @@
         <section class="scan-panel">
             <h2>Access / Payment</h2>
             <div class="scan-panel-body">
-                <div class="scan-row"><span class="scan-label">Pass Status</span><span class="scan-value">{{ match(strtoupper((string) ($scan->token_status ?? ''))) { 'UNUSED' => 'Ready', 'USED' => 'Already scanned', 'REVOKED' => 'Unavailable', default => $scan->token_status ?? 'Not available' } }}</span></div>
+                <div class="scan-row"><span class="scan-label">Pass Status</span><span class="scan-value">{{ match(strtoupper((string) ($scan->token_status ?? ''))) { 'UNUSED' => 'Generated / Unused', 'USED' => 'Used', 'REVOKED' => 'Unavailable', default => $scan->token_status ?? 'Not available' } }}</span></div>
                 @if($payment)
                     <div class="scan-row"><span class="scan-label">Payment</span><span class="scan-value">Verified</span></div>
                     <div class="scan-row"><span class="scan-label">Verified</span><span class="scan-value mono">{{ \Illuminate\Support\Carbon::parse($payment->verified_at)->format('d M Y, H:i') }}</span></div>
@@ -126,5 +126,20 @@
             </div>
         </section>
     </div>
+
+    <section class="scan-panel">
+        <h2>Assigned Courses and QR Status</h2>
+        <div class="scan-panel-body">
+            @forelse($courseAccess as $exam)
+                <div class="scan-row">
+                    <span class="scan-label">{{ $exam->course_code }} · {{ $exam->course_title ?: 'Course title not assigned yet' }}</span>
+                    <span class="scan-value">{{ $exam->venue ?: 'Hall not assigned yet' }} · {{ \Illuminate\Support\Carbon::parse($exam->exam_date)->format('d M Y') }} · {{ substr($exam->start_time, 0, 5) }}{{ $exam->end_time ? ' - ' . substr($exam->end_time, 0, 5) : '' }}</span>
+                    <span class="ex-muted">QR: {{ $exam->qr_status }} · Scan: {{ $exam->scan_status }}@if($exam->last_scan_at) · Last scan {{ \Illuminate\Support\Carbon::parse($exam->last_scan_at)->format('d M Y, H:i') }}@endif</span>
+                </div>
+            @empty
+                <div class="ex-empty">No exam timetable assigned yet.</div>
+            @endforelse
+        </div>
+    </section>
 </div>
 @endsection

@@ -17,6 +17,7 @@
         ['label' => 'Session', 'route' => route('admin.settings') . '#sessions'],
         ['label' => 'Audit Trail', 'route' => route('admin.activity')],
         ['label' => 'Verification Logs', 'route' => route('admin.scan-logs')],
+        ['label' => 'Course QR Passes', 'route' => route('admin.qr-tokens')],
     ];
     $adminLinks = [
         ['label' => 'Students', 'route' => route('admin.students')],
@@ -38,40 +39,40 @@
     .dash-head h1 { margin:0; font-size:clamp(30px,5vw,46px); line-height:1; letter-spacing:-.06em; }
     .dash-head p { margin:8px 0 0; max-width:720px; color:var(--ink-3); line-height:1.6; }
     .dash-role { display:inline-flex; width:fit-content; padding:6px 10px; border-radius:999px; border:1px solid var(--line); background:#fff; color:var(--navy); font-size:11px; font-weight:900; letter-spacing:.08em; text-transform:uppercase; }
-    .dash-strip { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); border:1px solid var(--line); border-radius:18px; overflow:hidden; background:#fff; margin-bottom:16px; }
+    .dash-strip { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); border-block:1px solid var(--line); background:rgba(235,241,255,.2); margin-bottom:22px; }
     .dash-strip div { padding:14px; border-right:1px solid var(--line); border-bottom:1px solid var(--line); min-width:0; background:rgba(244,247,252,.62); }
     .dash-strip div:nth-child(2n) { border-right:0; }
     .dash-strip span { display:block; color:var(--ink-4); font-size:10px; font-weight:900; letter-spacing:.13em; text-transform:uppercase; }
-    .dash-strip b { display:block; margin-top:7px; color:var(--ink); font-size:18px; line-height:1.2; overflow-wrap:anywhere; }
-    .dash-layout { display:grid; gap:16px; }
-    .dash-panel { border:1px solid var(--line); border-radius:20px; background:#fff; box-shadow:var(--shadow-sm); overflow:hidden; animation:adminFade .24s ease both; }
-    .dash-panel-head { padding:16px 18px; border-bottom:1px solid var(--line); border-left:4px solid rgba(15,32,80,.32); display:flex; justify-content:space-between; gap:12px; align-items:center; flex-wrap:wrap; background:rgba(244,247,252,.62); }
+    .dash-strip b { display:block; margin-top:7px; color:var(--ink); font-size:18px; line-height:1.2; overflow-wrap:break-word; word-break:normal; }
+    .dash-layout { display:grid; gap:28px; }
+    .dash-panel { min-width:0; animation:adminFade .24s ease both; }
+    .dash-panel-head { padding:0 0 13px; border-bottom:1px solid var(--line); display:flex; justify-content:space-between; gap:12px; align-items:center; flex-wrap:wrap; }
     .dash-panel-head h2 { margin:0; font-size:16px; letter-spacing:-.02em; }
     .dash-panel-head span { color:var(--ink-3); font-size:12px; }
-    .dash-panel-body { padding:16px 18px; }
+    .dash-panel-body { padding:16px 0 0; }
     .dash-panel-head .admin-action { flex-shrink:0; }
     .dash-list { display:grid; gap:0; }
     .dash-row { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:14px; align-items:center; padding:12px 0; border-bottom:1px solid var(--line); }
     .dash-row:last-child { border-bottom:0; }
     .dash-row > div { min-width:0; }
-    .dash-row b { display:block; color:var(--ink); overflow-wrap:anywhere; }
+    .dash-row b { display:block; color:var(--ink); overflow-wrap:break-word; word-break:normal; }
     .dash-row span { display:block; margin-top:4px; color:var(--ink-3); font-size:12px; line-height:1.45; }
     .dash-row > strong,
     .dash-row > .dash-pill,
-    .dash-row > .admin-action { justify-self:end; max-width:100%; overflow-wrap:anywhere; white-space:normal; text-align:right; }
+    .dash-row > .admin-action { justify-self:end; max-width:100%; overflow-wrap:break-word; word-break:normal; white-space:normal; text-align:right; }
     .dash-intel { display:grid; gap:14px; }
     .dash-intel-copy { min-width:0; }
-    .dash-intel-copy b { display:block; color:var(--ink); overflow-wrap:anywhere; }
+    .dash-intel-copy b { display:block; color:var(--ink); overflow-wrap:break-word; word-break:normal; }
     .dash-intel-copy span { display:block; margin-top:4px; color:var(--ink-3); font-size:12px; line-height:1.5; max-width:620px; }
     .dash-intel-metrics { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
-    .dash-intel-chip { display:inline-flex; min-height:32px; align-items:center; padding:0 10px; border:1px solid var(--line); border-radius:999px; background:rgba(244,244,239,.72); color:var(--ink); font-size:12px; font-weight:900; line-height:1; white-space:nowrap; }
+    .dash-intel-chip { display:inline-flex; min-height:32px; align-items:center; padding:0 10px; border-radius:999px; background:rgba(15,32,80,.055); color:var(--ink); font-size:12px; font-weight:900; line-height:1; white-space:nowrap; }
     .dash-actions { display:grid; gap:8px; }
-    .dash-actions a { min-height:42px; display:flex; align-items:center; justify-content:space-between; gap:12px; padding:0 12px; border:1px solid var(--line); border-radius:14px; background:#fff; color:var(--ink); text-decoration:none; font-size:13px; font-weight:900; transition:transform .16s ease, border-color .16s ease, box-shadow .16s ease; }
-    .dash-actions a:hover { transform:translateY(-1px); border-color:var(--line-2); box-shadow:var(--shadow-sm); }
+    .dash-actions a { min-height:42px; display:flex; align-items:center; justify-content:space-between; gap:12px; padding:0 4px; border-bottom:1px solid var(--line); color:var(--ink); text-decoration:none; font-size:13px; font-weight:900; transition:color .16s ease; }
+    .dash-actions a:hover { color:var(--navy); }
     .dash-action-bar { display:flex; flex-wrap:wrap; gap:8px; margin:0 0 16px; }
-    .dash-action-bar a { min-height:38px; display:inline-flex; align-items:center; padding:0 12px; border:1px solid var(--line); border-radius:999px; background:#fff; color:var(--ink); text-decoration:none; font-size:12px; font-weight:900; }
+    .dash-action-bar a { min-height:38px; display:inline-flex; align-items:center; padding:0 11px; border-radius:8px; background:rgba(235,241,255,.55); color:var(--ink); text-decoration:none; font-size:12px; font-weight:900; }
     .dash-review-strip { display:flex; flex-wrap:wrap; gap:8px; margin:0 0 16px; }
-    .dash-review-strip span { display:inline-flex; gap:6px; align-items:center; min-height:34px; padding:0 10px; border:1px solid var(--line); border-radius:999px; background:#fff; font-size:12px; font-weight:900; }
+    .dash-review-strip span { display:inline-flex; gap:6px; align-items:center; min-height:34px; padding:0 10px; border-left:2px solid rgba(180,83,9,.35); background:rgba(180,83,9,.045); font-size:12px; font-weight:900; }
     .dash-pill { display:inline-flex; align-items:center; width:fit-content; padding:4px 8px; border-radius:999px; background:rgba(15,32,80,.06); color:var(--ink-2); font-size:10px; font-weight:900; text-transform:uppercase; letter-spacing:.08em; }
     @media (min-width:900px) {
         .dash-strip { grid-template-columns:repeat({{ $isSuperAdmin ? 6 : 4 }},minmax(0,1fr)); }
@@ -86,7 +87,7 @@
         .dash-role { margin-top:12px; }
         .dash-panel-head { align-items:flex-start; }
         .dash-panel-head .admin-action { width:100%; min-height:40px; }
-        .dash-panel-body { padding:14px; }
+        .dash-panel-body { padding:14px 0 0; }
         .dash-row { grid-template-columns:1fr; gap:8px; align-items:start; }
         .dash-row > strong,
         .dash-row > .dash-pill,
@@ -147,7 +148,7 @@
     <section class="dash-strip" aria-label="Super Admin overview">
         <div><span>Session</span><b>{{ $activeSession ? ($activeSession->semester . ' ' . $activeSession->academic_year) : 'Inactive' }}</b></div>
         <div><span>Demo Mode</span><b>{{ \App\Support\DepartmentFees::isDemoMode() ? 'Enabled' : 'Disabled' }}</b></div>
-        <div><span>School Fees</span><b>{{ number_format($metrics['departments'] ?? 0) }} departments</b></div>
+        <div><span>Pending Course Passes</span><b>{{ number_format($metrics['pending_course_passes'] ?? 0) }}</b></div>
         <div><span>Admin Users</span><b>{{ number_format($metrics['admin_users'] ?? 0) }}</b></div>
         <div><span>Examiners</span><b>{{ number_format($metrics['examiner_users'] ?? 0) }}</b></div>
         <div><span>Verification</span><b>{{ number_format($metrics['total_scans']) }} scans</b></div>
@@ -187,7 +188,7 @@
         <div><span>Students</span><b>{{ number_format($metrics['students']) }}</b></div>
         <div><span>Payments</span><b>{{ number_format($metrics['payments_verified']) }}</b></div>
         <div><span>Exam Passes</span><b>{{ number_format($metrics['qr_issued']) }}</b></div>
-        <div><span>Scans</span><b>{{ number_format($metrics['total_scans']) }}</b></div>
+        <div><span>Pending Course Passes</span><b>{{ number_format($metrics['pending_course_passes'] ?? 0) }}</b></div>
     </section>
 
     <nav class="dash-action-bar" aria-label="Admin shortcuts">

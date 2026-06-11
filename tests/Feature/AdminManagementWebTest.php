@@ -86,6 +86,31 @@ class AdminManagementWebTest extends TestCase
             ->assertSee('View');
     }
 
+    public function test_examiner_management_only_lists_and_creates_examiner_accounts(): void
+    {
+        $super = DB::table('examiners')->where('username', 'superadmin')->first();
+        $username = 'focused_examiner_' . Str::lower(Str::random(6));
+
+        $this->withSession($this->adminSession($super))
+            ->get(route('admin.examiners'))
+            ->assertOk()
+            ->assertSee('Examiner Management')
+            ->assertDontSee('admin1')
+            ->assertDontSee('superadmin')
+            ->assertDontSee('Super Admin Control');
+
+        $this->withSession($this->adminSession($super))
+            ->post(route('admin.examiners.store'), [
+                'full_name' => 'Focused Examiner',
+                'username' => $username,
+                'password' => 'strongpass123',
+                'role' => 'super_admin',
+            ])
+            ->assertSessionHasErrors('role');
+
+        $this->assertDatabaseMissing('examiners', ['username' => $username]);
+    }
+
     public function test_student_list_and_view_show_clean_identity_without_qr_internals(): void
     {
         $admin = DB::table('examiners')->where('username', 'admin1')->first();
@@ -101,16 +126,74 @@ class AdminManagementWebTest extends TestCase
         $this->withSession($this->adminSession($admin))
             ->get(route('admin.students.show', ['student' => $student['matric_no']]))
             ->assertOk()
-            ->assertSee('Identity and Access')
-            ->assertSee('Payment')
-            ->assertSee('Exam Access')
-            ->assertSee('Scan Summary')
+            ->assertSee('Identity and Session')
+            ->assertSee('Session Payment')
+            ->assertSee('Assigned Courses and QR Access')
+            ->assertSee('Scan History')
             ->assertSee($student['full_name'])
             ->assertSee($student['matric_no'])
             ->assertDontSee('encrypted_payload')
             ->assertDontSee('hmac_signature')
             ->assertDontSee('aes_key')
             ->assertDontSee('hmac_secret');
+    }
+
+    public function test_student_detail_and_examiner_scan_detail_fall_back_cleanly_without_timetable_column(): void
+    {
+        $admin = DB::table('examiners')->where('username', 'admin1')->first();
+        $examiner = DB::table('examiners')->where('username', 'examiner1')->first();
+        $student = $this->createStudentRecord();
+        DB::table('verification_logs')->where('token_id', $student['token_id'])->delete();
+
+        Schema::disableForeignKeyConstraints();
+        Schema::table('qr_tokens', function ($table) {
+            $table->dropForeign(['timetable_id']);
+            $table->dropIndex('qr_tokens_exam_lookup');
+            $table->dropUnique('qr_tokens_student_session_timetable_unique');
+            $table->dropColumn('timetable_id');
+        });
+        Schema::enableForeignKeyConstraints();
+
+        $logId = DB::table('verification_logs')->insertGetId([
+            'token_id' => $student['token_id'],
+            'examiner_id' => $examiner->examiner_id,
+            'decision' => 'APPROVED',
+            'timestamp' => now(),
+            'device_fp' => 'test-device',
+            'ip_address' => '127.0.0.1',
+        ]);
+
+        $this->withSession($this->adminSession($admin))
+            ->get(route('admin.students.show', ['student' => $student['matric_no']]))
+            ->assertOk()
+            ->assertSee('Assigned Courses and QR Access')
+            ->assertDontSee('SQLSTATE');
+
+        $this->withSession($this->adminSession($examiner))
+            ->get(route('examiner.scans.show', ['log' => $logId]))
+            ->assertOk()
+            ->assertSee('Assigned Courses and QR Status')
+            ->assertDontSee('SQLSTATE');
+    }
+
+    public function test_super_admin_can_oversee_course_qr_passes_but_admin_cannot(): void
+    {
+        $super = DB::table('examiners')->where('username', 'superadmin')->first();
+        $admin = DB::table('examiners')->where('username', 'admin1')->first();
+        $student = $this->createStudentRecord();
+
+        $this->withSession($this->adminSession($super))
+            ->get(route('admin.qr-tokens'))
+            ->assertOk()
+            ->assertSee('Course QR Passes')
+            ->assertSee($student['full_name'])
+            ->assertSee($student['matric_no'])
+            ->assertDontSee('encrypted_payload')
+            ->assertDontSee('hmac_signature');
+
+        $this->withSession($this->adminSession($admin))
+            ->get(route('admin.qr-tokens'))
+            ->assertForbidden();
     }
 
     public function test_admin_intelligence_page_does_not_show_developer_paths_or_commands(): void
@@ -209,8 +292,8 @@ class AdminManagementWebTest extends TestCase
         $this->withSession($this->adminSession($admin))
             ->get(route('admin.students.show', ['student' => $student['matric_no']]))
             ->assertOk()
-            ->assertSee('Review Status')
-            ->assertSee('Repeated Scans')
+            ->assertSee('Admin Actions and Review')
+            ->assertSee('Repeated')
             ->assertSee('This exam pass was scanned again')
             ->assertDontSee('Token Reference')
             ->assertDontSee('127.0.0.1');
@@ -358,6 +441,7 @@ class AdminManagementWebTest extends TestCase
             ['rrr_number' => 'TEST-ADMIN-VIEW'],
             [
                 'student_id' => $matric,
+                'session_id' => $session->session_id,
                 'amount_declared' => 100000,
                 'amount_confirmed' => 100000,
                 'remita_response' => json_encode(['status' => 'Verified Demo Payment', 'source' => 'demo']),
@@ -369,6 +453,11 @@ class AdminManagementWebTest extends TestCase
             [
                 'student_id' => $matric,
                 'session_id' => $session->session_id,
+                'timetable_id' => DB::table('timetables')
+                    ->where('exam_session_id', $session->session_id)
+                    ->where('department_id', $department->dept_id)
+                    ->where('level', '400')
+                    ->value('id'),
                 'encrypted_payload' => 'not-rendered-payload',
                 'hmac_signature' => 'not-rendered-signature',
                 'status' => 'UNUSED',

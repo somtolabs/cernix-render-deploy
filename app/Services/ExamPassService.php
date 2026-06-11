@@ -47,8 +47,18 @@ class ExamPassService
             throw new RuntimeException('Select a valid assigned course before generating your exam pass.');
         }
 
-        $existingPayment = DB::table('payment_records')
-            ->where('student_id', $matricNo)
+        $supportsSessionPayment = Schema::hasColumn('payment_records', 'session_id');
+        $existingPaymentQuery = DB::table('payment_records')
+            ->where('student_id', $matricNo);
+
+        if ($supportsSessionPayment) {
+            $existingPaymentQuery->where(function ($query) use ($sessionId) {
+                $query->where('session_id', $sessionId)
+                    ->orWhereNull('session_id');
+            });
+        }
+
+        $existingPayment = $existingPaymentQuery
             ->orderByDesc('verified_at')
             ->first();
 
@@ -74,6 +84,15 @@ class ExamPassService
             throw new RuntimeException('RRR has already been used for another payment record.');
         }
 
+        if (
+            $supportsSessionPayment
+            && $paymentByReference
+            && $paymentByReference->session_id !== null
+            && (int) $paymentByReference->session_id !== $sessionId
+        ) {
+            throw new RuntimeException('RRR belongs to another exam session.');
+        }
+
         $existingPayment ??= $paymentByReference;
         $remitaResponse = $existingPayment
             ? json_decode((string) $existingPayment->remita_response, true, 512, JSON_THROW_ON_ERROR)
@@ -87,30 +106,44 @@ class ExamPassService
             $expectedAmount,
             $remitaResponse,
             $existingPayment,
+            $supportsSessionPayment,
         ) {
             if (! $existingPayment) {
-                DB::table('payment_records')->insert([
+                $paymentRecord = [
                     'student_id' => $matricNo,
                     'rrr_number' => $paymentReference,
                     'amount_declared' => $expectedAmount,
                     'amount_confirmed' => (float) ($remitaResponse['amount'] ?? $expectedAmount),
                     'remita_response' => json_encode($remitaResponse, JSON_THROW_ON_ERROR),
                     'verified_at' => now(),
-                ]);
+                ];
+
+                if ($supportsSessionPayment) {
+                    $paymentRecord['session_id'] = $sessionId;
+                }
+
+                DB::table('payment_records')->insert($paymentRecord);
+            } elseif ($supportsSessionPayment && $existingPayment->session_id === null) {
+                DB::table('payment_records')
+                    ->where('payment_id', $existingPayment->payment_id)
+                    ->update(['session_id' => $sessionId]);
             }
 
             $existingTokenQuery = DB::table('qr_tokens')
                 ->where('student_id', $matricNo)
-                ->where('session_id', $sessionId)
-                ->where('status', 'UNUSED');
+                ->where('session_id', $sessionId);
 
             if (Schema::hasColumn('qr_tokens', 'timetable_id')) {
                 $existingTokenQuery->where('timetable_id', $timetableId);
             }
 
             $existingToken = $existingTokenQuery->orderByDesc('issued_at')->first();
-            if ($existingToken && $existingPayment) {
+            if ($existingToken && strtoupper((string) $existingToken->status) === 'UNUSED') {
                 return $this->tokenResult($existingToken);
+            }
+
+            if ($existingToken) {
+                throw new RuntimeException('This course exam pass has already been used and cannot be generated again.');
             }
 
             return $this->qrTokens->issue($matricNo, $sessionId, $timetableId);

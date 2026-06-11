@@ -55,6 +55,24 @@ class LoginFormSubmissionTest extends TestCase
         ])->assertRedirect('/admin/dashboard');
     }
 
+    public function test_super_admin_baseline_login_succeeds_and_wrong_password_fails(): void
+    {
+        $this->post('/admin/login', [
+            'username' => 'superadmin',
+            'password' => 'superadmin123',
+        ])->assertRedirect('/admin/dashboard');
+
+        $this->post('/admin/logout');
+
+        $this->from('/admin/login')
+            ->post('/admin/login', [
+                'username' => 'superadmin',
+                'password' => 'wrong-password',
+            ])
+            ->assertRedirect('/admin/login')
+            ->assertSessionHas('error', 'Invalid credentials.');
+    }
+
     public function test_examiner_login_form_post_redirects_to_dashboard(): void
     {
         $this->post('/examiner/login', [

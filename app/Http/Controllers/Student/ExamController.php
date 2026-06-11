@@ -10,6 +10,9 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
+use RuntimeException;
 
 class ExamController extends Controller
 {
@@ -24,16 +27,6 @@ class ExamController extends Controller
             return response()->json(['status' => 'error', 'message' => 'Forbidden'], 403);
         }
 
-        $matricNo = (string) $request->input('matric_no', '');
-        $hasVerifiedPayment = $matricNo !== ''
-            && DB::table('payment_records')->where('student_id', $matricNo)->exists();
-
-        $data = $request->validate([
-            'matric_no'  => 'required|string|max:50',
-            'rrr_number' => [$hasVerifiedPayment ? 'nullable' : 'required', 'string', 'max:50'],
-            'timetable_id' => 'nullable|integer',
-        ]);
-
         $session = DB::table('exam_sessions')->where('is_active', true)->first();
 
         if (! $session) {
@@ -42,6 +35,22 @@ class ExamController extends Controller
                 'message' => 'No active exam session found.',
             ], 422);
         }
+
+        $matricNo = (string) $request->input('matric_no', '');
+        $paymentQuery = DB::table('payment_records')->where('student_id', $matricNo);
+        if (Schema::hasColumn('payment_records', 'session_id')) {
+            $paymentQuery->where(function ($query) use ($session) {
+                $query->where('session_id', $session->session_id)
+                    ->orWhereNull('session_id');
+            });
+        }
+        $hasVerifiedPayment = $matricNo !== '' && $paymentQuery->exists();
+
+        $data = $request->validate([
+            'matric_no'  => 'required|string|max:50',
+            'rrr_number' => [$hasVerifiedPayment ? 'nullable' : 'required', 'string', 'max:50'],
+            'timetable_id' => 'nullable|integer',
+        ]);
 
         try {
             $student = DB::table('students')
@@ -89,10 +98,31 @@ class ExamController extends Controller
                 'data'    => $result,
             ]);
 
-        } catch (\Throwable $e) {
+        } catch (RuntimeException $e) {
+            $message = str_contains(strtoupper($e->getMessage()), 'SQLSTATE')
+                ? 'Exam pass could not be generated right now. Please try again shortly.'
+                : $e->getMessage();
+
+            Log::warning('Student exam pass API request failed.', [
+                'matric_no' => $matricNo,
+                'session_id' => $session->session_id,
+                'reason' => $e->getMessage(),
+            ]);
+
             return response()->json([
                 'status'  => 'error',
-                'message' => $e->getMessage(),
+                'message' => $message,
+            ], 422);
+        } catch (\Throwable $e) {
+            Log::error('Student exam pass API request failed unexpectedly.', [
+                'matric_no' => $matricNo,
+                'session_id' => $session->session_id,
+                'exception' => $e::class,
+            ]);
+
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'Exam pass could not be generated right now. Please try again shortly.',
             ], 422);
         }
     }

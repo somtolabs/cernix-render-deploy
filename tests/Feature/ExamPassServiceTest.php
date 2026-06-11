@@ -26,6 +26,7 @@ class ExamPassServiceTest extends TestCase
 
         $this->assertDatabaseHas('payment_records', [
             'student_id' => $student,
+            'session_id' => $session,
         ]);
         $this->assertStringStartsWith(
             'TEST-DEMO-',
@@ -77,6 +78,7 @@ class ExamPassServiceTest extends TestCase
         Schema::table('qr_tokens', function (Blueprint $table) {
             $table->dropForeign(['timetable_id']);
             $table->dropIndex('qr_tokens_exam_lookup');
+            $table->dropUnique('qr_tokens_student_session_timetable_unique');
             $table->dropColumn('timetable_id');
         });
         Schema::enableForeignKeyConstraints();
@@ -154,6 +156,10 @@ class ExamPassServiceTest extends TestCase
         $secondPass = $service->generate($student, $session, $secondExam, null, 10000);
 
         $this->assertDatabaseCount('payment_records', 1);
+        $this->assertDatabaseHas('payment_records', [
+            'student_id' => $student,
+            'session_id' => $session,
+        ]);
         $this->assertDatabaseHas('qr_tokens', [
             'token_id' => $secondPass['token_id'],
             'student_id' => $student,
@@ -161,6 +167,31 @@ class ExamPassServiceTest extends TestCase
             'timetable_id' => $secondExam,
         ]);
         $this->assertSame(2, DB::table('qr_tokens')->where('student_id', $student)->count());
+    }
+
+    public function test_used_course_pass_cannot_be_generated_again(): void
+    {
+        [$student, $session, $exam] = $this->records();
+        $service = new ExamPassService(
+            $this->createMock(RemitaService::class),
+            new QrTokenService(new CryptoService())
+        );
+
+        $pass = $service->generate($student, $session, $exam, 'TEST-DEMO', 10000);
+        DB::table('qr_tokens')->where('token_id', $pass['token_id'])->update([
+            'status' => 'USED',
+            'used_at' => now(),
+        ]);
+
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage('already been used');
+
+        try {
+            $service->generate($student, $session, $exam, null, 10000);
+        } finally {
+            $this->assertSame(1, DB::table('payment_records')->where('student_id', $student)->count());
+            $this->assertSame(1, DB::table('qr_tokens')->where('student_id', $student)->count());
+        }
     }
 
     private function records(): array

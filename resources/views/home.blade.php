@@ -21,7 +21,7 @@
     .stat-strip div { padding:20px 16px; border-right:1px solid #e2dfd6; min-width:0; text-align:center; }
     .stat-strip div:last-child { border-right:0; }
     .stat-strip span { display:block; color:#9a9daf; font-size:11px; font-weight:900; letter-spacing:.18em; text-transform:uppercase; }
-    .stat-strip b { display:block; margin-bottom:9px; font-family:'JetBrains Mono', ui-monospace, monospace; font-size:clamp(22px,3vw,32px); letter-spacing:-.04em; color:#112054; overflow-wrap:anywhere; }
+    .stat-strip b { display:block; margin-bottom:9px; font-family:'JetBrains Mono', ui-monospace, monospace; font-size:clamp(22px,3vw,32px); letter-spacing:-.04em; color:#112054; overflow-wrap:break-word; word-break:normal; }
     .portal-panel { animation:homeRise .5s ease both; animation-delay:.08s; }
     .portals { display:grid; gap:16px; }
     .portal { display:grid; grid-template-columns:70px minmax(0,1fr) auto; align-items:center; gap:18px; min-height:112px; padding:18px 22px; border:1px solid #e3e0d8; border-radius:24px; background:rgba(255,255,255,.9); color:var(--ink); text-decoration:none; box-shadow:0 2px 6px rgba(14,18,38,.035); transition:transform .18s ease, border-color .18s ease, box-shadow .18s ease, background .18s ease; }

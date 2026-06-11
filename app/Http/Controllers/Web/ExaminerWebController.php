@@ -342,10 +342,12 @@ class ExaminerWebController extends Controller
             : collect();
 
         $counts = $studentScans->groupBy('decision')->map->count();
-        $todayExam = $student ? $this->studentTodayExam($student) : null;
-        $payment = $student ? DB::table('payment_records')->where('student_id', $student->matric_no)->orderByDesc('verified_at')->first() : null;
+        $todayExam = $student ? $this->studentTodayExam($student, $tokenId) : null;
+        $payment = $student ? $this->sessionPayment($student->matric_no, (int) $student->session_id) : null;
 
-        return view('examiner.scan-detail', compact('examiner', 'scan', 'student', 'studentScans', 'counts', 'todayExam', 'payment') + [
+        $courseAccess = $student ? $this->studentCourseAccess($student) : collect();
+
+        return view('examiner.scan-detail', compact('examiner', 'scan', 'student', 'studentScans', 'counts', 'todayExam', 'payment', 'courseAccess') + [
             'notificationUnreadCount' => $this->examinerUnreadNotes((int) $examiner['id']),
         ]);
     }
@@ -626,14 +628,72 @@ class ExaminerWebController extends Controller
 
     private function scanDetail(int $logId): ?object
     {
+        $supportsTimetableBinding = Schema::hasColumn('qr_tokens', 'timetable_id');
+        $timetableSelect = $supportsTimetableBinding
+            ? 'qr_tokens.timetable_id'
+            : DB::raw('NULL as timetable_id');
+
         return DB::table('verification_logs')
             ->join('qr_tokens', 'verification_logs.token_id', '=', 'qr_tokens.token_id')
             ->leftJoin('students', 'qr_tokens.student_id', '=', 'students.matric_no')
             ->leftJoin('departments', 'students.department_id', '=', 'departments.dept_id')
             ->leftJoin('examiners', 'verification_logs.examiner_id', '=', 'examiners.examiner_id')
             ->where('verification_logs.log_id', $logId)
-            ->select('verification_logs.*', 'qr_tokens.status as token_status', 'qr_tokens.student_id as matric_no', 'students.full_name', 'students.photo_path', 'students.level', 'departments.dept_name', 'departments.faculty', 'examiners.full_name as examiner_name')
+            ->select('verification_logs.*', 'qr_tokens.status as token_status', 'qr_tokens.student_id as matric_no', $timetableSelect, 'students.full_name', 'students.photo_path', 'students.level', 'departments.dept_name', 'departments.faculty', 'examiners.full_name as examiner_name')
             ->first();
+    }
+
+    private function studentCourseAccess(object $student)
+    {
+        if (! Schema::hasTable('timetables')) {
+            return collect();
+        }
+
+        $supportsTimetableBinding = Schema::hasColumn('qr_tokens', 'timetable_id');
+        $tokens = $supportsTimetableBinding
+            ? DB::table('qr_tokens')
+                ->where('student_id', $student->matric_no)
+                ->where('session_id', $student->session_id)
+                ->whereNotNull('timetable_id')
+                ->orderByDesc('issued_at')
+                ->get()
+                ->groupBy(fn ($token) => (int) $token->timetable_id)
+                ->map(fn ($group) => $group->first())
+            : collect();
+
+        $latestScans = $tokens->isEmpty()
+            ? collect()
+            : DB::table('verification_logs')
+                ->whereIn('token_id', $tokens->pluck('token_id'))
+                ->orderByDesc('timestamp')
+                ->get()
+                ->groupBy('token_id')
+                ->map(fn ($group) => $group->first());
+
+        return DB::table('timetables')
+            ->where('exam_session_id', $student->session_id)
+            ->where('department_id', $student->department_id)
+            ->where('level', (string) ($student->level ?? ''))
+            ->where('status', '!=', 'cancelled')
+            ->orderBy('exam_date')
+            ->orderBy('start_time')
+            ->get()
+            ->map(function ($exam) use ($tokens, $latestScans) {
+                $token = $tokens->get((int) $exam->id);
+                $latestScan = $token ? $latestScans->get($token->token_id) : null;
+                $exam->qr_status = match (strtoupper((string) ($token->status ?? ''))) {
+                    'UNUSED' => 'Generated / Unused',
+                    'USED' => 'Used',
+                    'REVOKED' => 'Unavailable',
+                    default => 'Not Generated',
+                };
+                $exam->scan_status = $latestScan
+                    ? ($latestScan->decision === 'DUPLICATE' ? 'Repeated' : ucfirst(strtolower($latestScan->decision)))
+                    : 'Not scanned';
+                $exam->last_scan_at = $latestScan?->timestamp;
+
+                return $exam;
+            });
     }
 
     private function studentFromToken(string $tokenId): ?object
@@ -646,16 +706,26 @@ class ExaminerWebController extends Controller
             ->first();
     }
 
-    private function studentTodayExam(object $student): ?object
+    private function studentTodayExam(object $student, ?string $tokenId = null): ?object
     {
         if (! DB::getSchemaBuilder()->hasTable('timetables')) {
             return null;
         }
 
-        return DB::table('timetables')
+        $query = DB::table('timetables')
             ->where('exam_session_id', $student->session_id)
             ->where('department_id', $student->department_id)
-            ->where('level', (string) ($student->level ?? ''))
+            ->where('level', (string) ($student->level ?? ''));
+
+        $timetableId = $tokenId && Schema::hasColumn('qr_tokens', 'timetable_id')
+            ? DB::table('qr_tokens')->where('token_id', $tokenId)->value('timetable_id')
+            : null;
+
+        if ($timetableId) {
+            return $query->where('id', $timetableId)->first();
+        }
+
+        return $query
             ->whereDate('exam_date', today())
             ->orderBy('start_time')
             ->first();
@@ -664,10 +734,7 @@ class ExaminerWebController extends Controller
     private function examAccessContext(object $student, ?string $tokenId = null): array
     {
         $session = DB::table('exam_sessions')->where('session_id', $student->session_id)->first();
-        $payment = DB::table('payment_records')
-            ->where('student_id', $student->matric_no)
-            ->orderByDesc('verified_at')
-            ->first();
+        $payment = $this->sessionPayment($student->matric_no, (int) $student->session_id);
         $exam = null;
 
         if (DB::getSchemaBuilder()->hasTable('timetables')) {
@@ -715,5 +782,19 @@ class ExaminerWebController extends Controller
             ->select('timetables.*', 'departments.dept_name')
             ->orderBy('start_time')
             ->get();
+    }
+
+    private function sessionPayment(string $matricNo, int $sessionId): ?object
+    {
+        $query = DB::table('payment_records')->where('student_id', $matricNo);
+
+        if (DB::getSchemaBuilder()->hasColumn('payment_records', 'session_id')) {
+            $query->where(function ($paymentQuery) use ($sessionId) {
+                $paymentQuery->where('session_id', $sessionId)
+                    ->orWhereNull('session_id');
+            });
+        }
+
+        return $query->orderByDesc('verified_at')->first();
     }
 }

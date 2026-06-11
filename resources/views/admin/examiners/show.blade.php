@@ -13,7 +13,7 @@
 <style>
     .examiner-id-card { display:flex; align-items:center; gap:14px; min-width:0; }
     .examiner-avatar { width:64px; height:64px; border-radius:9999px; display:grid; place-items:center; flex:0 0 auto; background:var(--navy); color:#fff; font-weight:950; border:1px solid var(--line); }
-    .examiner-id-card h2 { margin:0; font-size:clamp(20px,4vw,28px); letter-spacing:-.035em; line-height:1.08; overflow-wrap:anywhere; }
+    .examiner-id-card h2 { margin:0; font-size:clamp(20px,4vw,28px); letter-spacing:-.035em; line-height:1.08; overflow-wrap:break-word; word-break:normal; }
     .examiner-id-meta { margin-top:5px; color:var(--ink-3); }
     @media (max-width:640px) {
         .examiner-id-card { align-items:flex-start; }
@@ -106,12 +106,12 @@
         </div>
     </div>
     <div class="admin-section-body">
-        <div class="admin-table-wrap">
+        <div class="admin-table-wrap mobile-list">
             <table class="admin-table">
                 <thead><tr><th>Time</th><th>Decision</th><th>Student</th><th>Matric</th><th>Review Status</th><th>Action</th></tr></thead>
                 <tbody>
                     @forelse($history->take(3) as $row)
-                        <tr><td class="mono">{{ $row->timestamp }}</td><td><span class="admin-status {{ $row->decision === 'APPROVED' ? 'green' : ($row->decision === 'DUPLICATE' ? 'amber' : 'red') }}">{{ $row->decision === 'DUPLICATE' ? 'REPEATED' : $row->decision }}</span></td><td>{{ $row->student_name ?? 'Unavailable' }}</td><td class="mono">{{ $row->matric_no ?? 'Not available' }}</td><td>{{ $row->decision === 'DUPLICATE' ? 'Repeated scan needs review' : 'Recorded' }}</td><td><a class="admin-action ghost" href="{{ route('admin.scan-logs.show', $row->log_id) }}">View</a></td></tr>
+                        <tr><td class="mono mobile-primary">{{ $row->timestamp }}</td><td data-label="Decision"><span class="admin-status {{ $row->decision === 'APPROVED' ? 'green' : ($row->decision === 'DUPLICATE' ? 'amber' : 'red') }}">{{ $row->decision === 'DUPLICATE' ? 'REPEATED' : $row->decision }}</span></td><td data-label="Student">{{ $row->student_name ?? 'Unavailable' }}</td><td class="mono" data-label="Matric">{{ $row->matric_no ?? 'Not available' }}</td><td data-label="Review">{{ $row->decision === 'DUPLICATE' ? 'Repeated scan needs review' : 'Recorded' }}</td><td data-label="Action"><a class="admin-action ghost" href="{{ route('admin.scan-logs.show', $row->log_id) }}">View</a></td></tr>
                     @empty
                         <tr><td colspan="6"><div class="admin-empty">No scan history for this examiner.</div></td></tr>
                     @endforelse

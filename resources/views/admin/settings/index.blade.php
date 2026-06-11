@@ -10,29 +10,28 @@
     $canManageSettings = $permissions['can_manage_settings'] ?? false;
 @endphp
 <style>
-    .settings-shell { display:grid; gap:16px; }
+    .settings-shell { display:grid; gap:24px; }
     .settings-nav { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }
-    .settings-nav a { min-width:0; min-height:40px; display:flex; align-items:center; padding:8px 11px; border:1px solid rgba(15,32,80,.12); border-radius:11px; background:rgba(235,241,255,.46); color:var(--ink); text-decoration:none; font-size:12px; font-weight:900; line-height:1.3; word-break:normal; }
-    .settings-group { position:relative; scroll-margin-top:20px; border:1px solid var(--line); border-radius:18px; background:rgba(255,255,255,.94); overflow:hidden; }
-    .settings-group::before { content:""; position:absolute; inset:0 auto 0 0; width:4px; background:rgba(15,32,80,.32); }
-    .settings-head { display:flex; justify-content:space-between; align-items:flex-start; gap:14px; padding:16px 18px 16px 21px; border-bottom:1px solid var(--line); background:rgba(244,247,252,.7); }
+    .settings-nav a { min-width:0; min-height:40px; display:flex; align-items:center; padding:8px 11px; border-radius:8px; background:rgba(235,241,255,.46); color:var(--ink); text-decoration:none; font-size:12px; font-weight:900; line-height:1.3; word-break:normal; }
+    .settings-group { scroll-margin-top:20px; padding-bottom:8px; border-bottom:1px solid var(--line); }
+    .settings-head { display:flex; justify-content:space-between; align-items:flex-start; gap:14px; padding:0 0 13px; border-bottom:1px solid var(--line); }
     .settings-head h2 { margin:0; font-size:16px; }
     .settings-head p { margin:5px 0 0; color:var(--ink-3); font-size:12px; line-height:1.5; }
-    .settings-body { padding:18px 18px 18px 21px; }
+    .settings-body { padding:16px 0 18px; }
     .settings-row { display:grid; gap:5px; padding:12px 0; border-bottom:1px solid var(--line); }
     .settings-row:last-child { border-bottom:0; }
     .settings-actions { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-top:14px; }
-    .branding-preview { width:min(240px,100%); min-height:116px; display:grid; place-items:center; padding:16px; border:1px solid var(--line); border-radius:14px; background:var(--bg); }
+    .branding-preview { width:min(240px,100%); min-height:116px; display:grid; place-items:center; padding:16px; border-left:3px solid rgba(15,32,80,.25); background:var(--bg); }
     .branding-preview img { display:block; max-width:200px; max-height:90px; width:auto; height:auto; object-fit:contain; }
     .settings-input { width:100%; min-height:42px; border:1px solid var(--line-2); border-radius:11px; padding:8px 11px; background:#fff; }
-    .fee-list { display:grid; border:1px solid var(--line); border-radius:14px; overflow:hidden; background:#fff; }
+    .fee-list { display:grid; border-block:1px solid var(--line); }
     .fee-row { display:grid; gap:7px; padding:12px; border-bottom:1px solid var(--line); }
     .fee-row:last-child { border-bottom:0; }
     .fee-row label { font-weight:900; font-size:13px; }
     @media (min-width:860px) {
         .settings-shell { grid-template-columns:190px minmax(0,1fr); align-items:start; }
         .settings-nav { position:sticky; top:24px; grid-template-columns:1fr; }
-        .settings-content { display:grid; gap:16px; }
+        .settings-content { display:grid; gap:30px; }
         .fee-row { grid-template-columns:minmax(0,1fr) 180px; align-items:center; }
     }
 </style>

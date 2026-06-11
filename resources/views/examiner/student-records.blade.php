@@ -18,12 +18,8 @@
                     <tr>
                         <th>Student</th>
                         <th>Matric</th>
-                        <th>Department</th>
-                        <th>Level</th>
-                        <th>Total</th>
-                        <th>Approved</th>
-                        <th>Rejected</th>
-                        <th>Repeated</th>
+                        <th>Programme</th>
+                        <th>Scan Summary</th>
                         <th>Last Scan</th>
                         <th>Action</th>
                     </tr>
@@ -33,12 +29,8 @@
                         <tr>
                             <td data-label="Student" class="safe"><strong>{{ $row['student'] }}</strong></td>
                             <td data-label="Matric" class="ex-mono">{{ $row['matric_no'] }}</td>
-                            <td data-label="Department">{{ $row['department'] }}</td>
-                            <td data-label="Level">{{ $row['level'] }}</td>
-                            <td data-label="Total">{{ $row['total_scans'] }}</td>
-                            <td data-label="Approved">{{ $row['approved'] }}</td>
-                            <td data-label="Rejected">{{ $row['rejected'] }}</td>
-                            <td data-label="Repeated">{{ $row['duplicate'] }}</td>
+                            <td data-label="Programme">{{ $row['department'] }} · {{ $row['level'] }} Level</td>
+                            <td data-label="Scan summary"><strong>{{ $row['total_scans'] }} total</strong><div class="ex-muted" style="margin-top:4px;font-size:12px">{{ $row['approved'] }} approved · {{ $row['rejected'] }} rejected · {{ $row['duplicate'] }} repeated</div></td>
                             <td data-label="Last Scan">{{ $row['last_scan_time'] }}</td>
                             <td data-label="Action">
                                 @if($row['detail_url'])

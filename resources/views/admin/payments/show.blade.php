@@ -40,7 +40,7 @@
 </div>
 
 <section class="metric-strip" style="margin-top:16px">
-    <div class="metric-cell"><span class="metric-label">Exam Pass</span><span class="metric-value">{{ match(strtoupper((string) ($token->status ?? ''))) { 'UNUSED' => 'Ready', 'USED' => 'Already scanned', 'REVOKED' => 'Unavailable', default => $token->status ?? 'Missing' } }}</span></div>
+            <div class="metric-cell"><span class="metric-label">Exam Pass</span><span class="metric-value">{{ match(strtoupper((string) ($token->status ?? ''))) { 'UNUSED' => 'Generated / Unused', 'USED' => 'Used', 'REVOKED' => 'Unavailable', default => $token->status ?? 'Missing' } }}</span></div>
     <div class="metric-cell"><span class="metric-label">Issued</span><span class="metric-value" style="font-size:13px">{{ $token->issued_at ?? 'Not available' }}</span></div>
     <div class="metric-cell"><span class="metric-label">Approved</span><span class="metric-value">{{ $scanSummary['APPROVED'] ?? 0 }}</span></div>
     <div class="metric-cell"><span class="metric-label">Review Scans</span><span class="metric-value">{{ ($scanSummary['DUPLICATE'] ?? 0) + ($scanSummary['REJECTED'] ?? 0) }}</span></div>

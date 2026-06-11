@@ -128,7 +128,7 @@ class ExaminerPortalWebTest extends TestCase
             ->postJson('/examiner/verify', ['qr_data' => $qrData])
             ->assertOk()
             ->assertJsonPath('status', 'REJECTED')
-            ->assertJsonPath('reason', 'tampered_token');
+            ->assertJsonPath('reason', 'token_record_mismatch');
     }
 
     public function test_examiner_web_scanner_route_requires_examiner_session(): void

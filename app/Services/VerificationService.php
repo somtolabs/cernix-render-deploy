@@ -45,6 +45,14 @@ class VerificationService
             return $this->response('REJECTED', null, $tokenId, $timestamp, 'token_not_found');
         }
 
+        if (
+            ! hash_equals((string) $token->encrypted_payload, (string) $qrData['encrypted_payload'])
+            || ! hash_equals((string) $token->hmac_signature, (string) $qrData['hmac_signature'])
+        ) {
+            $traceId = $this->log($tokenId, $examinerId, 'REJECTED', $deviceFp, $ip, $now);
+            return $this->response('REJECTED', null, $tokenId, $timestamp, 'token_record_mismatch', null, null, $traceId);
+        }
+
         // ── Step 3: Fetch active exam session ─────────────────────────────────
         $session = DB::table('exam_sessions')
             ->where('session_id', $qrSessionId)
@@ -82,12 +90,47 @@ class VerificationService
             && (int) $session->session_id === $qrSessionId
             && (int) $token->session_id === $qrSessionId;
 
-        $matricMatch = $student
-            && hash_equals((string) $student->matric_no, (string) ($payload['matric_no'] ?? ''));
+        $tokenTimetableId = property_exists($token, 'timetable_id') && $token->timetable_id !== null
+            ? (int) $token->timetable_id
+            : null;
+        $tokenMatch = isset($payload['token_id'])
+            ? hash_equals((string) $token->token_id, (string) $payload['token_id'])
+            : $tokenTimetableId === null;
 
-        if (! $student || ! $sessionMatch || ! $matricMatch) {
+        $matricMatch = $student
+            && hash_equals((string) $student->matric_no, (string) ($payload['matric_no'] ?? ''))
+            && hash_equals((string) $token->student_id, (string) $student->matric_no);
+
+        if (! $student || ! $sessionMatch || ! $tokenMatch || ! $matricMatch) {
             $traceId = $this->log($tokenId, $examinerId, 'REJECTED', $deviceFp, $ip, $now);
             return $this->response('REJECTED', null, $tokenId, $timestamp, 'identity_mismatch', null, null, $traceId);
+        }
+
+        $examAccess = null;
+        if ($tokenTimetableId !== null) {
+            $payloadTimetableId = isset($payload['timetable_id']) ? (int) $payload['timetable_id'] : null;
+            $exam = DB::table('timetables')
+                ->where('id', $tokenTimetableId)
+                ->where('exam_session_id', $qrSessionId)
+                ->where('department_id', $student->department_id)
+                ->where('level', (string) ($student->level ?? ''))
+                ->where('status', '!=', 'cancelled')
+                ->first();
+
+            if ($payloadTimetableId !== $tokenTimetableId || ! $exam) {
+                $traceId = $this->log($tokenId, $examinerId, 'REJECTED', $deviceFp, $ip, $now);
+                return $this->response('REJECTED', null, $tokenId, $timestamp, 'course_mismatch', null, null, $traceId);
+            }
+
+            $examAccess = [
+                'timetable_id' => $tokenTimetableId,
+                'course_code' => $exam->course_code,
+                'course_title' => $exam->course_title,
+                'venue' => $exam->venue,
+                'exam_date' => $exam->exam_date,
+                'start_time' => $exam->start_time,
+                'end_time' => $exam->end_time,
+            ];
         }
 
         // ── Step 7: Atomic status decision (DB transaction + row lock) ────────
@@ -148,7 +191,7 @@ class VerificationService
                 'department_id' => $student->department_id,
                 'department' => $student->department_name ?? 'Department unavailable',
                 'photo_path' => $student->photo_path,
-            ], $tokenId, $timestamp, $statusResult['reason'], $statusResult['used_at'], null, $traceId);
+            ], $tokenId, $timestamp, $statusResult['reason'], $statusResult['used_at'], null, $traceId, $examAccess);
         }
 
         if ($statusResult['decision'] === 'REJECTED') {
@@ -172,7 +215,7 @@ class VerificationService
         ], $tokenId, $timestamp, '', null, [
             'semester'      => $session->semester ?? '',
             'academic_year' => $session->academic_year ?? '',
-        ], $traceId);
+        ], $traceId, $examAccess);
     }
 
     // -------------------------------------------------------------------------
@@ -187,7 +230,8 @@ class VerificationService
         string  $reason   = '',
         ?string $usedAt   = null,
         ?array  $session  = null,
-        ?int    $traceId  = null
+        ?int    $traceId  = null,
+        ?array  $examAccess = null
     ): array {
         $resp = [
             'status'    => $status,
@@ -199,6 +243,7 @@ class VerificationService
         if ($usedAt !== null)   $resp['used_at']   = $usedAt;
         if ($session !== null)  $resp['session']   = $session;
         if ($traceId !== null)  $resp['trace_id']  = $traceId;
+        if ($examAccess !== null) $resp['exam_access'] = $examAccess;
         return $resp;
     }
 

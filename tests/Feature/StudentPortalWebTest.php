@@ -150,7 +150,8 @@ class StudentPortalWebTest extends TestCase
         $this->get('/student/dashboard')
             ->assertOk()
             ->assertSee('Payment: Pending')
-            ->assertSee('Exam Pass: Not generated')
+            ->assertSee('Course QR Access')
+            ->assertSee('Not Generated')
             ->assertSee('Generate Exam Pass')
             ->assertDontSee(route('student.payment'), false)
             ->assertDontSee(route('student.instructions'), false);
@@ -231,6 +232,7 @@ class StudentPortalWebTest extends TestCase
         $this->get('/student/generate-exam-pass')
             ->assertOk()
             ->assertSee('Your exam pass is ready')
+            ->assertSee('Generated / Unused')
             ->assertSee('View Exam Pass');
     }
 
@@ -333,7 +335,7 @@ class StudentPortalWebTest extends TestCase
             ->assertSee('Assigned Course')
             ->assertSee('Payment')
             ->assertSee('Pending')
-            ->assertSee('Not Generated');
+            ->assertSee('Exam pass not generated');
 
         $this->generateDemoPass();
 
@@ -351,7 +353,7 @@ class StudentPortalWebTest extends TestCase
 
         $response = $this->get('/student/generate-exam-pass')->assertOk();
 
-        $response->assertSee('Session payment verified')
+        $response->assertSee('Payment verified for this session')
             ->assertSee('You do not need to enter your RRR again')
             ->assertDontSee('name="rrr_number"', false);
 
@@ -383,7 +385,7 @@ class StudentPortalWebTest extends TestCase
         DB::table('timetables')->delete();
         $this->get('/student/generate-exam-pass')
             ->assertOk()
-            ->assertSee('Timetable not assigned yet')
+            ->assertSee('No exam timetable assigned yet')
             ->assertDontSee('null')
             ->assertDontSee('undefined');
     }

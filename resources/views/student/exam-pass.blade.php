@@ -7,7 +7,7 @@
 @if($token)
     <div class="no-print" style="width:min(520px,100%);margin:0 auto 18px;display:flex;gap:10px;flex-wrap:wrap">
         <button type="button" class="btn btn-primary" onclick="window.print()">Print Exam Pass</button>
-        <a class="btn btn-ghost" href="{{ route('student.exam-access-id') }}">Back to Exam Access ID</a>
+        <a class="btn btn-ghost" href="{{ $passExam ? route('student.exam-access-id.course', ['timetable' => $passExam->id]) : route('student.exam-access-id') }}">Back to Exam Access ID</a>
     </div>
     @include('student.partials.exam-access-id')
 @else
