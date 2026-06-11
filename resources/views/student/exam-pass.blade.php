@@ -3,9 +3,35 @@
 @section('title', 'Print Course QR Pass')
 
 @section('student-content')
-<div class="cx-page-head no-print"><div class="cx-eyebrow">Print View</div><h1>Print Course QR Pass</h1><p>Print the QR pass for the selected course only.</p></div>
+<style>
+    .qr-print-actions {
+        width: min(880px, 100%);
+        margin: 0 auto 18px;
+        display: flex;
+        justify-content: flex-end;
+        gap: 9px;
+        flex-wrap: wrap;
+    }
+    .qr-print-actions .btn {
+        min-height: 42px;
+        padding-inline: 16px;
+        border-radius: 10px;
+        font-size: 13px;
+    }
+    @media (max-width: 560px) {
+        .qr-print-actions {
+            display: grid;
+            grid-template-columns: 1fr;
+        }
+        .qr-print-actions .btn {
+            width: 100%;
+        }
+    }
+</style>
+
+<div class="cx-page-head no-print"><div class="cx-eyebrow">Print View</div><h1>Print Course QR Pass</h1><p>Print-ready access credential for the selected examination.</p></div>
 @if($token)
-    <div class="no-print" style="width:min(720px,100%);margin:0 auto 18px;display:flex;gap:10px;flex-wrap:wrap">
+    <div class="qr-print-actions no-print">
         <button type="button" class="btn btn-primary" onclick="window.print()">Print Course QR</button>
         <a class="btn btn-ghost" href="{{ route('student.exam-access-id.course', ['timetable' => $passExam->id]) }}">Back to Course QR Pass</a>
     </div>

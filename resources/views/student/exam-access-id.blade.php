@@ -3,16 +3,42 @@
 @section('title', 'Course QR Pass')
 
 @section('student-content')
+<style>
+    .qr-pass-actions {
+        width: min(880px, 100%);
+        margin: 18px auto 0;
+        display: flex;
+        justify-content: flex-end;
+        gap: 9px;
+        flex-wrap: wrap;
+    }
+    .qr-pass-actions .btn {
+        min-height: 42px;
+        padding-inline: 16px;
+        border-radius: 10px;
+        font-size: 13px;
+    }
+    @media (max-width: 560px) {
+        .qr-pass-actions {
+            display: grid;
+            grid-template-columns: 1fr;
+        }
+        .qr-pass-actions .btn {
+            width: 100%;
+        }
+    }
+</style>
+
 <div class="cx-page-head">
     <div class="cx-eyebrow">Course Access</div>
     <h1>Course QR Pass</h1>
-    <p>This QR pass is valid only for the selected course and timetable entry shown below.</p>
+    <p>Official student access credential for the selected course and examination schedule.</p>
 </div>
 @if($token)
     @include('student.partials.exam-access-id')
-    <div class="no-print" style="width:min(720px,100%);margin:18px auto 0;display:flex;gap:10px;flex-wrap:wrap">
+    <div class="qr-pass-actions no-print">
         <button class="btn btn-primary" type="button" id="saveExamAccessId">Save Course QR</button>
-        <a class="btn btn-primary" href="{{ route('student.exam-pass.course', ['timetable' => $passExam->id]) }}">Print Course QR</a>
+        <a class="btn btn-ghost" href="{{ route('student.exam-pass.course', ['timetable' => $passExam->id]) }}">Print Course QR</a>
         <a class="btn btn-ghost" href="{{ route('student.generate-exam-pass') }}">Back to Generate QR Pass</a>
     </div>
 @else
