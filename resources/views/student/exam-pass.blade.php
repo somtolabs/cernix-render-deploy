@@ -5,7 +5,7 @@
 @section('student-content')
 <style>
     .qr-print-actions {
-        width: min(780px, 100%);
+        width: min(470px, 100%);
         margin: 0 auto 18px;
         display: flex;
         justify-content: flex-end;

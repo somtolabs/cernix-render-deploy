@@ -5,7 +5,7 @@
 @section('student-content')
 <style>
     .qr-pass-actions {
-        width: min(780px, 100%);
+        width: min(470px, 100%);
         margin: 18px auto 0;
         display: flex;
         justify-content: flex-end;
