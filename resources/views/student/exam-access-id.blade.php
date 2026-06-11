@@ -5,7 +5,7 @@
 @section('student-content')
 <style>
     .qr-pass-actions {
-        width: min(880px, 100%);
+        width: min(780px, 100%);
         margin: 18px auto 0;
         display: flex;
         justify-content: flex-end;
@@ -32,7 +32,7 @@
 <div class="cx-page-head">
     <div class="cx-eyebrow">Course Access</div>
     <h1>Course QR Pass</h1>
-    <p>Official student access credential for the selected course and examination schedule.</p>
+    <p>Your QR pass for this course, ready to present at the examination entrance.</p>
 </div>
 @if($token)
     @include('student.partials.exam-access-id')

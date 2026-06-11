@@ -5,7 +5,7 @@
 @section('student-content')
 <style>
     .qr-print-actions {
-        width: min(880px, 100%);
+        width: min(780px, 100%);
         margin: 0 auto 18px;
         display: flex;
         justify-content: flex-end;
@@ -29,7 +29,7 @@
     }
 </style>
 
-<div class="cx-page-head no-print"><div class="cx-eyebrow">Print View</div><h1>Print Course QR Pass</h1><p>Print-ready access credential for the selected examination.</p></div>
+<div class="cx-page-head no-print"><div class="cx-eyebrow">Print View</div><h1>Print Course QR Pass</h1><p>A clean print copy of your QR pass for this course.</p></div>
 @if($token)
     <div class="qr-print-actions no-print">
         <button type="button" class="btn btn-primary" onclick="window.print()">Print Course QR</button>
