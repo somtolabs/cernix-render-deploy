@@ -445,7 +445,7 @@
     }
 </style>
 
-<article id="exam-access-id-card" class="course-qr-pass" data-qr-pass-version="2026-06-11-A">
+<article id="exam-access-id-card" class="course-qr-pass" data-qr-pass-version="student-identity-card-v2">
     <header class="qr-pass-masthead">
         <div class="qr-pass-brand">
             <img class="qr-pass-logo" src="{{ $brandingLogoUrl }}" alt="Adekunle Ajasin University logo">
@@ -469,7 +469,7 @@
     </header>
 
     <div class="qr-pass-body">
-        <section class="qr-pass-student" aria-label="Student identity">
+        <section class="qr-pass-student qr-pass-identity-card" aria-label="Student identity">
             <x-student-photo :student="$student" size="passport" />
             <div class="qr-pass-student-copy">
                 <span class="qr-pass-label">Student</span>

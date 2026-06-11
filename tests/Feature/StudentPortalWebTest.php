@@ -190,24 +190,34 @@ class StudentPortalWebTest extends TestCase
             ->assertOk();
 
         $response->assertSee('exam-access-id-card')
+            ->assertSee('data-qr-pass-version="student-identity-card-v2"', false)
             ->assertSee('Course QR Pass')
             ->assertSee('qr-pass-masthead', false)
             ->assertSee('qr-pass-body', false)
             ->assertSee('qr-pass-student', false)
+            ->assertSee('qr-pass-identity-card', false)
             ->assertSee('qr-pass-exam', false)
             ->assertSee('qr-pass-code', false)
             ->assertSee('CSC401')
             ->assertSee('Artificial Intelligence')
             ->assertSee('Faculty Lab 1')
+            ->assertSee('Computer Science')
+            ->assertSee('Faculty of Computing')
+            ->assertSee('400 Level')
             ->assertSee('AAUA / CERNIX VERIFIED')
             ->assertDontSee('encrypted_payload')
             ->assertDontSee('hmac_signature')
             ->assertDontSee('aes_key')
             ->assertDontSee('hmac_secret');
 
+        $html = $response->getContent();
+        $this->assertLessThan(strpos($html, 'class="qr-pass-exam"'), strpos($html, 'qr-pass-identity-card'));
+        $this->assertLessThan(strpos($html, 'class="qr-pass-code"'), strpos($html, 'class="qr-pass-exam"'));
+
         $this->get(route('student.exam-pass.course', ['timetable' => $examId]))
             ->assertOk()
-            ->assertSee('Print Course QR Pass');
+            ->assertSee('Print Course QR Pass')
+            ->assertSee('data-qr-pass-version="student-identity-card-v2"', false);
     }
 
     public function test_course_qr_view_requires_assigned_course_with_generated_qr(): void
