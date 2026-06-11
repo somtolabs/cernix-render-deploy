@@ -4,7 +4,6 @@ namespace App\Http\Controllers\Web;
 
 use App\Http\Controllers\Controller;
 use App\Services\AuditService;
-use App\Services\CryptoService;
 use App\Services\VerificationService;
 use App\Support\Roles;
 use Illuminate\Http\JsonResponse;
@@ -13,10 +12,17 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
+use Throwable;
 
 class ExaminerWebController extends Controller
 {
+    public function __construct(
+        private readonly VerificationService $verificationService,
+        private readonly AuditService $auditService,
+    ) {}
+
     public function login(Request $request)
     {
         if ($request->session()->has('examiner_id')) {
@@ -107,7 +113,7 @@ class ExaminerWebController extends Controller
         $request->session()->put('examiner_name', $examiner->full_name);
         $request->session()->put('examiner_role', $examiner->role);
 
-        app(AuditService::class)->logAction((string) $examiner->examiner_id, 'examiner', 'examiner.login', ['username' => $examiner->username]);
+        $this->auditService->logAction((string) $examiner->examiner_id, 'examiner', 'examiner.login', ['username' => $examiner->username]);
 
         $redirectUrl = $mode === 'admin' ? '/admin/dashboard' : '/examiner/dashboard';
 
@@ -142,7 +148,7 @@ class ExaminerWebController extends Controller
     {
         $examinerId = $request->session()->get('examiner_id');
         if ($examinerId) {
-            app(AuditService::class)->logAction((string) $examinerId, 'examiner', $action, [
+            $this->auditService->logAction((string) $examinerId, 'examiner', $action, [
                 'role' => $request->session()->get('examiner_role'),
                 'redirect_to' => $redirectTo,
             ]);
@@ -364,48 +370,108 @@ class ExaminerWebController extends Controller
         $ip = $request->ip() ?? '0.0.0.0';
 
         try {
-            $result = (new VerificationService(new CryptoService()))->verifyQr($data['qr_data'], $examinerId, $deviceFp, $ip);
-            $result['examiner'] = $request->session()->get('examiner_name', 'Examiner');
+            $result = $this->verificationService->verifyQr(
+                $data['qr_data'],
+                $examinerId,
+                $deviceFp,
+                $ip
+            );
+        } catch (Throwable) {
+            $this->safeVerificationLog($data['qr_data'], null, 'verification_service_error');
 
-            if (! empty($result['token_id'])) {
-                $student = $this->studentFromToken((string) $result['token_id']);
+            return response()->json([
+                'status' => 'ERROR',
+                'display_status' => 'Error Verifying QR',
+                'message' => 'The QR could not be verified right now. Please try again.',
+                'student' => null,
+                'timestamp' => now()->toIso8601String(),
+                'reason' => 'verification_failed',
+            ]);
+        }
+
+        $result['examiner'] = $request->session()->get('examiner_name', 'Examiner');
+        $tokenId = isset($result['token_id']) ? (string) $result['token_id'] : null;
+        $student = null;
+
+        if ($tokenId !== null) {
+            try {
+                $student = $this->studentFromToken($tokenId);
                 if ($student && isset($result['student']) && is_array($result['student'])) {
                     $result['student']['level'] = $student->level;
                     $result['student']['department'] = $student->dept_name ?? ($result['student']['department'] ?? null);
                     $result['student']['faculty'] = $student->faculty ?? null;
                     $result['student']['photo_path'] = $student->photo_path;
-                    $result['exam_access'] = $this->examAccessContext($student, $result['token_id'] ?? null);
+                    $result['exam_access'] = array_merge(
+                        $result['exam_access'] ?? [],
+                        $this->examAccessContext($student, $tokenId)
+                    );
                 }
-                $result['token_status'] = DB::table('qr_tokens')->where('token_id', $result['token_id'])->value('status');
+                $result['token_status'] = DB::table('qr_tokens')->where('token_id', $tokenId)->value('status');
                 $result['scan_count'] = $student
                     ? DB::table('verification_logs')
                         ->join('qr_tokens', 'verification_logs.token_id', '=', 'qr_tokens.token_id')
                         ->where('qr_tokens.student_id', $student->matric_no)
                         ->count()
                     : 0;
-                $result['today_exam'] = $student ? $this->studentTodayExam($student) : null;
-                $result['detail_url'] = isset($result['trace_id']) ? route('examiner.scans.show', $result['trace_id']) : null;
+                $result['today_exam'] = $student ? $this->studentTodayExam($student, $tokenId) : null;
+                $result['detail_url'] = isset($result['trace_id'])
+                    ? route('examiner.scans.show', $result['trace_id'])
+                    : null;
+            } catch (Throwable) {
+                // Display enrichment must never replace a completed verification decision.
+                $this->safeVerificationLog(
+                    $data['qr_data'],
+                    $result,
+                    'result_enrichment_failed'
+                );
             }
+        }
 
+        try {
             if (DB::getSchemaBuilder()->hasColumn('examiners', 'last_active_at')) {
                 DB::table('examiners')->where('examiner_id', $examinerId)->update(['last_active_at' => now()]);
             }
-            app(AuditService::class)->logAction((string) $examinerId, 'examiner', 'scan.' . strtolower($result['status']), [
-                'token_id' => $result['token_id'] ?? null,
-                'reason' => $result['reason'] ?? null,
-            ]);
 
-            unset($result['token_id']);
-
-            return response()->json($result);
-        } catch (\Throwable) {
-            return response()->json([
-                'status' => 'REJECTED',
-                'student' => null,
-                'timestamp' => now()->toIso8601String(),
-                'reason' => 'verification_failed',
-            ]);
+            $this->auditService->logAction(
+                (string) $examinerId,
+                'examiner',
+                'scan.'.strtolower($result['status']),
+                [
+                    'token_id' => $tokenId,
+                    'reason' => $result['reason'] ?? null,
+                ]
+            );
+        } catch (Throwable) {
+            // Audit/heartbeat failures are recorded safely but do not rewrite
+            // an authentic APPROVED or DUPLICATE verification as REJECTED.
+            $this->safeVerificationLog(
+                $data['qr_data'],
+                $result,
+                'post_verification_logging_failed'
+            );
         }
+
+        unset($result['token_id']);
+
+        return response()->json($result);
+    }
+
+    private function safeVerificationLog(array $qrData, ?array $result, string $reason): void
+    {
+        if (app()->environment('testing')) {
+            return;
+        }
+
+        Log::warning('QR scanner request issue', [
+            'token_id' => $qrData['token_id'] ?? null,
+            'student_id' => $result['student']['matric_no'] ?? null,
+            'matric_number' => $result['student']['matric_no'] ?? null,
+            'session_id' => $qrData['session_id'] ?? null,
+            'timetable_id' => $result['exam_access']['timetable_id'] ?? null,
+            'qr_status' => $result['status'] ?? 'ERROR',
+            'rejection_reason_code' => $reason,
+            'timestamp' => now()->toIso8601String(),
+        ]);
     }
 
     private function examiner(Request $request): ?array
@@ -536,6 +602,7 @@ class ExaminerWebController extends Controller
     private function chartData(int $examinerId): array
     {
         $metrics = $this->metricsData($examinerId);
+
         return [
             'labels' => ['Approved', 'Rejected', 'Duplicate'],
             'values' => [$metrics['approved'], $metrics['rejected'], $metrics['duplicate']],
@@ -558,7 +625,7 @@ class ExaminerWebController extends Controller
                 'student' => $row->full_name ?? 'Student unavailable',
                 'matric_no' => $row->matric_no ?? 'Unavailable',
                 'decision' => $row->decision,
-                'token_ref' => substr($row->token_id, 0, 8) . '...' . substr($row->token_id, -4),
+                'token_ref' => substr($row->token_id, 0, 8).'...'.substr($row->token_id, -4),
                 'detail_url' => route('examiner.scans.show', $row->log_id),
             ])
             ->all();
@@ -575,11 +642,11 @@ class ExaminerWebController extends Controller
             ->limit($limit)
             ->get()
             ->map(fn ($row) => [
-                'action' => 'scan.' . strtolower($row->decision),
+                'action' => 'scan.'.strtolower($row->decision),
                 'time' => Carbon::parse($row->timestamp)->format('d M Y, H:i'),
                 'student' => $row->full_name ?? 'Student unavailable',
                 'matric_no' => $row->matric_no ?? 'Unavailable',
-                'token_ref' => substr($row->token_id, 0, 8) . '...' . substr($row->token_id, -4),
+                'token_ref' => substr($row->token_id, 0, 8).'...'.substr($row->token_id, -4),
                 'ip_address' => $row->ip_address,
                 'device_fp' => $row->device_fp,
                 'detail_url' => route('examiner.scans.show', $row->log_id),
@@ -756,7 +823,7 @@ class ExaminerWebController extends Controller
         }
 
         return [
-            'session' => $session ? trim(($session->semester ?? '') . ' ' . ($session->academic_year ?? '')) : null,
+            'session' => $session ? trim(($session->semester ?? '').' '.($session->academic_year ?? '')) : null,
             'payment_status' => $payment ? 'Verified' : 'Not verified',
             'payment_verified_at' => $payment?->verified_at,
             'course_code' => $exam?->course_code,

@@ -8,9 +8,10 @@ use App\Services\MockSISService;
 use App\Services\QrTokenService;
 use App\Services\RegistrationService;
 use Database\Seeders\DepartmentsSeeder;
-use Database\Seeders\ExamSessionsSeeder;
 use Database\Seeders\ExaminersSeeder;
+use Database\Seeders\ExamSessionsSeeder;
 use Database\Seeders\MockSISSeeder;
+use Database\Seeders\TimetableSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
@@ -20,9 +21,11 @@ class ExaminerApiTest extends TestCase
 {
     use RefreshDatabase;
 
-    private User   $examinerUser;
+    private User $examinerUser;
+
     private string $examinerToken;
-    private int    $examinerId;
+
+    private int $examinerId;
 
     protected function setUp(): void
     {
@@ -33,12 +36,13 @@ class ExaminerApiTest extends TestCase
             ExamSessionsSeeder::class,
             MockSISSeeder::class,
             ExaminersSeeder::class,
+            TimetableSeeder::class,
         ]);
 
         // Create a JWT user with examiner role whose email matches an examiners.username
         $this->examinerUser = User::factory()->create([
             'email' => 'examiner1',  // matches ExaminersSeeder username
-            'role'  => 'examiner',
+            'role' => 'examiner',
         ]);
         $this->examinerToken = JWTAuth::fromUser($this->examinerUser);
 
@@ -51,23 +55,38 @@ class ExaminerApiTest extends TestCase
         $session = DB::table('exam_sessions')->where('is_active', true)->first();
         $feeAmount = (float) $session->fee_amount;
 
-        $regService = new RegistrationService(new MockSISService());
+        $regService = new RegistrationService(new MockSISService);
         $regService->registerStudent([
-            'matric_no'       => 'CSC/2021/001',
-            'session_id'      => (int) $session->session_id,
+            'matric_no' => 'CSC/2021/001',
+            'session_id' => (int) $session->session_id,
         ]);
-        $result = (new QrTokenService(new CryptoService()))
-            ->issue('CSC/2021/001', (int) $session->session_id);
+        $student = DB::table('students')->where('matric_no', 'CSC/2021/001')->first();
+        $timetableId = DB::table('timetables')
+            ->where('exam_session_id', $session->session_id)
+            ->where('department_id', $student->department_id)
+            ->where('level', (string) $student->level)
+            ->value('id');
+        DB::table('payment_records')->insert([
+            'student_id' => 'CSC/2021/001',
+            'session_id' => $session->session_id,
+            'rrr_number' => 'RRR-API-VERIFIED-001',
+            'amount_declared' => $feeAmount,
+            'amount_confirmed' => $feeAmount,
+            'remita_response' => json_encode(['status' => 'verified'], JSON_THROW_ON_ERROR),
+            'verified_at' => now(),
+        ]);
+        $result = (new QrTokenService(new CryptoService))
+            ->issue('CSC/2021/001', (int) $session->session_id, (int) $timetableId);
 
         $tokenRow = DB::table('qr_tokens')
             ->where('token_id', $result['token_id'])
             ->first();
 
         return [
-            'token_id'          => $tokenRow->token_id,
+            'token_id' => $tokenRow->token_id,
             'encrypted_payload' => $tokenRow->encrypted_payload,
-            'hmac_signature'    => $tokenRow->hmac_signature,
-            'session_id'        => (int) $session->session_id,
+            'hmac_signature' => $tokenRow->hmac_signature,
+            'session_id' => (int) $session->session_id,
         ];
     }
 
@@ -81,7 +100,7 @@ class ExaminerApiTest extends TestCase
     public function test_student_role_cannot_verify(): void
     {
         $student = User::factory()->create(['role' => 'student']);
-        $token   = auth('api')->login($student);
+        $token = auth('api')->login($student);
 
         $this->withToken($token)->postJson('/api/examiner/verify', [
             'qr_data' => ['token_id' => 'x'],
@@ -97,15 +116,15 @@ class ExaminerApiTest extends TestCase
         ]);
 
         $response->assertStatus(200)
-                 ->assertJsonPath('status', 'success')
-                 ->assertJsonPath('data.status', 'APPROVED')
-                 ->assertJsonStructure([
-                     'data' => ['status', 'student', 'token_id', 'timestamp'],
-                 ]);
+            ->assertJsonPath('status', 'success')
+            ->assertJsonPath('data.status', 'APPROVED')
+            ->assertJsonStructure([
+                'data' => ['status', 'student', 'token_id', 'timestamp'],
+            ]);
 
         $this->assertDatabaseHas('qr_tokens', [
             'token_id' => $qrData['token_id'],
-            'status'   => 'USED',
+            'status' => 'USED',
         ]);
     }
 
@@ -122,7 +141,7 @@ class ExaminerApiTest extends TestCase
         ]);
 
         $response->assertStatus(200)
-                 ->assertJsonPath('data.status', 'DUPLICATE');
+            ->assertJsonPath('data.status', 'DUPLICATE');
     }
 
     public function test_tampered_payload_returns_rejected(): void
@@ -135,13 +154,13 @@ class ExaminerApiTest extends TestCase
         ]);
 
         $response->assertStatus(200)
-                 ->assertJsonPath('data.status', 'REJECTED');
+            ->assertJsonPath('data.status', 'REJECTED');
     }
 
     public function test_missing_qr_data_field_returns_422(): void
     {
         $this->withToken($this->examinerToken)->postJson('/api/examiner/verify', [])
-             ->assertStatus(422);
+            ->assertStatus(422);
     }
 
     public function test_approved_scan_is_written_to_audit_log(): void
@@ -154,7 +173,7 @@ class ExaminerApiTest extends TestCase
 
         $this->assertDatabaseHas('audit_log', [
             'actor_type' => 'examiner',
-            'action'     => 'scan.approved',
+            'action' => 'scan.approved',
         ]);
     }
 

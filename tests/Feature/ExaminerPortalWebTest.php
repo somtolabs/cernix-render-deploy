@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Services\AuditService;
 use App\Services\CryptoService;
 use App\Services\ExamPassService;
 use App\Services\MockSISService;
@@ -11,6 +12,7 @@ use App\Services\RemitaService;
 use App\Services\VerificationService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
+use RuntimeException;
 use Tests\TestCase;
 
 class ExaminerPortalWebTest extends TestCase
@@ -51,7 +53,7 @@ class ExaminerPortalWebTest extends TestCase
         $this->withSession($session)
             ->getJson('/examiner/history')
             ->assertOk()
-            ->assertJsonPath('rows.0.token_ref', substr($token, 0, 8) . '...' . substr($token, -4));
+            ->assertJsonPath('rows.0.token_ref', substr($token, 0, 8).'...'.substr($token, -4));
 
         $this->withSession($session)
             ->getJson('/examiner/audit')
@@ -69,6 +71,9 @@ class ExaminerPortalWebTest extends TestCase
             ->assertSee('Start Scanner')
             ->assertSee('Latest Result')
             ->assertSee('Exam Access Verification')
+            ->assertSee('ALREADY USED')
+            ->assertSee('older_qr_format')
+            ->assertSee('Error Verifying QR')
             ->assertSee('Adekunle Ajasin University logo')
             ->assertSee('verify-brand-logo')
             ->assertSee('background-size:min(520px,84%)', false)
@@ -87,6 +92,7 @@ class ExaminerPortalWebTest extends TestCase
             ->postJson('/examiner/verify', ['qr_data' => $qrData])
             ->assertOk()
             ->assertJsonPath('status', 'APPROVED')
+            ->assertJsonPath('display_status', 'Verified')
             ->assertJsonPath('student.faculty', 'Faculty of Computing')
             ->assertJsonPath('exam_access.payment_status', 'Verified')
             ->assertJsonStructure([
@@ -107,11 +113,15 @@ class ExaminerPortalWebTest extends TestCase
         foreach (['token_id', 'encrypted_payload', 'hmac_signature', 'rrr_number', 'qr_data', 'ip_address'] as $field) {
             $response->assertJsonMissingPath($field);
         }
+        $this->assertStringNotContainsString($qrData['encrypted_payload'], $response->getContent());
+        $this->assertStringNotContainsString($qrData['hmac_signature'], $response->getContent());
+        $this->assertStringNotContainsString('SQLSTATE', $response->getContent());
 
         $this->withSession($this->examinerSession())
             ->postJson('/examiner/verify', ['qr_data' => $qrData])
             ->assertOk()
-            ->assertJsonPath('status', 'DUPLICATE');
+            ->assertJsonPath('status', 'DUPLICATE')
+            ->assertJsonPath('display_status', 'Already Used');
 
         $this->assertSame(2, DB::table('verification_logs')->where('token_id', $token->token_id)->count());
         $this->assertDatabaseHas('verification_logs', ['token_id' => $token->token_id, 'decision' => 'APPROVED']);
@@ -131,6 +141,55 @@ class ExaminerPortalWebTest extends TestCase
             ->assertJsonPath('reason', 'token_record_mismatch');
     }
 
+    public function test_post_verification_audit_failure_does_not_turn_genuine_qr_into_rejected(): void
+    {
+        $token = $this->registerToken();
+        $qrData = $this->qrData($token);
+        $audit = $this->createMock(AuditService::class);
+        $audit->method('logAction')
+            ->willThrowException(new RuntimeException('SQLSTATE simulated audit failure'));
+        $this->app->instance(AuditService::class, $audit);
+
+        $response = $this->withSession($this->examinerSession())
+            ->postJson('/examiner/verify', ['qr_data' => $qrData])
+            ->assertOk()
+            ->assertJsonPath('status', 'APPROVED')
+            ->assertJsonPath('display_status', 'Verified');
+
+        $this->assertDatabaseHas('qr_tokens', [
+            'token_id' => $token->token_id,
+            'status' => 'USED',
+        ]);
+        $this->assertStringNotContainsString('SQLSTATE', $response->getContent());
+    }
+
+    public function test_verification_log_failure_returns_error_without_consuming_pass(): void
+    {
+        $token = $this->registerToken();
+        $qrData = $this->qrData($token);
+
+        DB::unprepared(
+            "CREATE TRIGGER fail_verification_log
+             BEFORE INSERT ON verification_logs
+             BEGIN
+                 SELECT RAISE(ABORT, 'simulated verification log failure');
+             END"
+        );
+
+        $response = $this->withSession($this->examinerSession())
+            ->postJson('/examiner/verify', ['qr_data' => $qrData])
+            ->assertOk()
+            ->assertJsonPath('status', 'ERROR')
+            ->assertJsonPath('display_status', 'Error Verifying QR');
+
+        $this->assertDatabaseHas('qr_tokens', [
+            'token_id' => $token->token_id,
+            'status' => 'UNUSED',
+        ]);
+        $this->assertStringNotContainsString('SQLSTATE', $response->getContent());
+        $this->assertStringNotContainsString('simulated verification log failure', $response->getContent());
+    }
+
     public function test_examiner_web_scanner_route_requires_examiner_session(): void
     {
         $this->postJson('/examiner/verify', ['qr_data' => []])
@@ -141,7 +200,7 @@ class ExaminerPortalWebTest extends TestCase
     private function registerAndScan(int $examinerId): string
     {
         $token = $this->registerToken();
-        (new VerificationService(new CryptoService()))->verifyQr(
+        (new VerificationService(new CryptoService))->verifyQr(
             $this->qrData($token),
             $examinerId,
             'test-device',
@@ -154,7 +213,7 @@ class ExaminerPortalWebTest extends TestCase
     private function registerToken(): object
     {
         $session = DB::table('exam_sessions')->where('is_active', true)->first();
-        (new RegistrationService(new MockSISService()))->registerStudent([
+        (new RegistrationService(new MockSISService))->registerStudent([
             'matric_no' => '220404008',
             'session_id' => (int) $session->session_id,
         ]);
@@ -164,7 +223,7 @@ class ExaminerPortalWebTest extends TestCase
             ->value('id');
         $result = (new ExamPassService(
             $this->createMock(RemitaService::class),
-            new QrTokenService(new CryptoService()),
+            new QrTokenService(new CryptoService),
         ))->generate(
             '220404008',
             (int) $session->session_id,

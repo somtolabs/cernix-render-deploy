@@ -15,53 +15,74 @@ class QrTokenServiceTest extends TestCase
     use RefreshDatabase;
 
     private QrTokenService $service;
+
     private int $sessionId;
+
     private string $matricNo;
+
     private int $examinerId;
+
+    private int $timetableId;
 
     protected function setUp(): void
     {
         parent::setUp();
 
-        $this->service = new QrTokenService(new CryptoService());
+        $this->service = new QrTokenService(new CryptoService);
 
         // Department
         $deptId = DB::table('departments')->insertGetId([
             'dept_name' => 'Computer Science',
-            'faculty'   => 'Faculty of Computing',
+            'faculty' => 'Faculty of Computing',
         ]);
 
         // Active exam session with real keys
         $this->sessionId = DB::table('exam_sessions')->insertGetId([
-            'semester'      => 'First Semester',
+            'semester' => 'First Semester',
             'academic_year' => '2025/2026',
-            'fee_amount'    => 10000.00,
-            'aes_key'       => bin2hex(random_bytes(32)),
-            'hmac_secret'   => bin2hex(random_bytes(32)),
-            'is_active'     => true,
-            'created_at'    => now(),
-            'updated_at'    => now(),
+            'fee_amount' => 10000.00,
+            'aes_key' => bin2hex(random_bytes(32)),
+            'hmac_secret' => bin2hex(random_bytes(32)),
+            'is_active' => true,
+            'created_at' => now(),
+            'updated_at' => now(),
         ]);
 
         // Student
         $this->matricNo = 'CSC/2021/001';
         DB::table('students')->insert([
-            'matric_no'     => $this->matricNo,
-            'full_name'     => 'Adebayo Oluwaseun Emmanuel',
+            'matric_no' => $this->matricNo,
+            'full_name' => 'Adebayo Oluwaseun Emmanuel',
             'department_id' => $deptId,
-            'session_id'    => $this->sessionId,
-            'photo_path'    => 'demo-passports/student-020.jpg',
-            'created_at'    => now(),
+            'level' => '400',
+            'session_id' => $this->sessionId,
+            'photo_path' => 'demo-passports/student-020.jpg',
+            'created_at' => now(),
+        ]);
+
+        $this->timetableId = DB::table('timetables')->insertGetId([
+            'exam_session_id' => $this->sessionId,
+            'department_id' => $deptId,
+            'level' => '400',
+            'course_code' => 'CSC401',
+            'course_title' => 'Artificial Intelligence',
+            'exam_date' => today()->addDay(),
+            'start_time' => '09:00',
+            'end_time' => '12:00',
+            'venue' => 'CBT Hall A',
+            'status' => 'scheduled',
+            'created_at' => now(),
+            'updated_at' => now(),
         ]);
 
         // Examiner
         $this->examinerId = DB::table('examiners')->insertGetId([
-            'full_name'     => 'Examiner One',
-            'username'      => 'examiner1',
+            'full_name' => 'Examiner One',
+            'username' => 'examiner1',
             'password_hash' => bcrypt('password123'),
-            'role'          => 'examiner',
-            'is_active'     => true,
-            'created_at'    => now(),
+            'role' => 'examiner',
+            'is_active' => true,
+            'created_at' => now(),
         ]);
     }
 
@@ -93,10 +114,42 @@ class QrTokenServiceTest extends TestCase
         $result = $this->service->issue($this->matricNo, $this->sessionId);
 
         $this->assertDatabaseHas('qr_tokens', [
-            'token_id'   => $result['token_id'],
+            'token_id' => $result['token_id'],
             'student_id' => $this->matricNo,
             'session_id' => $this->sessionId,
-            'status'     => 'UNUSED',
+            'status' => 'UNUSED',
+        ]);
+    }
+
+    public function test_generated_course_qr_contains_the_fields_and_binding_expected_by_scanner(): void
+    {
+        $result = $this->service->issue(
+            $this->matricNo,
+            $this->sessionId,
+            $this->timetableId
+        );
+        $qrData = json_decode($result['qr_content'], true, 512, JSON_THROW_ON_ERROR);
+        $session = DB::table('exam_sessions')->where('session_id', $this->sessionId)->first();
+        $payload = (new CryptoService)->decryptPayload(
+            $qrData['encrypted_payload'],
+            $qrData['hmac_signature'],
+            $session->aes_key,
+            $session->hmac_secret
+        );
+
+        $this->assertSame(
+            ['token_id', 'encrypted_payload', 'hmac_signature', 'session_id'],
+            array_keys($qrData)
+        );
+        $this->assertSame($result['token_id'], $payload['token_id']);
+        $this->assertSame($this->sessionId, $payload['session_id']);
+        $this->assertSame($this->timetableId, $payload['timetable_id']);
+        $this->assertDatabaseHas('qr_tokens', [
+            'token_id' => $result['token_id'],
+            'student_id' => $this->matricNo,
+            'session_id' => $this->sessionId,
+            'timetable_id' => $this->timetableId,
+            'status' => 'UNUSED',
         ]);
     }
 
@@ -168,7 +221,7 @@ class QrTokenServiceTest extends TestCase
 
         $this->assertDatabaseHas('qr_tokens', [
             'token_id' => $issued['token_id'],
-            'status'   => 'USED',
+            'status' => 'USED',
         ]);
     }
 
@@ -178,11 +231,11 @@ class QrTokenServiceTest extends TestCase
         $this->service->verify($issued['qr_content'], $this->examinerId, 'fp-device', '10.0.0.1');
 
         $this->assertDatabaseHas('verification_logs', [
-            'token_id'    => $issued['token_id'],
+            'token_id' => $issued['token_id'],
             'examiner_id' => $this->examinerId,
-            'decision'    => 'APPROVED',
-            'device_fp'   => 'fp-device',
-            'ip_address'  => '10.0.0.1',
+            'decision' => 'APPROVED',
+            'device_fp' => 'fp-device',
+            'ip_address' => '10.0.0.1',
         ]);
     }
 
@@ -240,7 +293,7 @@ class QrTokenServiceTest extends TestCase
 
         $this->assertDatabaseHas('qr_tokens', [
             'token_id' => $issued['token_id'],
-            'status'   => 'REVOKED',
+            'status' => 'REVOKED',
         ]);
     }
 
@@ -271,10 +324,10 @@ class QrTokenServiceTest extends TestCase
         $issued = $this->service->issue($this->matricNo, $this->sessionId);
 
         $tokenData = [
-            'token_id'          => $issued['token_id'],
+            'token_id' => $issued['token_id'],
             'encrypted_payload' => $issued['encrypted_payload'],
-            'hmac_signature'    => $issued['hmac_signature'],
-            'session_id'        => $this->sessionId,
+            'hmac_signature' => $issued['hmac_signature'],
+            'session_id' => $this->sessionId,
         ];
 
         $svg = $this->service->buildQrCode($tokenData);
@@ -304,8 +357,8 @@ class QrTokenServiceTest extends TestCase
     {
         $issued = $this->service->issue($this->matricNo, $this->sessionId);
 
-        $qrJson  = $issued['qr_content'];
-        $qrData  = json_decode($qrJson, true);
+        $qrJson = $issued['qr_content'];
+        $qrData = json_decode($qrJson, true);
 
         // None of these keys may appear in the outer QR envelope
         foreach (['matric_no', 'full_name', 'photo_path', 'photo_hash', 'email'] as $piiKey) {
@@ -321,11 +374,11 @@ class QrTokenServiceTest extends TestCase
     {
         $issued = $this->service->issue($this->matricNo, $this->sessionId);
 
-        $session = \Illuminate\Support\Facades\DB::table('exam_sessions')
+        $session = DB::table('exam_sessions')
             ->where('session_id', $this->sessionId)
             ->first();
 
-        $crypto    = new \App\Services\CryptoService();
+        $crypto = new CryptoService;
         $decrypted = $crypto->decryptPayload(
             $issued['encrypted_payload'],
             $issued['hmac_signature'],
@@ -347,7 +400,7 @@ class QrTokenServiceTest extends TestCase
         $data['encrypted_payload'] = base64_encode('forged_garbage_payload');
         $tampered = json_encode($data);
 
-        $this->expectException(\RuntimeException::class);
+        $this->expectException(RuntimeException::class);
 
         $this->service->verify($tampered, $this->examinerId, 'fp', '127.0.0.1');
     }

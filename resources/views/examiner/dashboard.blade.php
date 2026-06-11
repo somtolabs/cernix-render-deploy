@@ -165,7 +165,7 @@
                 <article class="recent-scan-item">
                     <div class="recent-scan-top">
                         <strong>{{ $row['student'] ?? 'Student unavailable' }}</strong>
-                        <span class="ex-badge {{ $row['decision'] ?? 'REJECTED' }}">{{ ($row['decision'] ?? '') === 'DUPLICATE' ? 'REPEATED' : ($row['decision'] ?? 'RECORDED') }}</span>
+                        <span class="ex-badge {{ $row['decision'] ?? 'REJECTED' }}">{{ ($row['decision'] ?? '') === 'DUPLICATE' ? 'ALREADY USED' : (($row['decision'] ?? '') === 'APPROVED' ? 'VERIFIED' : ($row['decision'] ?? 'RECORDED')) }}</span>
                     </div>
                     <div class="recent-scan-meta mono">{{ $row['matric_no'] ?? 'No matric' }} · {{ $row['time'] ?? 'No time' }}</div>
                     @if(! empty($row['detail_url']))
@@ -193,8 +193,8 @@
             <div>
                 <div class="verify-label">Verification Result</div>
                 <div class="verify-decision-line">
-                    <h2 class="verify-status" id="verifyStatus">USED</h2>
-                    <span class="ex-badge DUPLICATE" id="verifyBadge">REPEATED</span>
+                    <h2 class="verify-status" id="verifyStatus">ALREADY USED</h2>
+                    <span class="ex-badge DUPLICATE" id="verifyBadge">ALREADY USED</span>
                 </div>
                 <p class="verify-message" id="verifyMessage">This exam pass has already been scanned.</p>
             </div>
@@ -321,7 +321,8 @@
         const theme = statusTheme(status);
         if (theme === 'approved') return 'Student verified successfully.';
         if (theme === 'duplicate') return 'This exam pass has already been scanned.';
-        return 'Verification failed. Access denied.';
+        if (normalizeStatus(status) === 'ERROR') return 'The QR could not be verified right now. Please try again.';
+        return 'This QR could not be verified.';
     }
     function photoUrl(path) {
         if (!path || /^https?:\/\//i.test(path) || path.includes('..')) return '';
@@ -564,7 +565,7 @@
         try {
             qrData = JSON.parse(rawData);
         } catch (_) {
-            const result = { status: 'INVALID', student: null, token_id: null, timestamp: new Date().toISOString(), reason: 'Invalid QR code.' };
+            const result = { status: 'INVALID', display_status: 'Invalid QR', student: null, token_id: null, timestamp: new Date().toISOString(), reason: 'Invalid QR code.' };
             renderResult(result);
             showVerificationOverlay(result);
             playResultSound(result.status);
@@ -576,7 +577,7 @@
         }
         const requiredFields = ['token_id', 'encrypted_payload', 'hmac_signature', 'session_id'];
         if (!qrData || typeof qrData !== 'object' || !requiredFields.every((field) => qrData[field])) {
-            const result = { status: 'REJECTED', student: null, timestamp: new Date().toISOString(), reason: 'Invalid QR code.' };
+            const result = { status: 'INVALID', display_status: 'Invalid QR', student: null, timestamp: new Date().toISOString(), reason: 'Invalid QR code.' };
             renderResult(result);
             showVerificationOverlay(result);
             playResultSound(result.status);
@@ -604,19 +605,23 @@
                 body: JSON.stringify({ qr_data: qrData })
             });
             const result = await response.json().catch(() => ({
-                status: 'REJECTED',
+                status: 'ERROR',
+                display_status: 'Error Verifying QR',
                 student: null,
                 timestamp: new Date().toISOString(),
                 reason: 'The verification server returned an unreadable response.'
             }));
             if (response.status === 419) {
-                result.status = 'REJECTED';
+                result.status = 'ERROR';
+                result.display_status = 'Error Verifying QR';
                 result.reason = 'Session expired. Log in again.';
             } else if (response.status === 401 || response.status === 403) {
-                result.status = 'REJECTED';
+                result.status = 'ERROR';
+                result.display_status = 'Error Verifying QR';
                 result.reason = 'Examiner access required. Log in again.';
             } else if (!response.ok) {
-                result.status = 'REJECTED';
+                result.status = 'ERROR';
+                result.display_status = 'Error Verifying QR';
                 result.reason = result.message || result.reason || 'Verification could not be completed.';
             }
             renderResult(result);
@@ -650,6 +655,7 @@
     }
     function renderResult(result) {
         const status = normalizeStatus(result.status);
+        const label = result.display_status || decisionLabel(status);
         const student = result.student || {};
         const access = result.exam_access || {};
         const detailLink = result.detail_url
@@ -658,8 +664,8 @@
         latestResult.innerHTML = `
             <div class="ex-record">
                 <div class="ex-record-top">
-                    <strong>${decisionLabel(status)}</strong>
-                    <span class="ex-badge ${status}">${decisionLabel(status)}</span>
+                    <strong>${escapeHtml(label)}</strong>
+                    <span class="ex-badge ${status}">${escapeHtml(label)}</span>
                 </div>
                 <div class="result-grid">
                     <div><span>Student</span><b>${escapeHtml(student.full_name || 'Student unavailable')}</b></div>
@@ -674,13 +680,14 @@
     }
     function showVerificationOverlay(result) {
         const status = normalizeStatus(result.status);
+        const label = result.display_status || decisionLabel(status);
         const theme = statusTheme(status);
         const student = result.student || {};
         const access = result.exam_access || {};
         verifyDocument.className = `verify-document ${theme}`;
-        document.getElementById('verifyStatus').textContent = status === 'DUPLICATE' ? 'ALREADY SCANNED' : decisionLabel(status);
-        document.getElementById('verifyMessage').textContent = statusMessage(status);
-        if (result.reason && !['token_already_used'].includes(result.reason)) {
+        document.getElementById('verifyStatus').textContent = label;
+        document.getElementById('verifyMessage').textContent = result.message || statusMessage(status);
+        if (!result.message && result.reason && !['token_already_used'].includes(result.reason)) {
             document.getElementById('verifyMessage').textContent = friendlyReason(result.reason);
         }
         const displayName = student.full_name || 'Student unavailable';
@@ -698,7 +705,7 @@
         document.getElementById('verifyName').textContent = displayName;
         document.getElementById('verifyMatric').textContent = student.matric_no || 'Unavailable';
         const badge = document.getElementById('verifyBadge');
-        badge.textContent = status === 'DUPLICATE' ? 'REPEATED' : status;
+        badge.textContent = label;
         badge.className = `ex-badge ${status}`;
         document.getElementById('verifyDepartment').textContent = student.department || 'Not available';
         document.getElementById('verifyLevel').textContent = student.level || 'Not available';
@@ -712,7 +719,7 @@
         document.getElementById('verifyVenue').textContent = access.venue || 'Hall not assigned yet';
         document.getElementById('verifySeat').textContent = access.seat_number || 'Not assigned yet';
         document.getElementById('verifyTimetable').textContent = access.timetable_status || 'Not assigned yet';
-        document.getElementById('verifyDecision').textContent = status;
+        document.getElementById('verifyDecision').textContent = label;
         document.getElementById('verifyTime').textContent = new Date(result.timestamp || Date.now()).toLocaleString();
         document.getElementById('verifyExaminer').textContent = result.examiner || @json($examiner['full_name'] ?? 'Examiner');
         document.getElementById('verifyCount').textContent = result.scan_count || 0;
@@ -730,17 +737,27 @@
         return normalized;
     }
     function decisionLabel(status) {
-        return normalizeStatus(status) === 'DUPLICATE' ? 'REPEATED' : normalizeStatus(status);
+        const normalized = normalizeStatus(status);
+        if (normalized === 'APPROVED') return 'Verified';
+        if (normalized === 'DUPLICATE' || normalized === 'USED') return 'Already Used';
+        if (normalized === 'INVALID') return 'Invalid QR';
+        if (normalized === 'ERROR') return 'Error Verifying QR';
+        return 'Rejected';
     }
     function friendlyReason(reason) {
         const messages = {
             invalid_format: 'This is not a valid CERNIX exam pass.',
             invalid_session: 'This exam pass is not valid for the active exam session.',
             tampered_token: 'This exam pass could not be verified.',
-            identity_mismatch: 'Student details could not be confirmed.',
+            identity_mismatch: 'This QR does not match the student or course.',
+            course_mismatch: 'This QR does not match the student or course.',
+            course_not_assigned: 'This course is not assigned to the student.',
+            payment_not_verified: 'A verified session payment could not be confirmed.',
+            older_qr_format: 'This QR was generated using an older format. Please generate a new course QR pass.',
             token_not_found: 'This exam pass could not be found.',
             token_revoked: 'This exam pass is unavailable.',
-            invalid_status: 'This exam pass is unavailable.'
+            invalid_status: 'This exam pass is unavailable.',
+            verification_failed: 'The QR could not be verified right now. Please try again.'
         };
         return messages[reason] || String(reason || 'Verification failed. Access denied.');
     }

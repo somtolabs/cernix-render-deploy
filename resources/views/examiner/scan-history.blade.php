@@ -29,7 +29,7 @@
                             <td data-label="Time">{{ $row['time'] }}</td>
                             <td data-label="Student" class="safe"><strong>{{ $row['student'] }}</strong></td>
                             <td data-label="Matric" class="ex-mono">{{ $row['matric_no'] }}</td>
-                            <td data-label="Decision"><span class="ex-badge {{ $row['decision'] }}">{{ $row['decision'] === 'DUPLICATE' ? 'REPEATED' : $row['decision'] }}</span></td>
+                            <td data-label="Decision"><span class="ex-badge {{ $row['decision'] }}">{{ $row['decision'] === 'DUPLICATE' ? 'ALREADY USED' : ($row['decision'] === 'APPROVED' ? 'VERIFIED' : $row['decision']) }}</span></td>
                             <td data-label="Action"><a class="ex-action secondary" href="{{ $row['detail_url'] }}">View</a></td>
                         </tr>
                     @endforeach

@@ -14,62 +14,77 @@ class VerificationServiceTest extends TestCase
     use RefreshDatabase;
 
     private VerificationService $service;
+
     private CryptoService $crypto;
 
-    private string $matricNo  = 'CSC/2021/001';
-    private int    $sessionId;
-    private int    $examinerId;
+    private string $matricNo = 'CSC/2021/001';
+
+    private int $sessionId;
+
+    private int $examinerId;
+
     private string $aesKey;
+
     private string $hmacSecret;
 
     protected function setUp(): void
     {
         parent::setUp();
 
-        $this->crypto  = new CryptoService();
+        $this->crypto = new CryptoService;
         $this->service = new VerificationService($this->crypto);
 
         // Department
         $deptId = DB::table('departments')->insertGetId([
             'dept_name' => 'Computer Science',
-            'faculty'   => 'Faculty of Computing',
+            'faculty' => 'Faculty of Computing',
         ]);
 
         // Keys stored as 64-char hex (same format as ExamSessionsSeeder)
-        $this->aesKey     = bin2hex(random_bytes(32));
+        $this->aesKey = bin2hex(random_bytes(32));
         $this->hmacSecret = bin2hex(random_bytes(32));
 
         // Active exam session
         $this->sessionId = DB::table('exam_sessions')->insertGetId([
-            'semester'      => 'First Semester',
+            'semester' => 'First Semester',
             'academic_year' => '2025/2026',
-            'fee_amount'    => 10000.00,
-            'aes_key'       => $this->aesKey,
-            'hmac_secret'   => $this->hmacSecret,
-            'is_active'     => true,
-            'created_at'    => now(),
-            'updated_at'    => now(),
+            'fee_amount' => 10000.00,
+            'aes_key' => $this->aesKey,
+            'hmac_secret' => $this->hmacSecret,
+            'is_active' => true,
+            'created_at' => now(),
+            'updated_at' => now(),
         ]);
 
         // Student
         DB::table('students')->insert([
-            'matric_no'     => $this->matricNo,
-            'full_name'     => 'Adebayo Oluwaseun Emmanuel',
+            'matric_no' => $this->matricNo,
+            'full_name' => 'Adebayo Oluwaseun Emmanuel',
             'department_id' => $deptId,
-            'level'         => '400',
-            'session_id'    => $this->sessionId,
-            'photo_path'    => 'demo-passports/student-020.jpg',
-            'created_at'    => now(),
+            'level' => '400',
+            'session_id' => $this->sessionId,
+            'photo_path' => 'demo-passports/student-020.jpg',
+            'created_at' => now(),
+        ]);
+
+        DB::table('payment_records')->insert([
+            'student_id' => $this->matricNo,
+            'session_id' => $this->sessionId,
+            'rrr_number' => 'RRR-VERIFIED-001',
+            'amount_declared' => 10000,
+            'amount_confirmed' => 10000,
+            'remita_response' => json_encode(['status' => 'verified'], JSON_THROW_ON_ERROR),
+            'verified_at' => now(),
         ]);
 
         // Examiner (required for verification_logs FK)
         $this->examinerId = DB::table('examiners')->insertGetId([
-            'full_name'     => 'Examiner One',
-            'username'      => 'examiner1',
+            'full_name' => 'Examiner One',
+            'username' => 'examiner1',
             'password_hash' => bcrypt('password123'),
-            'role'          => 'examiner',
-            'is_active'     => true,
-            'created_at'    => now(),
+            'role' => 'examiner',
+            'is_active' => true,
+            'created_at' => now(),
         ]);
     }
 
@@ -81,7 +96,7 @@ class VerificationServiceTest extends TestCase
      * Insert a qr_tokens row with a real encrypted payload and return the
      * QR envelope array a scanner would present to verifyQr().
      *
-     * @param  string $status  Initial token status (default: 'UNUSED')
+     * @param  string  $status  Initial token status (default: 'UNUSED')
      * @param  array  $payloadOverrides  Override individual payload fields
      */
     private function issueToken(
@@ -89,17 +104,24 @@ class VerificationServiceTest extends TestCase
         array $payloadOverrides = [],
         ?int $timetableId = null,
         bool $legacyPayload = false
-    ): array
-    {
+    ): array {
+        if ($timetableId === null && ! $legacyPayload) {
+            $sequence = DB::table('timetables')->count() + 401;
+            $timetableId = $this->createExam(
+                'CSC'.$sequence,
+                'Assigned Course '.$sequence
+            );
+        }
+
         $tokenId = Str::uuid()->toString();
 
         $payload = array_merge([
-            'token_id'   => $tokenId,
-            'matric_no'  => $this->matricNo,
-            'full_name'  => 'Adebayo Oluwaseun Emmanuel',
+            'token_id' => $tokenId,
+            'matric_no' => $this->matricNo,
+            'full_name' => 'Adebayo Oluwaseun Emmanuel',
             'session_id' => $this->sessionId,
             'timetable_id' => $timetableId,
-            'issued_at'  => now()->toISOString(),
+            'issued_at' => now()->toISOString(),
         ], $payloadOverrides);
         if ($legacyPayload) {
             unset($payload['token_id'], $payload['timetable_id']);
@@ -108,22 +130,22 @@ class VerificationServiceTest extends TestCase
         $encrypted = $this->crypto->encryptPayload($payload, $this->aesKey, $this->hmacSecret);
 
         DB::table('qr_tokens')->insert([
-            'token_id'          => $tokenId,
-            'student_id'        => $this->matricNo,
-            'session_id'        => $this->sessionId,
-            'timetable_id'      => $timetableId,
+            'token_id' => $tokenId,
+            'student_id' => $this->matricNo,
+            'session_id' => $this->sessionId,
+            'timetable_id' => $timetableId,
             'encrypted_payload' => $encrypted['encrypted_payload'],
-            'hmac_signature'    => $encrypted['hmac_signature'],
-            'status'            => $status,
-            'issued_at'         => now(),
-            'used_at'           => null,
+            'hmac_signature' => $encrypted['hmac_signature'],
+            'status' => $status,
+            'issued_at' => now(),
+            'used_at' => null,
         ]);
 
         return [
-            'token_id'          => $tokenId,
+            'token_id' => $tokenId,
             'encrypted_payload' => $encrypted['encrypted_payload'],
-            'hmac_signature'    => $encrypted['hmac_signature'],
-            'session_id'        => $this->sessionId,
+            'hmac_signature' => $encrypted['hmac_signature'],
+            'session_id' => $this->sessionId,
         ];
     }
 
@@ -184,6 +206,17 @@ class VerificationServiceTest extends TestCase
         $this->assertSame('DUPLICATE', $result['status']);
         $this->assertSame($this->matricNo, $result['student']['matric_no']);
         $this->assertSame($qrData['token_id'], $result['token_id']);
+    }
+
+    public function test_already_used_token_remains_duplicate_if_payment_record_is_later_unavailable(): void
+    {
+        $qrData = $this->issueToken('USED');
+        DB::table('payment_records')->where('student_id', $this->matricNo)->delete();
+
+        $result = $this->service->verifyQr($qrData, $this->examinerId, 'fp', '127.0.0.1');
+
+        $this->assertSame('DUPLICATE', $result['status']);
+        $this->assertSame('Already Used', $result['display_status']);
     }
 
     public function test_revoked_token_returns_rejected(): void
@@ -298,14 +331,80 @@ class VerificationServiceTest extends TestCase
         ]);
     }
 
-    public function test_legacy_session_token_without_course_binding_still_verifies(): void
+    public function test_legacy_session_token_without_course_binding_requires_new_course_pass(): void
     {
         $qrData = $this->issueToken('UNUSED', [], null, true);
 
         $result = $this->service->verifyQr($qrData, $this->examinerId, 'fp', '127.0.0.1');
 
-        $this->assertSame('APPROVED', $result['status']);
+        $this->assertSame('REJECTED', $result['status']);
+        $this->assertSame('OLDER QR FORMAT', strtoupper($result['display_status']));
+        $this->assertSame('older_qr_format', $result['reason']);
         $this->assertArrayNotHasKey('exam_access', $result);
+        $this->assertDatabaseHas('qr_tokens', [
+            'token_id' => $qrData['token_id'],
+            'status' => 'UNUSED',
+        ]);
+    }
+
+    public function test_qr_for_wrong_student_is_rejected(): void
+    {
+        $departmentId = DB::table('students')
+            ->where('matric_no', $this->matricNo)
+            ->value('department_id');
+
+        DB::table('students')->insert([
+            'matric_no' => 'CSC/2021/999',
+            'full_name' => 'Another Student',
+            'department_id' => $departmentId,
+            'level' => '400',
+            'session_id' => $this->sessionId,
+            'photo_path' => 'demo-passports/student-021.jpg',
+            'created_at' => now(),
+        ]);
+
+        $qrData = $this->issueToken('UNUSED', [
+            'matric_no' => 'CSC/2021/999',
+            'full_name' => 'Another Student',
+        ]);
+
+        $result = $this->service->verifyQr($qrData, $this->examinerId, 'fp', '127.0.0.1');
+
+        $this->assertSame('REJECTED', $result['status']);
+        $this->assertSame('identity_mismatch', $result['reason']);
+        $this->assertSame('Wrong Student/Course', $result['display_status']);
+    }
+
+    public function test_unassigned_or_cancelled_course_is_rejected_cleanly(): void
+    {
+        $qrData = $this->issueToken();
+        $timetableId = DB::table('qr_tokens')
+            ->where('token_id', $qrData['token_id'])
+            ->value('timetable_id');
+
+        DB::table('timetables')->where('id', $timetableId)->update(['status' => 'cancelled']);
+
+        $result = $this->service->verifyQr($qrData, $this->examinerId, 'fp', '127.0.0.1');
+
+        $this->assertSame('REJECTED', $result['status']);
+        $this->assertSame('course_not_assigned', $result['reason']);
+        $this->assertSame('Course Not Assigned', $result['display_status']);
+    }
+
+    public function test_missing_session_payment_is_rejected_without_using_token(): void
+    {
+        $qrData = $this->issueToken();
+        DB::table('payment_records')->where('student_id', $this->matricNo)->delete();
+
+        $result = $this->service->verifyQr($qrData, $this->examinerId, 'fp', '127.0.0.1');
+
+        $this->assertSame('REJECTED', $result['status']);
+        $this->assertSame('payment_not_verified', $result['reason']);
+        $this->assertSame('Payment Not Verified', $result['display_status']);
+        $this->assertDatabaseHas('qr_tokens', [
+            'token_id' => $qrData['token_id'],
+            'status' => 'UNUSED',
+        ]);
     }
 
     // -------------------------------------------------------------------------
@@ -334,7 +433,7 @@ class VerificationServiceTest extends TestCase
 
         $this->assertDatabaseHas('qr_tokens', [
             'token_id' => $qrData['token_id'],
-            'status'   => 'USED',
+            'status' => 'USED',
         ]);
     }
 
@@ -344,11 +443,11 @@ class VerificationServiceTest extends TestCase
         $this->service->verifyQr($qrData, $this->examinerId, 'fp-scanner', '192.168.1.1');
 
         $this->assertDatabaseHas('verification_logs', [
-            'token_id'    => $qrData['token_id'],
+            'token_id' => $qrData['token_id'],
             'examiner_id' => $this->examinerId,
-            'decision'    => 'APPROVED',
-            'device_fp'   => 'fp-scanner',
-            'ip_address'  => '192.168.1.1',
+            'decision' => 'APPROVED',
+            'device_fp' => 'fp-scanner',
+            'ip_address' => '192.168.1.1',
         ]);
     }
 
@@ -360,12 +459,27 @@ class VerificationServiceTest extends TestCase
     {
         $qrData = $this->issueToken();
 
-        $first  = $this->service->verifyQr($qrData, $this->examinerId, 'fp', '127.0.0.1');
+        $first = $this->service->verifyQr($qrData, $this->examinerId, 'fp', '127.0.0.1');
         $second = $this->service->verifyQr($qrData, $this->examinerId, 'fp', '127.0.0.1');
 
-        $this->assertSame('APPROVED',   $first['status']);
-        $this->assertSame('DUPLICATE',  $second['status']);
+        $this->assertSame('APPROVED', $first['status']);
+        $this->assertSame('DUPLICATE', $second['status']);
+        $this->assertSame('Already Used', $second['display_status']);
         $this->assertSame($this->matricNo, $second['student']['matric_no']);
+    }
+
+    public function test_another_course_qr_for_same_student_can_verify_separately(): void
+    {
+        $firstQr = $this->issueToken();
+        $secondQr = $this->issueToken();
+
+        $first = $this->service->verifyQr($firstQr, $this->examinerId, 'fp', '127.0.0.1');
+        $second = $this->service->verifyQr($secondQr, $this->examinerId, 'fp', '127.0.0.1');
+
+        $this->assertSame('APPROVED', $first['status']);
+        $this->assertSame('APPROVED', $second['status']);
+        $this->assertDatabaseHas('qr_tokens', ['token_id' => $firstQr['token_id'], 'status' => 'USED']);
+        $this->assertDatabaseHas('qr_tokens', ['token_id' => $secondQr['token_id'], 'status' => 'USED']);
     }
 
     public function test_reused_qr_writes_duplicate_log(): void
@@ -411,8 +525,11 @@ class VerificationServiceTest extends TestCase
 
         $encoded = json_encode($result);
 
-        $this->assertStringNotContainsString($this->aesKey,     $encoded, 'AES key must not appear in response');
+        $this->assertStringNotContainsString($this->aesKey, $encoded, 'AES key must not appear in response');
         $this->assertStringNotContainsString($this->hmacSecret, $encoded, 'HMAC secret must not appear in response');
+        $this->assertStringNotContainsString($qrData['encrypted_payload'], $encoded);
+        $this->assertStringNotContainsString($qrData['hmac_signature'], $encoded);
+        $this->assertStringNotContainsString('SQLSTATE', $encoded);
     }
 
     private function createExam(string $courseCode, string $courseTitle): int
