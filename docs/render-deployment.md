@@ -13,9 +13,12 @@ If your GitHub repository wraps the app inside a `cernix/` subfolder, set the Re
 1. Push the repository to GitHub.
 2. In Render, create a new **Web Service**.
 3. Choose the GitHub repository.
-4. Select **Docker** as the runtime.
-5. Use `Dockerfile` from the Laravel root.
-6. Set the service port through Render's `PORT` variable. The container defaults to `10000` locally.
+4. Confirm the linked branch is **main**.
+5. Keep the service root directory at the repository root (`.`), not the legacy `cernix/` subfolder.
+6. Select **Docker** as the runtime.
+7. Use `Dockerfile` from the Laravel root.
+8. Keep automatic deploys enabled for commits to `main`.
+9. Set the service port through Render's `PORT` variable. The container defaults to `10000` locally.
 
 The container starts through `scripts/render-start.sh`, which validates Render's `PORT` value before calling Laravel:
 
@@ -82,8 +85,7 @@ Do not hardcode demo mode in the repository.
 `scripts/render-start.sh` runs:
 
 ```bash
-php artisan config:clear
-php artisan route:clear
+php artisan optimize:clear
 php artisan view:clear
 php artisan storage:link || true
 php artisan migrate --force

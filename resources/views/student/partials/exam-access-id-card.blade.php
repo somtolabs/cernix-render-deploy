@@ -445,7 +445,7 @@
     }
 </style>
 
-<article id="exam-access-id-card" class="course-qr-pass">
+<article id="exam-access-id-card" class="course-qr-pass" data-qr-pass-version="2026-06-11-A">
     <header class="qr-pass-masthead">
         <div class="qr-pass-brand">
             <img class="qr-pass-logo" src="{{ $brandingLogoUrl }}" alt="Adekunle Ajasin University logo">

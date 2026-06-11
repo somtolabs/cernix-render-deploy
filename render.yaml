@@ -3,6 +3,10 @@ services:
     name: cernix
     runtime: docker
     plan: starter
+    repo: https://github.com/bright1122-os/cernix-render-deploy
+    branch: main
+    rootDir: .
+    autoDeployTrigger: commit
     dockerfilePath: ./Dockerfile
     dockerContext: .
     healthCheckPath: /up
