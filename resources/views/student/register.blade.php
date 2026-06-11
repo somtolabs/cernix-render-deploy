@@ -190,7 +190,7 @@
                     <details class="demo-helper">
                         <summary>Need demo credentials?</summary>
                         <div class="demo-body">
-                            <p>For demo/testing, choose a sample student number from 001 to 014. Payment is completed later from Generate Exam Pass.</p>
+                            <p>For demo/testing, choose a sample student number from 001 to 014. Session payment is completed later from Generate QR Pass.</p>
                             <div class="demo-list">
                                 @foreach($sampleRecords as $sample)
                                     <div class="demo-record">

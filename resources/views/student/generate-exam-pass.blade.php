@@ -1,6 +1,6 @@
 @extends('layouts.student-portal')
 
-@section('title', 'Generate Exam Pass')
+@section('title', 'Generate QR Pass')
 
 @section('student-content')
 <style>
@@ -55,24 +55,24 @@
 
 <div class="cx-page-head">
     <div class="cx-eyebrow">Payment and Course Access</div>
-    <h1>Generate Exam Pass</h1>
-    <p>{{ $payment ? 'Your payment is verified for this session. Generate or open your exam pass for each assigned paper.' : 'Enter your Remita RRR once to verify payment for this exam session.' }}</p>
+    <h1>Generate QR Pass</h1>
+    <p>{{ $payment ? 'Payment verified for this session. Select a course to generate or view its QR pass.' : 'Enter your Remita RRR once for this session, then select a course to generate its QR pass.' }}</p>
 </div>
 
 <div class="course-pass-flow">
-    <section class="course-pass-strip" aria-label="Exam pass summary">
+    <section class="course-pass-strip" aria-label="Course QR pass summary">
         <div><span>Registration</span><b>Complete</b></div>
         <div><span>Session Payment</span><b>{{ $payment ? 'Verified' : 'Pending' }}</b></div>
         <div><span>Assigned Courses</span><b>{{ $coursePasses->count() }}</b></div>
-        <div><span>Exam Passes</span><b>{{ $unusedCount + $usedCount }} generated</b></div>
+        <div><span>Course QR Passes</span><b>{{ $unusedCount + $usedCount }} generated</b></div>
     </section>
 
     @if(session('exam_pass_error'))
-        <div class="course-pass-notice error" role="alert"><strong>Course pass not generated</strong>{{ session('exam_pass_error') }}</div>
+        <div class="course-pass-notice error" role="alert"><strong>Course QR not generated</strong>{{ session('exam_pass_error') }}</div>
     @elseif(session('status'))
         <div class="course-pass-notice success" role="status">
-            <strong>Your exam pass is ready</strong>
-            Your payment has been verified for this session. You can view or print your exam access pass.
+            <strong>{{ session('status') }}</strong>
+            Select a course below to generate or view its QR pass.
         </div>
     @endif
 
@@ -82,12 +82,12 @@
         <section class="course-pass-panel">
             <div class="course-pass-head">
                 <h2>Verify session payment</h2>
-                <p>Choose the first course pass to generate. The verified payment will unlock pass generation for every other assigned course in this session.</p>
+                <p>Select a course and verify the RRR once. The verified session payment then unlocks QR generation for every other assigned course.</p>
             </div>
             <form method="POST" action="{{ route('student.generate-exam-pass.store') }}" class="course-pass-form">
                 @csrf
                 <div class="course-pass-field">
-                    <label>Assigned course or paper</label>
+                    <label>Select a course</label>
                     <div class="course-choice-list">
                         @foreach($coursePasses->where('status', '!=', 'cancelled')->where('qr_status', 'Not Generated') as $exam)
                             <label class="course-choice">
@@ -95,7 +95,7 @@
                                 <span>
                                     <b>{{ $exam->course_code }} · {{ $exam->course_title ?: 'Course title not assigned yet' }}</b>
                                     <span>{{ \Illuminate\Support\Carbon::parse($exam->exam_date)->format('D, d M Y') }} · {{ substr($exam->start_time, 0, 5) }}{{ $exam->end_time ? ' - ' . substr($exam->end_time, 0, 5) : '' }} · {{ $exam->venue ?: 'Hall not assigned yet' }}</span>
-                                    <small>Exam pass not generated</small>
+                                    <small>QR not generated</small>
                                 </span>
                             </label>
                         @endforeach
@@ -110,25 +110,25 @@
                 </div>
                 <div class="course-pass-actions">
                     <a class="btn btn-ghost" href="{{ route('student.dashboard') }}">Back to Dashboard</a>
-                    <button class="btn btn-primary" type="submit">Generate QR / Exam Pass</button>
+                    <button class="btn btn-primary" type="submit">Generate Course QR Pass</button>
                 </div>
             </form>
         </section>
     @else
         <div class="course-pass-notice success">
             @if(($unusedCount + $usedCount) > 0)
-                <strong>Your exam pass is ready</strong>
-                Your payment has been verified for this session. You can view or print your exam access pass.
+                <strong>Payment verified for this session</strong>
+                Select a course below to generate or view its QR pass. No additional RRR is required.
             @else
                 <strong>Payment verified for this session</strong>
-                You do not need to enter your RRR again. Generate an exam pass for any assigned paper below.
+                You do not need to enter your RRR again. Generate a QR pass for any assigned course below.
             @endif
         </div>
 
         <section class="course-pass-panel">
             <div class="course-pass-head">
-                <h2>Assigned Exam Passes</h2>
-                <p>Course, hall, date, and time are resolved from the official timetable.</p>
+                <h2>Assigned Courses</h2>
+                <p>Select a course to generate or view its QR pass. Date, time, and venue come from the official timetable.</p>
             </div>
             <div class="course-pass-body">
                 @foreach($coursePasses as $exam)
@@ -141,15 +141,15 @@
                             <p>{{ \Illuminate\Support\Carbon::parse($exam->exam_date)->format('D, d M Y') }} · {{ substr($exam->start_time, 0, 5) }}{{ $exam->end_time ? ' - ' . substr($exam->end_time, 0, 5) : '' }} · {{ $exam->venue ?: 'Hall not assigned yet' }}</p>
                         </div>
                         <div class="course-pass-actions">
-                            <span class="chip {{ $statusClass }}">Pass {{ $exam->qr_status }}</span>
+                            <span class="chip {{ $statusClass }}">{{ $exam->qr_status === 'Not Generated' ? 'QR not generated' : $exam->qr_status }}</span>
                             @if($exam->qr_token && in_array($exam->qr_status, ['Generated / Unused', 'Used'], true))
-                                <a class="btn btn-primary" href="{{ route('student.exam-access-id.course', ['timetable' => $exam->id]) }}">View Exam Pass</a>
+                                <a class="btn btn-primary" href="{{ route('student.exam-access-id.course', ['timetable' => $exam->id]) }}">View Course QR</a>
                                 <a class="btn btn-ghost" href="{{ route('student.exam-pass.course', ['timetable' => $exam->id]) }}">Print</a>
                             @elseif($exam->qr_status === 'Not Generated')
                                 <form method="POST" action="{{ route('student.generate-exam-pass.store') }}">
                                     @csrf
                                     <input type="hidden" name="timetable_id" value="{{ $exam->id }}">
-                                    <button class="btn btn-primary" type="submit">Generate QR / Exam Pass</button>
+                                    <button class="btn btn-primary" type="submit">Generate QR Pass</button>
                                 </form>
                             @endif
                         </div>

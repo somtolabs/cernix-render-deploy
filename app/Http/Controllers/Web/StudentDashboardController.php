@@ -30,7 +30,11 @@ class StudentDashboardController extends Controller
 
     public function examAccessId(Request $request, ?int $timetable = null)
     {
-        return $this->portalView($request, 'student.exam-access-id', 'exam-access-id', true, $timetable);
+        if ($timetable === null) {
+            return $this->redirectToQrSelection($request, 'Select a course to view its QR pass.');
+        }
+
+        return $this->courseQrView($request, 'student.exam-access-id', $timetable);
     }
 
     public function timetable(Request $request)
@@ -68,7 +72,7 @@ class StudentDashboardController extends Controller
         $expectedAmount = DepartmentFees::amountForDepartment($payload['student']->dept_name ?? null);
         if ($expectedAmount <= 0) {
             return back()
-                ->withErrors(['rrr_number' => 'Exam pass could not be generated because your school fee is not configured.'])
+                ->withErrors(['rrr_number' => 'A course QR pass could not be generated because your school fee is not configured.'])
                 ->withInput($request->except('rrr_number'));
         }
 
@@ -93,9 +97,7 @@ class StudentDashboardController extends Controller
             );
 
             return redirect()->route('student.generate-exam-pass')
-                ->with('status', $hasVerifiedPayment
-                    ? 'Verified session payment reused. Your exam pass is ready.'
-                    : 'Payment verified. Your exam pass is ready.');
+                ->with('status', 'Payment verified for this session. Your course QR pass is ready.');
         } catch (Throwable $exception) {
             if (! $exception instanceof RuntimeException || $this->isTechnicalExamPassFailure($exception)) {
                 report($exception);
@@ -161,7 +163,11 @@ class StudentDashboardController extends Controller
 
     public function printPass(Request $request, ?int $timetable = null)
     {
-        return $this->portalView($request, 'student.exam-pass', 'print', true, $timetable);
+        if ($timetable === null) {
+            return $this->redirectToQrSelection($request, 'Select a course to print its QR pass.');
+        }
+
+        return $this->courseQrView($request, 'student.exam-pass', $timetable);
     }
 
     public function scanDetail(Request $request, int $log)
@@ -171,13 +177,25 @@ class StudentDashboardController extends Controller
             return $payload;
         }
 
+        $scanColumns = [
+            'verification_logs.*',
+            'qr_tokens.status as token_status',
+            'qr_tokens.issued_at',
+            'qr_tokens.used_at',
+            'examiners.full_name as examiner_name',
+            'examiners.username as examiner_username',
+        ];
+        if (Schema::hasColumn('qr_tokens', 'timetable_id')) {
+            $scanColumns[] = 'qr_tokens.timetable_id as token_timetable_id';
+        }
+
         $scan = DB::table('verification_logs')
             ->join('qr_tokens', 'verification_logs.token_id', '=', 'qr_tokens.token_id')
             ->leftJoin('examiners', 'verification_logs.examiner_id', '=', 'examiners.examiner_id')
             ->where('verification_logs.log_id', $log)
             ->where('qr_tokens.student_id', $payload['student']->matric_no)
             ->where('qr_tokens.session_id', $payload['student']->session_id)
-            ->select('verification_logs.*', 'qr_tokens.status as token_status', 'qr_tokens.issued_at', 'qr_tokens.used_at', 'examiners.full_name as examiner_name', 'examiners.username as examiner_username')
+            ->select($scanColumns)
             ->first();
 
         abort_unless($scan, 404);
@@ -221,6 +239,40 @@ class StudentDashboardController extends Controller
         }
 
         return view($view, array_merge($payload, ['activePortal' => $active]));
+    }
+
+    private function courseQrView(Request $request, string $view, int $timetable)
+    {
+        $payload = $this->dashboardPayload($request, true, $timetable);
+        if ($payload instanceof RedirectResponse) {
+            return $payload;
+        }
+
+        $assignedCourse = $payload['coursePasses']->firstWhere('id', $timetable);
+        abort_unless($assignedCourse, 404);
+
+        if (! $payload['qrToken']) {
+            return redirect()->route('student.generate-exam-pass')
+                ->with('status', 'QR not generated for the selected course.');
+        }
+
+        return view($view, array_merge($payload, [
+            'activePortal' => 'generate-exam-pass',
+            'passExam' => $assignedCourse,
+        ]));
+    }
+
+    private function redirectToQrSelection(Request $request, string $message): RedirectResponse
+    {
+        if (
+            ! $request->session()->has('student_matric_no')
+            || ! $request->session()->has('student_session_id')
+        ) {
+            return redirect()->route('student.register')
+                ->with('status', 'Open your exam dashboard by registering first.');
+        }
+
+        return redirect()->route('student.generate-exam-pass')->with('status', $message);
     }
 
     private function dashboardPayload(
@@ -482,7 +534,7 @@ class StudentDashboardController extends Controller
         $message = strtolower($exception->getMessage());
 
         if ($this->isTechnicalExamPassFailure($exception)) {
-            return 'Exam pass could not be generated yet. Please try again shortly.';
+            return 'The course QR pass could not be generated yet. Please try again shortly.';
         }
 
         if (
@@ -518,10 +570,10 @@ class StudentDashboardController extends Controller
                 || str_contains($message, 'assigned')
             )
         ) {
-            return 'The selected course is not available for this exam pass. Please refresh and try again.';
+            return 'The selected course is not available for QR generation. Please refresh and try again.';
         }
 
-        return 'Exam pass could not be generated yet. Please try again shortly.';
+        return 'The course QR pass could not be generated yet. Please try again shortly.';
     }
 
     private function isTechnicalExamPassFailure(Throwable $exception): bool

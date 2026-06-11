@@ -48,12 +48,16 @@
             <div class="access-row"><span class="access-label">Decision</span><span class="access-value">{{ $scan->decision === 'DUPLICATE' ? 'Repeated scan' : \Illuminate\Support\Str::headline(strtolower((string) $scan->decision)) }}</span></div>
             <div class="access-row"><span class="access-label">Scan Time</span><span class="access-value mono">{{ $scan->timestamp }}</span></div>
             <div class="access-row"><span class="access-label">Examiner</span><span class="access-value">{{ $scan->examiner_name ?? $scan->examiner_username ?? 'Not available' }}</span></div>
-            <div class="access-row"><span class="access-label">Exam Pass</span><span class="access-value">{{ match(strtoupper((string) ($scan->token_status ?? ''))) { 'UNUSED' => 'Generated / Unused', 'USED' => 'Used', 'REVOKED' => 'Unavailable', default => $scan->token_status ?? 'Not available' } }}</span></div>
+            <div class="access-row"><span class="access-label">Course QR Pass</span><span class="access-value">{{ match(strtoupper((string) ($scan->token_status ?? ''))) { 'UNUSED' => 'Generated / Unused', 'USED' => 'Used', 'REVOKED' => 'Unavailable', default => $scan->token_status ?? 'Not available' } }}</span></div>
             <div class="access-row"><span class="access-label">Review Status</span><span class="access-value">{{ $scan->decision === 'DUPLICATE' ? 'Repeated scan recorded' : 'Recorded' }}</span></div>
             <div class="access-row">
                 <div class="access-actions">
                     <a class="btn btn-ghost" href="{{ route('student.dashboard') }}">Back to Dashboard</a>
-                    <a class="btn btn-primary" href="{{ route('student.exam-access-id') }}">View Exam Pass</a>
+                    @if($scan->token_timetable_id ?? null)
+                        <a class="btn btn-primary" href="{{ route('student.exam-access-id.course', ['timetable' => $scan->token_timetable_id]) }}">View Course QR</a>
+                    @else
+                        <a class="btn btn-primary" href="{{ route('student.generate-exam-pass') }}">Generate QR Pass</a>
+                    @endif
                 </div>
             </div>
         </div>

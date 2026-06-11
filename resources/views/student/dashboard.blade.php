@@ -16,7 +16,7 @@
 <div class="cx-page-head">
     <div class="cx-eyebrow">Student Portal</div>
     <h1>Student Exam Dashboard</h1>
-    <p>Your identity, payment clearance, exam pass, and next exam in one compact view.</p>
+    <p>Your identity, session payment, course QR status, and next exam in one compact view.</p>
 </div>
 
 <style>
@@ -85,7 +85,7 @@
             </div>
         </div>
         <div class="student-actions">
-            <a class="btn btn-primary btn-block" href="{{ route('student.generate-exam-pass') }}">{{ $notGeneratedCount > 0 ? 'Manage Course Exam Passes' : 'View Course Exam Passes' }}</a>
+            <a class="btn btn-primary btn-block" href="{{ route('student.generate-exam-pass') }}">Generate QR Pass</a>
             <a class="btn btn-ghost btn-block" href="{{ route('student.timetable') }}">Your Timetable</a>
         </div>
     </section>
@@ -115,9 +115,9 @@
                     <div class="course-access-actions">
                         <span class="chip {{ $statusClass }}">{{ $exam->qr_status }}</span>
                         @if($exam->qr_status === 'Not Generated')
-                            <a class="btn btn-primary" href="{{ route('student.generate-exam-pass') }}">Generate</a>
+                            <a class="btn btn-primary" href="{{ route('student.generate-exam-pass') }}">Generate QR Pass</a>
                         @elseif($exam->qr_token && in_array($exam->qr_status, ['Generated / Unused', 'Used'], true))
-                            <a class="btn btn-ghost" href="{{ route('student.exam-access-id.course', ['timetable' => $exam->id]) }}">View</a>
+                            <a class="btn btn-ghost" href="{{ route('student.exam-access-id.course', ['timetable' => $exam->id]) }}">View Course QR</a>
                         @endif
                     </div>
                 </article>

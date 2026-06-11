@@ -1,324 +1,503 @@
 @php
     $status = strtoupper($token->status ?? 'UNAVAILABLE');
-    $badge = match ($status) {
-        'UNUSED' => 'ACTIVE',
-        'USED' => 'SCANNED',
-        'REVOKED' => 'REVOKED',
-        default => 'PENDING',
-    };
-    $badgeClass = match ($status) {
-        'UNUSED' => 'is-active',
-        'USED' => 'is-used',
-        'REVOKED' => 'is-revoked',
-        default => 'is-pending',
-    };
-    $passStatus = match ($status) {
+    $statusLabel = match ($status) {
         'UNUSED' => 'Generated / Unused',
         'USED' => 'Used',
         'REVOKED' => 'Unavailable',
         default => 'Pending',
     };
-    $issuedAt = $token?->issued_at ? \Illuminate\Support\Carbon::parse($token->issued_at)->format('d M, H:i') : 'Not available';
-    $verifiedAt = $payment?->verified_at ? \Illuminate\Support\Carbon::parse($payment->verified_at)->format('d M, H:i') : 'Not available';
-    $paymentValue = $payment ? 'Verified · ₦' . number_format($payment->amount_confirmed) : 'Not available';
-    $sessionValue = trim(($session->semester ?? 'Not available') . ' ' . ($session->academic_year ?? ''));
+    $statusClass = match ($status) {
+        'UNUSED' => 'is-valid',
+        'USED' => 'is-used',
+        'REVOKED' => 'is-invalid',
+        default => 'is-pending',
+    };
     $assignedExam = $passExam ?? $nextExam;
-    $nextDate = $assignedExam ? \Illuminate\Support\Carbon::parse($assignedExam->exam_date)->format('d M Y') . ' · ' . substr($assignedExam->start_time, 0, 5) : 'Timetable not assigned yet';
+    $sessionValue = trim(($session->semester ?? 'Not available') . ' ' . ($session->academic_year ?? ''));
+    $issuedAt = $token?->issued_at
+        ? \Illuminate\Support\Carbon::parse($token->issued_at)->format('d M Y, H:i')
+        : 'Not available';
+    $verifiedAt = $payment?->verified_at
+        ? \Illuminate\Support\Carbon::parse($payment->verified_at)->format('d M Y, H:i')
+        : 'Not available';
+    $examDate = $assignedExam?->exam_date
+        ? \Illuminate\Support\Carbon::parse($assignedExam->exam_date)->format('D, d M Y')
+        : 'Date not assigned';
+    $examTime = $assignedExam?->start_time
+        ? substr($assignedExam->start_time, 0, 5)
+            . ($assignedExam?->end_time ? ' - ' . substr($assignedExam->end_time, 0, 5) : '')
+        : 'Time not assigned';
 @endphp
+
 <style>
-    .exam-access-id-card {
+    .course-qr-pass {
+        --pass-line: rgba(70, 81, 93, .16);
+        --pass-muted: #707982;
+        --pass-navy: #33475f;
         position: relative;
+        isolation: isolate;
         overflow: hidden;
-        width: min(510px, calc(100vw - 16px));
+        width: min(720px, 100%);
         margin: 0 auto;
-        background: rgba(255, 255, 255, .96);
-        border: 1px solid var(--line, #dfddd4);
-        border-radius: 14px;
-        box-shadow: 0 8px 20px rgba(14, 18, 38, .06);
+        color: var(--ink, #222a33);
+        background: #fbfbf9;
+        border: 1px solid var(--pass-line);
+        border-radius: 12px;
     }
-    .exam-access-id-card::before {
+    .course-qr-pass::before {
         content: "";
         position: absolute;
-        inset: 74px 0 52px;
-        background-image: url('{{ $brandingLogoUrl }}');
-        background-repeat: no-repeat;
-        background-position: center;
-        background-size: 90%;
-        opacity: .1;
+        z-index: -2;
+        inset: 112px 7% 72px;
+        background: url('{{ $brandingLogoUrl }}') center / min(58%, 330px) auto no-repeat;
+        opacity: .11;
         pointer-events: none;
-        z-index: 0;
     }
-    .exam-access-id-card::after {
+    .course-qr-pass::after {
         content: "";
         position: absolute;
+        z-index: -1;
         inset: 0;
-        background: rgba(255,255,255,.78);
+        background: rgba(251, 251, 249, .82);
         pointer-events: none;
-        z-index: 0;
     }
-    .exam-access-id-card > * { position: relative; z-index: 1; }
-    .id-head {
-        display: grid;
-        grid-template-columns: 42px minmax(0, 1fr) auto;
-        align-items: center;
-        gap: 10px;
-        padding: 13px 15px;
-        border-bottom: 1px solid var(--line, #dfddd4);
-        background: rgba(250, 250, 247, .88);
-    }
-    .id-head img { width: 38px; height: 38px; object-fit: contain; }
-    .id-title b {
-        display: block;
-        color: var(--navy, #0f2347);
-        font-size: clamp(14px, 3.8vw, 18px);
-        line-height: 1.05;
-        letter-spacing: -.02em;
-    }
-    .id-title span {
-        display: block;
-        margin-top: 2px;
-        color: var(--ink-3, #6b7085);
-        font-size: 10.5px;
-        line-height: 1.2;
-    }
-    .id-badge {
-        display: inline-flex;
-        align-items: center;
-        gap: 6px;
-        padding: 6px 9px;
-        border-radius: 999px;
-        background: rgba(5,150,105,.1);
-        border: 1px solid rgba(5,150,105,.24);
-        color: var(--emerald, #059669);
-        font-size: 10px;
-        font-weight: 900;
-        line-height: 1;
-    }
-    .id-badge::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
-    .id-badge.is-used { background: rgba(180,83,9,.1); border-color: rgba(180,83,9,.24); color: var(--amber, #b45309); }
-    .id-badge.is-revoked { background: rgba(220,38,38,.1); border-color: rgba(220,38,38,.24); color: var(--red, #dc2626); }
-    .id-badge.is-pending { background: rgba(107,112,133,.1); border-color: rgba(107,112,133,.24); color: var(--ink-3, #6b7085); }
-    .id-body { padding: 12px 13px 12px; display: grid; gap: 10px; }
-    .identity-row {
+    .qr-pass-header {
         display: grid;
         grid-template-columns: auto minmax(0, 1fr);
+        gap: 14px;
         align-items: center;
-        gap: 12px;
-        padding: 9px 0 12px;
-        border-bottom: 1px solid rgba(223,221,212,.8);
+        padding: 20px 22px 17px;
+        border-bottom: 1px solid var(--pass-line);
     }
-    .identity-row .cernix-passport-photo--passport {
-        width: 68px;
-        height: 68px;
-        border-radius: 9999px;
+    .qr-pass-logo {
+        width: 54px;
+        height: 54px;
+        object-fit: contain;
     }
-    .identity-row h2 {
-        margin: 0;
-        color: var(--ink, #141827);
-        font-size: clamp(16px, 4.2vw, 20px);
-        line-height: 1.08;
-        letter-spacing: -.025em;
-        overflow-wrap: break-word;
-        word-break: normal;
+    .qr-pass-brand {
+        min-width: 0;
     }
-    .identity-meta {
-        margin-top: 6px;
-        display: grid;
-        gap: 3px;
-        color: var(--ink-3, #6b7085);
-        font-size: 11.5px;
-        line-height: 1.25;
+    .qr-pass-brand strong {
+        display: block;
+        color: var(--pass-navy);
+        font-size: clamp(15px, 3.6vw, 19px);
+        line-height: 1.15;
+        letter-spacing: -.02em;
     }
-    .identity-meta b { color: var(--ink, #141827); font-weight: 900; }
-    .qr-section {
-        display: grid;
-        grid-template-columns: minmax(0, 1fr);
-        gap: 10px;
-        align-items: stretch;
-    }
-    .qr-shell {
-        text-align: center;
-        padding: 9px 0;
-    }
-    .qr-box {
-        width: min(260px, 78vw);
-        margin: 0 auto;
-        padding: 9px;
-        background: #fff;
-        border: 1px solid var(--line-2, #d7d4c8);
-        border-radius: 8px;
-    }
-    .qr-box svg { width: 100%; height: auto; display: block; }
-    .qr-missing { min-height: 190px; display: grid; place-items: center; color: var(--ink-3, #6b7085); font-weight: 800; }
-    .qr-note {
-        margin: 7px 0 0;
-        color: var(--ink-3, #6b7085);
+    .qr-pass-brand span {
+        display: block;
+        margin-top: 4px;
+        color: var(--pass-muted);
         font-size: 11px;
         line-height: 1.35;
     }
-    .next-exam {
-        padding: 10px 12px;
-        border-left: 3px solid rgba(20,83,45,.28);
-        background: rgba(236,253,245,.72);
-    }
-    .next-exam span,
-    .detail-item span {
-        display: block;
-        color: var(--ink-4, #7c8194);
-        font-size: 9.5px;
-        font-weight: 900;
-        line-height: 1;
-        margin-bottom: 5px;
-    }
-    .next-exam b {
-        display: block;
-        color: var(--ink, #141827);
-        font-size: 13px;
-        line-height: 1.2;
-    }
-    .next-exam p {
-        margin: 4px 0 0;
-        color: var(--ink-3, #6b7085);
-        font-size: 11.5px;
-        line-height: 1.35;
-    }
-    .details-grid {
-        display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 7px;
-    }
-    .detail-item {
-        min-width: 0;
-        padding: 9px 4px;
-        border-bottom: 1px solid rgba(223,221,212,.8);
-    }
-    .detail-item b {
-        display: block;
-        color: var(--ink, #141827);
-        font-size: 11.5px;
-        line-height: 1.25;
-        overflow-wrap: break-word;
-        word-break: normal;
-    }
-    .detail-item.is-wide { grid-column: 1 / -1; }
-    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
-    .id-foot {
+    .qr-pass-title-row {
         display: flex;
         justify-content: space-between;
-        align-items: center;
-        gap: 10px;
-        padding: 9px 13px;
-        border-top: 1px solid var(--line, #dfddd4);
-        background: rgba(250,250,247,.9);
-        color: var(--ink-3, #6b7085);
-        font-size: 9.5px;
-        font-weight: 800;
-        line-height: 1.25;
+        align-items: flex-start;
+        gap: 16px;
+        padding: 18px 22px;
+        border-bottom: 1px solid var(--pass-line);
     }
-    .id-foot b { color: var(--navy, #0f2347); }
-    @media (min-width: 470px) {
-        .exam-access-id-card { width: min(560px, calc(100vw - 32px)); }
-        .id-head { padding: 14px 16px; }
-        .id-body { padding: 13px 14px 13px; gap: 10px; }
-        .identity-row { padding: 10px; }
-        .identity-row .cernix-passport-photo--passport { width: 72px; height: 72px; }
-        .qr-section {
-            grid-template-columns: minmax(0, 1fr);
-            align-items: stretch;
+    .qr-pass-kicker,
+    .qr-pass-label {
+        display: block;
+        color: #858d95;
+        font-size: 9px;
+        font-weight: 800;
+        letter-spacing: .13em;
+        line-height: 1.3;
+        text-transform: uppercase;
+    }
+    .qr-pass-title {
+        margin: 5px 0 0;
+        color: #26364a;
+        font-size: clamp(22px, 5vw, 30px);
+        line-height: 1;
+        letter-spacing: -.045em;
+    }
+    .qr-pass-status {
+        flex: 0 0 auto;
+        padding: 7px 10px;
+        border-radius: 999px;
+        background: rgba(85, 117, 101, .09);
+        color: #557565;
+        font-size: 10px;
+        font-weight: 800;
+        line-height: 1.2;
+        white-space: nowrap;
+    }
+    .qr-pass-status.is-used,
+    .qr-pass-status.is-pending {
+        background: rgba(138, 117, 85, .09);
+        color: #806d50;
+    }
+    .qr-pass-status.is-invalid {
+        background: rgba(138, 91, 91, .08);
+        color: #815656;
+    }
+    .qr-pass-clearance {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        border-bottom: 1px solid var(--pass-line);
+        background: rgba(95, 112, 130, .035);
+    }
+    .qr-pass-clearance div {
+        min-width: 0;
+        padding: 12px 22px;
+        border-right: 1px solid var(--pass-line);
+    }
+    .qr-pass-clearance div:last-child {
+        border-right: 0;
+    }
+    .qr-pass-clearance b {
+        display: block;
+        margin-top: 5px;
+        font-size: 12px;
+        line-height: 1.35;
+        overflow-wrap: break-word;
+    }
+    .qr-pass-content {
+        display: grid;
+        gap: 0;
+    }
+    .qr-pass-identity {
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr);
+        gap: 16px;
+        align-items: center;
+        padding: 20px 22px;
+        border-bottom: 1px solid var(--pass-line);
+    }
+    .qr-pass-identity .cernix-passport-photo--passport {
+        width: 76px;
+        height: 76px;
+        border-radius: 50%;
+        border: 1px solid var(--pass-line);
+    }
+    .qr-pass-name {
+        margin: 5px 0 0;
+        font-size: clamp(18px, 4vw, 24px);
+        line-height: 1.08;
+        letter-spacing: -.03em;
+        overflow-wrap: break-word;
+    }
+    .qr-pass-student-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 5px 12px;
+        margin-top: 8px;
+        color: var(--pass-muted);
+        font-size: 11.5px;
+        line-height: 1.45;
+    }
+    .qr-pass-student-meta b {
+        color: #46515d;
+        font-weight: 700;
+    }
+    .qr-pass-main {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 260px;
+        align-items: stretch;
+    }
+    .qr-pass-course {
+        min-width: 0;
+        padding: 22px;
+        border-right: 1px solid var(--pass-line);
+    }
+    .qr-pass-course-code {
+        margin: 7px 0 0;
+        color: var(--pass-navy);
+        font-size: 22px;
+        line-height: 1;
+        letter-spacing: -.035em;
+    }
+    .qr-pass-course-title {
+        margin: 7px 0 0;
+        color: #46515d;
+        font-size: 13px;
+        font-weight: 600;
+        line-height: 1.45;
+        overflow-wrap: break-word;
+    }
+    .qr-pass-exam-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 0 18px;
+        margin-top: 18px;
+        border-top: 1px solid var(--pass-line);
+    }
+    .qr-pass-field {
+        min-width: 0;
+        padding: 12px 0;
+        border-bottom: 1px solid var(--pass-line);
+    }
+    .qr-pass-field b {
+        display: block;
+        margin-top: 5px;
+        color: #394552;
+        font-size: 11.5px;
+        line-height: 1.4;
+        overflow-wrap: break-word;
+    }
+    .qr-pass-qr {
+        display: grid;
+        place-items: center;
+        align-content: center;
+        padding: 20px;
+        text-align: center;
+        background: rgba(255, 255, 255, .42);
+    }
+    .qr-pass-qr-box {
+        width: min(218px, 62vw);
+        padding: 8px;
+        background: #fff;
+        border: 1px solid rgba(70, 81, 93, .18);
+        border-radius: 6px;
+    }
+    .qr-pass-qr-box svg {
+        display: block;
+        width: 100%;
+        height: auto;
+    }
+    .qr-pass-qr-missing {
+        min-height: 190px;
+        display: grid;
+        place-items: center;
+        color: var(--pass-muted);
+        font-size: 12px;
+        font-weight: 700;
+    }
+    .qr-pass-qr-note {
+        max-width: 220px;
+        margin: 9px auto 0;
+        color: var(--pass-muted);
+        font-size: 10.5px;
+        line-height: 1.45;
+    }
+    .qr-pass-footer {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-end;
+        gap: 18px;
+        padding: 14px 22px 16px;
+        border-top: 1px solid var(--pass-line);
+        color: var(--pass-muted);
+        font-size: 9.5px;
+        line-height: 1.45;
+    }
+    .qr-pass-footer b {
+        display: block;
+        margin-bottom: 2px;
+        color: var(--pass-navy);
+        font-size: 10px;
+    }
+    .qr-pass-security {
+        max-width: 310px;
+        text-align: right;
+    }
+    @media (max-width: 620px) {
+        .course-qr-pass::before {
+            inset: 130px 4% 90px;
+            background-size: min(76%, 290px) auto;
+        }
+        .qr-pass-header,
+        .qr-pass-title-row,
+        .qr-pass-identity,
+        .qr-pass-course,
+        .qr-pass-qr,
+        .qr-pass-footer {
+            padding-left: 16px;
+            padding-right: 16px;
+        }
+        .qr-pass-title-row {
+            align-items: center;
+        }
+        .qr-pass-clearance {
+            grid-template-columns: 1fr;
+        }
+        .qr-pass-clearance div {
+            padding: 10px 16px;
+            border-right: 0;
+            border-bottom: 1px solid var(--pass-line);
+        }
+        .qr-pass-clearance div:last-child {
+            border-bottom: 0;
+        }
+        .qr-pass-main {
+            grid-template-columns: 1fr;
+        }
+        .qr-pass-course {
+            border-right: 0;
+            border-bottom: 1px solid var(--pass-line);
+        }
+        .qr-pass-qr-box {
+            width: min(230px, 72vw);
+        }
+        .qr-pass-footer {
+            align-items: flex-start;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .qr-pass-security {
+            max-width: none;
+            text-align: left;
+        }
+    }
+    @media (max-width: 390px) {
+        .qr-pass-header {
+            grid-template-columns: 44px minmax(0, 1fr);
             gap: 10px;
         }
-        .qr-shell { display: grid; place-items: center; }
-        .qr-box { width: 282px; }
-        .next-exam {
-            align-self: stretch;
-            min-height: 0;
+        .qr-pass-logo {
+            width: 44px;
+            height: 44px;
         }
-        .details-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-        .detail-item.is-wide { grid-column: span 1; }
-    }
-    @media (max-width: 350px) {
-        .id-head { grid-template-columns: 34px minmax(0, 1fr); }
-        .id-head img { width: 32px; height: 32px; }
-        .id-badge { grid-column: 1 / -1; width: max-content; }
-        .details-grid { gap: 6px; }
-        .detail-item { padding: 7px; }
-        .detail-item b { font-size: 10.5px; }
-        .qr-box { width: min(240px, 78vw); }
-        .id-foot { flex-direction: column; align-items: flex-start; gap: 4px; }
+        .qr-pass-title-row {
+            display: grid;
+        }
+        .qr-pass-status {
+            width: fit-content;
+        }
+        .qr-pass-identity {
+            align-items: start;
+        }
+        .qr-pass-identity .cernix-passport-photo--passport {
+            width: 62px;
+            height: 62px;
+        }
+        .qr-pass-exam-grid {
+            grid-template-columns: 1fr;
+        }
     }
     @media print {
-        @page { size: A4; margin: 9mm; }
-        .exam-access-id-card {
-            width: 138mm;
-            box-shadow: none;
-            border-radius: 16px;
+        @page {
+            size: A4;
+            margin: 10mm;
+        }
+        .course-qr-pass {
+            width: 176mm;
+            max-width: 100%;
+            border-color: rgba(70, 81, 93, .24);
+            border-radius: 8px;
             break-inside: avoid;
             page-break-inside: avoid;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
         }
-        .exam-access-id-card::before { opacity: .2 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-        .qr-section { grid-template-columns: minmax(0, 1fr); align-items: stretch; }
-        .qr-box { width: 282px; }
-        .next-exam { min-height: 0; }
-        .details-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-        .detail-item.is-wide { grid-column: span 1; }
+        .course-qr-pass::before {
+            opacity: .1;
+            background-size: 300px auto;
+        }
+        .course-qr-pass::after {
+            background: rgba(255, 255, 255, .84);
+        }
+        .qr-pass-qr-box {
+            width: 54mm;
+            border-color: rgba(70, 81, 93, .24);
+        }
+        .qr-pass-status,
+        .qr-pass-clearance {
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+        }
     }
 </style>
 
-<article id="exam-access-id-card" class="exam-access-id-card">
-    <header class="id-head">
-        <img src="{{ $brandingLogoUrl }}" alt="CERNIX branding">
-        <div class="id-title">
-            <b>Adekunle Ajasin University</b>
+<article id="exam-access-id-card" class="course-qr-pass">
+    <header class="qr-pass-header">
+        <img class="qr-pass-logo" src="{{ $brandingLogoUrl }}" alt="Adekunle Ajasin University logo">
+        <div class="qr-pass-brand">
+            <strong>Adekunle Ajasin University</strong>
             <span>CERNIX Secure Exam Verification</span>
         </div>
-        <div class="id-badge {{ $badgeClass }}">{{ $badge }}</div>
     </header>
 
-    <div class="id-body">
-        <section class="identity-row">
+    <section class="qr-pass-title-row">
+        <div>
+            <span class="qr-pass-kicker">Official Course Access</span>
+            <h2 class="qr-pass-title">Course QR Pass</h2>
+        </div>
+        <span class="qr-pass-status {{ $statusClass }}">{{ $statusLabel }}</span>
+    </section>
+
+    <section class="qr-pass-clearance" aria-label="Pass clearance">
+        <div>
+            <span class="qr-pass-label">Payment</span>
+            <b>{{ $payment ? 'Verified for session' : 'Not verified' }}</b>
+        </div>
+        <div>
+            <span class="qr-pass-label">Session</span>
+            <b>{{ $sessionValue }}</b>
+        </div>
+        <div>
+            <span class="qr-pass-label">QR Status</span>
+            <b>{{ $statusLabel }}</b>
+        </div>
+    </section>
+
+    <div class="qr-pass-content">
+        <section class="qr-pass-identity" aria-label="Student identity">
             <x-student-photo :student="$student" size="passport" />
             <div>
-                <h2>{{ $student->full_name }}</h2>
-                <div class="identity-meta">
-                    <div><b class="mono">{{ $student->matric_no }}</b> · {{ $student->dept_name ?? 'Department unavailable' }}</div>
-                    <div>{{ $student->level ?? 'Level unavailable' }} Level · {{ $student->faculty ?? 'Faculty unavailable' }}</div>
+                <span class="qr-pass-label">Student</span>
+                <h3 class="qr-pass-name">{{ $student->full_name }}</h3>
+                <div class="qr-pass-student-meta">
+                    <span><b class="mono">{{ $student->matric_no }}</b></span>
+                    <span>{{ $student->dept_name ?? 'Department unavailable' }}</span>
+                    <span>{{ $student->level ?? 'Level unavailable' }} Level</span>
                 </div>
             </div>
         </section>
 
-        <section class="qr-section">
-            <div class="qr-shell">
+        <section class="qr-pass-main">
+            <div class="qr-pass-course">
+                <span class="qr-pass-label">Course and Examination</span>
+                <h3 class="qr-pass-course-code">{{ $assignedExam->course_code ?? 'Course unavailable' }}</h3>
+                <p class="qr-pass-course-title">{{ $assignedExam?->course_title ?: 'Course title not assigned' }}</p>
+
+                <div class="qr-pass-exam-grid">
+                    <div class="qr-pass-field">
+                        <span class="qr-pass-label">Exam Date</span>
+                        <b>{{ $examDate }}</b>
+                    </div>
+                    <div class="qr-pass-field">
+                        <span class="qr-pass-label">Exam Time</span>
+                        <b>{{ $examTime }}</b>
+                    </div>
+                    <div class="qr-pass-field">
+                        <span class="qr-pass-label">Hall / Venue</span>
+                        <b>{{ $assignedExam?->venue ?: 'Hall not assigned' }}</b>
+                    </div>
+                    <div class="qr-pass-field">
+                        <span class="qr-pass-label">Pass Issued</span>
+                        <b>{{ $issuedAt }}</b>
+                    </div>
+                </div>
+            </div>
+
+            <div class="qr-pass-qr">
                 <div>
-                    <div class="qr-box">
+                    <div class="qr-pass-qr-box">
                         @if($qrSvg)
                             {!! $qrSvg !!}
                         @else
-                            <div class="qr-missing">QR not available</div>
+                            <div class="qr-pass-qr-missing">QR not available</div>
                         @endif
                     </div>
-                    <p class="qr-note">Present this pass at the exam entrance.</p>
+                    <p class="qr-pass-qr-note">Present this course-specific QR pass at the examination entrance.</p>
                 </div>
             </div>
-
-            <div class="next-exam">
-                <span>Assigned Paper</span>
-                <b>{{ $assignedExam->course_code ?? 'Course not assigned yet' }}{{ $assignedExam?->course_title ? ' · ' . $assignedExam->course_title : '' }}</b>
-                <p>{{ $nextDate }}</p>
-                <p>{{ $assignedExam?->venue ?: 'Hall not assigned yet' }}{{ $assignedExam?->end_time ? ' · Ends ' . substr($assignedExam->end_time, 0, 5) : '' }}</p>
-            </div>
-        </section>
-
-        <section class="details-grid" aria-label="Access details">
-            <div class="detail-item is-wide"><span>Session</span><b>{{ $sessionValue }}</b></div>
-            <div class="detail-item is-wide"><span>Payment</span><b>{{ $paymentValue }}</b></div>
-            <div class="detail-item"><span>Verified</span><b>{{ $verifiedAt }}</b></div>
-            <div class="detail-item"><span>Pass Status</span><b>{{ $passStatus }}</b></div>
-            <div class="detail-item"><span>Issued</span><b>{{ $issuedAt }}</b></div>
         </section>
     </div>
 
-    <footer class="id-foot">
-        <div><b>AAUA Verified</b> · {{ $generatedAt->format('d M Y, H:i') }}</div>
-        <div>Secure server verification · One-time QR check</div>
+    <footer class="qr-pass-footer">
+        <div>
+            <b>AAUA Verified</b>
+            Payment verified {{ $verifiedAt }}
+        </div>
+        <div class="qr-pass-security">
+            Issued {{ $issuedAt }}. Secure server verification applies. This QR pass is valid only for the course shown above and is accepted once.
+        </div>
     </footer>
 </article>

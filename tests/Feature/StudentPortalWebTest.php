@@ -152,35 +152,66 @@ class StudentPortalWebTest extends TestCase
             ->assertSee('Payment: Pending')
             ->assertSee('Course QR Access')
             ->assertSee('Not Generated')
-            ->assertSee('Generate Exam Pass')
+            ->assertSee('Generate QR Pass')
+            ->assertDontSee('href="' . route('student.exam-access-id') . '"', false)
             ->assertDontSee(route('student.payment'), false)
             ->assertDontSee(route('student.instructions'), false);
 
         foreach ([
             '/student/profile',
-            '/student/exam-access-id',
             '/student/timetable',
             '/student/payment',
             '/student/generate-exam-pass',
             '/student/instructions',
-            '/student/exam-pass',
         ] as $path) {
             $this->get($path)->assertOk();
         }
+
+        $this->get('/student/exam-access-id')
+            ->assertRedirect(route('student.generate-exam-pass'))
+            ->assertSessionHas('status', 'Select a course to view its QR pass.');
+
+        $this->get('/student/exam-pass')
+            ->assertRedirect(route('student.generate-exam-pass'))
+            ->assertSessionHas('status', 'Select a course to print its QR pass.');
+
+        $this->get('/student/exam-pass/print')
+            ->assertRedirect(route('student.generate-exam-pass'))
+            ->assertSessionHas('status', 'Select a course to print its QR pass.');
     }
 
     public function test_exam_access_id_hides_raw_crypto_fields(): void
     {
         $this->registerDemoStudent();
         $this->generateDemoPass();
+        $examId = DB::table('timetables')->where('course_code', 'CSC401')->value('id');
 
-        $response = $this->get('/student/exam-access-id')->assertOk();
+        $response = $this->get(route('student.exam-access-id.course', ['timetable' => $examId]))
+            ->assertOk();
 
         $response->assertSee('exam-access-id-card')
+            ->assertSee('Course QR Pass')
             ->assertDontSee('encrypted_payload')
             ->assertDontSee('hmac_signature')
             ->assertDontSee('aes_key')
             ->assertDontSee('hmac_secret');
+
+        $this->get(route('student.exam-pass.course', ['timetable' => $examId]))
+            ->assertOk()
+            ->assertSee('Print Course QR Pass');
+    }
+
+    public function test_course_qr_view_requires_assigned_course_with_generated_qr(): void
+    {
+        $this->registerDemoStudent();
+        $examId = DB::table('timetables')->where('course_code', 'CSC401')->value('id');
+
+        $this->get(route('student.exam-access-id.course', ['timetable' => $examId]))
+            ->assertRedirect(route('student.generate-exam-pass'))
+            ->assertSessionHas('status', 'QR not generated for the selected course.');
+
+        $this->get(route('student.exam-access-id.course', ['timetable' => 999999]))
+            ->assertNotFound();
     }
 
     public function test_generated_matric_uses_selected_department_code(): void
@@ -231,9 +262,9 @@ class StudentPortalWebTest extends TestCase
 
         $this->get('/student/generate-exam-pass')
             ->assertOk()
-            ->assertSee('Your exam pass is ready')
+            ->assertSee('Payment verified for this session')
             ->assertSee('Generated / Unused')
-            ->assertSee('View Exam Pass');
+            ->assertSee('View Course QR');
     }
 
     public function test_test_demo_still_works_when_legacy_demo_reference_belongs_to_another_student(): void
@@ -264,7 +295,7 @@ class StudentPortalWebTest extends TestCase
             'timetable_id' => $examId,
             'rrr_number' => 'TEST-DEMO',
         ])->assertRedirect(route('student.generate-exam-pass'))
-          ->assertSessionHas('status', 'Payment verified. Your exam pass is ready.');
+          ->assertSessionHas('status', 'Payment verified for this session. Your course QR pass is ready.');
 
         $this->assertDatabaseHas('payment_records', ['student_id' => '220404008']);
         $this->assertDatabaseHas('qr_tokens', ['student_id' => '220404008', 'timetable_id' => $examId]);
@@ -310,13 +341,13 @@ class StudentPortalWebTest extends TestCase
             'timetable_id' => $examId,
             'rrr_number' => 'TEST-DEMO',
         ])->assertRedirect('/student/generate-exam-pass')
-          ->assertSessionHasErrors([
-              'rrr_number' => 'Exam pass could not be generated yet. Please try again shortly.',
+            ->assertSessionHasErrors([
+              'rrr_number' => 'The course QR pass could not be generated yet. Please try again shortly.',
           ]);
 
         $this->get('/student/generate-exam-pass')
             ->assertOk()
-            ->assertSee('Exam pass could not be generated yet')
+            ->assertSee('The course QR pass could not be generated yet')
             ->assertDontSee('SQLSTATE')
             ->assertDontSee('table qr_tokens has no column');
 
@@ -330,19 +361,21 @@ class StudentPortalWebTest extends TestCase
 
         $this->get('/student/generate-exam-pass')
             ->assertOk()
-            ->assertSee('Generate Exam Pass')
-            ->assertSee('Enter your Remita RRR once to verify payment for this exam session.')
+            ->assertSee('Generate QR Pass')
+            ->assertSee('Enter your Remita RRR once for this session')
             ->assertSee('Assigned Course')
+            ->assertSee('CSC401')
+            ->assertSee('Artificial Intelligence')
             ->assertSee('Payment')
             ->assertSee('Pending')
-            ->assertSee('Exam pass not generated');
+            ->assertSee('QR not generated');
 
         $this->generateDemoPass();
 
         $this->get('/student/generate-exam-pass')
             ->assertOk()
-            ->assertSee('Your exam pass is ready')
-            ->assertSee('View Exam Pass');
+            ->assertSee('Payment verified for this session')
+            ->assertSee('View Course QR');
     }
 
     public function test_verified_session_payment_does_not_request_rrr_again(): void
@@ -362,13 +395,26 @@ class StudentPortalWebTest extends TestCase
         $this->post('/student/generate-exam-pass', [
             'timetable_id' => $examId,
         ])->assertRedirect(route('student.generate-exam-pass'))
-          ->assertSessionHas('status', 'Verified session payment reused. Your exam pass is ready.');
+          ->assertSessionHas('status', 'Payment verified for this session. Your course QR pass is ready.');
 
         $this->assertDatabaseCount('payment_records', 1);
         $this->assertDatabaseHas('qr_tokens', [
             'student_id' => '220404008',
             'timetable_id' => $examId,
         ]);
+    }
+
+    public function test_generate_qr_pass_requires_explicit_course_selection(): void
+    {
+        $this->registerDemoStudent();
+
+        $this->from('/student/generate-exam-pass')
+            ->post('/student/generate-exam-pass', ['rrr_number' => 'TEST-DEMO'])
+            ->assertRedirect('/student/generate-exam-pass')
+            ->assertSessionHasErrors('timetable_id');
+
+        $this->assertDatabaseCount('payment_records', 0);
+        $this->assertDatabaseCount('qr_tokens', 0);
     }
 
     public function test_generate_exam_pass_page_handles_missing_timetable_and_hall_cleanly(): void

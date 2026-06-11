@@ -49,7 +49,7 @@ class ExamController extends Controller
         $data = $request->validate([
             'matric_no'  => 'required|string|max:50',
             'rrr_number' => [$hasVerifiedPayment ? 'nullable' : 'required', 'string', 'max:50'],
-            'timetable_id' => 'nullable|integer',
+            'timetable_id' => 'required|integer',
         ]);
 
         try {
@@ -60,20 +60,10 @@ class ExamController extends Controller
                 ->select('students.*', 'departments.dept_name')
                 ->first();
             if (! $student) {
-                throw new \RuntimeException('Register your student profile before generating an exam pass.');
+                throw new \RuntimeException('Register your student profile before generating a course QR pass.');
             }
 
-            $timetableId = (int) ($data['timetable_id'] ?? DB::table('timetables')
-                ->where('exam_session_id', $session->session_id)
-                ->where('department_id', $student->department_id)
-                ->where('level', (string) $student->level)
-                ->where('status', '!=', 'cancelled')
-                ->orderBy('exam_date')
-                ->orderBy('start_time')
-                ->value('id'));
-            if (! $timetableId) {
-                throw new \RuntimeException('No assigned course is available for this student.');
-            }
+            $timetableId = (int) $data['timetable_id'];
 
             $result = $this->examPassService->generate(
                 $data['matric_no'],
@@ -93,14 +83,14 @@ class ExamController extends Controller
             return response()->json([
                 'status'  => 'success',
                 'message' => $hasVerifiedPayment
-                    ? 'Verified session payment reused and exam pass generated.'
-                    : 'Payment verified and exam pass generated.',
+                    ? 'Verified session payment reused and course QR pass generated.'
+                    : 'Payment verified and course QR pass generated.',
                 'data'    => $result,
             ]);
 
         } catch (RuntimeException $e) {
             $message = str_contains(strtoupper($e->getMessage()), 'SQLSTATE')
-                ? 'Exam pass could not be generated right now. Please try again shortly.'
+                ? 'The course QR pass could not be generated right now. Please try again shortly.'
                 : $e->getMessage();
 
             Log::warning('Student exam pass API request failed.', [
@@ -122,7 +112,7 @@ class ExamController extends Controller
 
             return response()->json([
                 'status'  => 'error',
-                'message' => 'Exam pass could not be generated right now. Please try again shortly.',
+                'message' => 'The course QR pass could not be generated right now. Please try again shortly.',
             ], 422);
         }
     }

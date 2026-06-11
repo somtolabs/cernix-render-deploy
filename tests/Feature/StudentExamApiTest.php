@@ -75,6 +75,7 @@ class StudentExamApiTest extends TestCase
         $response = $this->withToken($this->token)->postJson('/api/student/register-exam', [
             'matric_no'  => 'CSC/2021/001',
             'rrr_number' => 'TEST-DEMO',
+            'timetable_id' => $this->assignedExamId(),
         ]);
 
         $response->assertStatus(200)
@@ -99,6 +100,7 @@ class StudentExamApiTest extends TestCase
     {
         $this->withToken($this->token)->postJson('/api/student/register-exam', [
             'rrr_number' => 'TEST-DEMO',
+            'timetable_id' => $this->assignedExamId(),
         ])->assertStatus(422);
     }
 
@@ -106,7 +108,19 @@ class StudentExamApiTest extends TestCase
     {
         $this->withToken($this->token)->postJson('/api/student/register-exam', [
             'matric_no' => 'CSC/2021/001',
+            'timetable_id' => $this->assignedExamId(),
         ])->assertStatus(422);
+    }
+
+    public function test_validation_requires_timetable_id(): void
+    {
+        $this->withToken($this->token)->postJson('/api/student/register-exam', [
+            'matric_no' => 'CSC/2021/001',
+            'rrr_number' => 'TEST-DEMO',
+        ])->assertStatus(422)
+          ->assertJsonPath('status', 'error')
+          ->assertJsonPath('message', 'Validation failed.')
+          ->assertJsonStructure(['data' => ['timetable_id']]);
     }
 
     public function test_unknown_matric_number_returns_error(): void
@@ -114,6 +128,7 @@ class StudentExamApiTest extends TestCase
         $response = $this->withToken($this->token)->postJson('/api/student/register-exam', [
             'matric_no'  => 'UNKNOWN/0000/000',
             'rrr_number' => 'TEST-DEMO',
+            'timetable_id' => $this->assignedExamId(),
         ]);
 
         $response->assertStatus(422)
@@ -125,15 +140,17 @@ class StudentExamApiTest extends TestCase
         $first = $this->withToken($this->token)->postJson('/api/student/register-exam', [
             'matric_no'  => 'CSC/2021/001',
             'rrr_number' => 'TEST-DEMO',
+            'timetable_id' => $this->assignedExamId(),
         ])->assertOk();
 
         $response = $this->withToken($this->token)->postJson('/api/student/register-exam', [
             'matric_no' => 'CSC/2021/001',
+            'timetable_id' => $this->assignedExamId(),
         ]);
 
         $response->assertOk()
             ->assertJsonPath('status', 'success')
-            ->assertJsonPath('message', 'Verified session payment reused and exam pass generated.')
+            ->assertJsonPath('message', 'Verified session payment reused and course QR pass generated.')
             ->assertJsonPath('data.token_id', $first->json('data.token_id'));
 
         $this->assertDatabaseCount('payment_records', 1);
@@ -147,9 +164,21 @@ class StudentExamApiTest extends TestCase
         $response = $this->withToken($this->token)->postJson('/api/student/register-exam', [
             'matric_no'  => 'CSC/2021/001',
             'rrr_number' => 'TEST-DEMO',
+            'timetable_id' => $this->assignedExamId(),
         ]);
 
         $response->assertStatus(422)
                  ->assertJsonPath('status', 'error');
+    }
+
+    private function assignedExamId(): int
+    {
+        $student = DB::table('students')->where('matric_no', 'CSC/2021/001')->first();
+
+        return (int) DB::table('timetables')
+            ->where('exam_session_id', $student->session_id)
+            ->where('department_id', $student->department_id)
+            ->where('level', (string) $student->level)
+            ->value('id');
     }
 }

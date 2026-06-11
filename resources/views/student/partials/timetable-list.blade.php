@@ -3,7 +3,7 @@
     <div class="desktop-table cx-table-wrap">
         <table class="cx-table">
             <thead>
-                <tr><th>Course</th><th>Date</th><th>Time</th><th>Venue</th><th>Schedule</th><th>Exam Pass</th></tr>
+                <tr><th>Course</th><th>Date</th><th>Time</th><th>Venue</th><th>Schedule</th><th>Course QR</th></tr>
             </thead>
             <tbody>
                 @foreach($visibleTimetable as $exam)
@@ -15,7 +15,7 @@
                         <td><span class="chip {{ $exam->display_status === 'Cancelled' ? 'red' : 'emerald' }}">{{ $exam->display_status }}</span></td>
                         <td>
                             @if(isset($exam->qr_token) && $exam->qr_token)
-                                <a class="btn btn-ghost" href="{{ route('student.exam-access-id.course', ['timetable' => $exam->id]) }}">{{ $exam->qr_status ?? 'View Pass' }}</a>
+                                <a class="btn btn-ghost" href="{{ route('student.exam-access-id.course', ['timetable' => $exam->id]) }}">{{ $exam->qr_status ?? 'View Course QR' }}</a>
                             @else
                                 <span class="cx-muted">Not Generated</span>
                             @endif
@@ -33,9 +33,9 @@
                 <span>{{ $exam->venue ?: 'Hall not assigned yet' }}</span>
                 <span><span class="chip {{ $exam->display_status === 'Cancelled' ? 'red' : 'emerald' }}">{{ $exam->display_status }}</span></span>
                 @if(isset($exam->qr_token) && $exam->qr_token)
-                    <a class="btn btn-ghost" href="{{ route('student.exam-access-id.course', ['timetable' => $exam->id]) }}">Exam Pass {{ $exam->qr_status ?? 'Generated / Unused' }}</a>
+                    <a class="btn btn-ghost" href="{{ route('student.exam-access-id.course', ['timetable' => $exam->id]) }}">Course QR {{ $exam->qr_status ?? 'Generated / Unused' }}</a>
                 @else
-                    <span class="cx-muted">Exam pass not generated</span>
+                    <span class="cx-muted">QR not generated</span>
                 @endif
             </article>
         @endforeach

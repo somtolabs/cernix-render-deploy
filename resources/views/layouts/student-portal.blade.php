@@ -4,8 +4,7 @@
 @php
     $nav = [
         ['key' => 'overview', 'label' => 'Overview', 'route' => 'student.dashboard'],
-        ['key' => 'generate-exam-pass', 'label' => 'Generate Exam Pass', 'route' => 'student.generate-exam-pass'],
-        ['key' => 'exam-access-id', 'label' => 'Exam Pass', 'route' => 'student.exam-access-id'],
+        ['key' => 'generate-exam-pass', 'label' => 'Generate QR Pass', 'route' => 'student.generate-exam-pass'],
         ['key' => 'timetable', 'label' => 'Timetable', 'route' => 'student.timetable'],
         ['key' => 'notifications', 'label' => 'Notifications', 'route' => 'student.notifications', 'badge' => $notificationUnreadCount ?? 0],
     ];

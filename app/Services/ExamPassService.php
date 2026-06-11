@@ -44,7 +44,7 @@ class ExamPassService
             ->first();
 
         if (! $exam) {
-            throw new RuntimeException('Select a valid assigned course before generating your exam pass.');
+            throw new RuntimeException('Select a valid assigned course before generating its QR pass.');
         }
 
         $supportsSessionPayment = Schema::hasColumn('payment_records', 'session_id');
@@ -143,7 +143,7 @@ class ExamPassService
             }
 
             if ($existingToken) {
-                throw new RuntimeException('This course exam pass has already been used and cannot be generated again.');
+                throw new RuntimeException('This course QR pass has already been used and cannot be generated again.');
             }
 
             return $this->qrTokens->issue($matricNo, $sessionId, $timetableId);
