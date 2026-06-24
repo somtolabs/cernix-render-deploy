@@ -5,17 +5,17 @@
 **Student Name:** Agwunobi Somtochukwu Bright  
 **Matric Number:** 220404008  
 **Department:** Computer Science  
-**Level:** 400L
+**Level:** 400L  
 
 ---
 
 ## 1. Project Overview
 
-CERNIX is a secure exam verification system designed to reduce exam impersonation and unauthorized exam entry.
+CERNIX is a secure exam verification system designed to reduce exam impersonation and unauthorized entry into examination halls.
 
-The system helps a school confirm that the right student is entering the right exam hall for the right course. It does this by using student registration, session payment verification, course timetable assignment, and secure QR exam passes.
+Instead of relying only on manual checking, CERNIX uses student registration, payment verification, course-specific QR exam passes, and examiner scanning to confirm whether a student is allowed to enter a particular exam.
 
-CERNIX allows:
+The system allows:
 
 - students to register
 - students to verify session payment
@@ -24,13 +24,19 @@ CERNIX allows:
 - admins to manage students, examiners, timetables, payments, verification records, and settings
 - super admins to control higher-level system settings and monitoring
 
-In simple terms, CERNIX replaces manual checking with a more organized digital process.
+In simple terms, CERNIX helps confirm three major things before a student enters an exam hall:
+
+1. the student is registered
+2. the student has verified payment for the session
+3. the QR pass is genuine and belongs to the correct student and course
 
 ---
 
 ## 2. Main Problem CERNIX Solves
 
-Many schools still rely on manual exam checking. This can cause several problems:
+Many institutions still depend heavily on manual checking during examinations. This can create several problems.
+
+### Problems
 
 - exam impersonation
 - fake exam passes
@@ -39,9 +45,11 @@ Many schools still rely on manual exam checking. This can cause several problems
 - difficulty managing exam access manually
 - poor tracking of scan history and audit logs
 
+### How CERNIX solves these problems
+
 CERNIX solves these problems by using:
 
-- secure QR passes
+- secure QR pass generation
 - one-time QR usage
 - examiner verification
 - clear student identity display
@@ -49,7 +57,7 @@ CERNIX solves these problems by using:
 - session-level payment verification
 - audit logs and verification records
 
-The main idea is simple: a student should only enter an exam if the system confirms their identity, payment status, course assignment, and QR pass validity.
+The goal is to make exam entry more secure, organized, and traceable.
 
 ---
 
@@ -57,36 +65,38 @@ The main idea is simple: a student should only enter an exam if the system confi
 
 | Actor | What they do |
 |------|--------------|
-| Student | Registers, verifies payment, and generates QR passes for assigned courses |
+| Student | Registers, verifies payment, generates QR passes for assigned courses |
 | Examiner | Scans QR passes and verifies student identity |
 | Admin | Manages students, examiners, timetable, payments, and verification records |
 | Super Admin | Controls higher-level system settings, admin functions, and system monitoring |
 
-Each actor has a different role, which helps keep the system organized and secure.
+Each actor has a different role, and the system separates their access so that users only see the parts meant for them.
 
 ---
 
 ## 4. Full System Flow
 
-The complete CERNIX flow starts from student registration and ends with exam hall verification.
+The system starts from student registration and ends with examiner verification at the exam hall.
 
-1. Student registers.
-2. Student selects department and level.
-3. Student dashboard opens.
-4. Student verifies payment once for the active session using RRR.
-5. System checks session payment.
-6. Student sees assigned courses/exams.
-7. Student generates QR pass per course.
-8. QR pass is tied to student, session, and course/timetable.
-9. Student presents QR pass at exam hall.
-10. Examiner scans QR.
-11. System verifies QR authenticity.
-12. Examiner sees student identity and exam details.
-13. QR becomes used after successful scan.
-14. Verification log is saved.
-15. Admin/super admin can review records.
+### Step-by-step flow
 
-Simple flow diagram:
+1. Student registers
+2. Student selects department and level
+3. Student dashboard opens
+4. Student verifies payment once for the active session using RRR
+5. System checks session payment
+6. Student sees assigned courses/exams
+7. Student generates QR pass per course
+8. QR pass is tied to student, session, and course/timetable
+9. Student presents QR pass at exam hall
+10. Examiner scans QR
+11. System verifies QR authenticity
+12. Examiner sees student identity and exam details
+13. QR becomes used after successful scan
+14. Verification log is saved
+15. Admin/super admin can review records
+
+### Simple flow diagram
 
 ```text
 Student Registration
@@ -112,13 +122,11 @@ Verification Log Saved
 
 ## 5. Student Flow
 
-The student flow was designed to be simple and clear.
+The student flow was improved to make the process clearer and more realistic.
 
-The student first registers without entering an RRR. During registration, the student selects their department, faculty, and level. After registration, the student dashboard shows registration status, payment status, timetable status, and QR pass status.
+A student does not need to enter RRR during registration. Registration comes first, then payment verification happens later from the student dashboard.
 
-The student enters RRR only once for the active exam session. After payment verification, the student can generate QR passes for assigned courses.
-
-Important student flow points:
+### Student flow details
 
 - registration does not require RRR
 - student chooses department/faculty/level
@@ -132,7 +140,7 @@ Important student flow points:
   - Generated / Unused
   - Used
 
-Simple student flow diagram:
+### Student flow diagram
 
 ```text
 Student
@@ -154,9 +162,9 @@ Use QR At Exam Hall
 
 RRR/payment is session-level, not course-level.
 
-This means the student does not pay separately for every course. School fees or exam payment is handled once for the active session. Once the student payment is verified for that session, the student becomes eligible to generate QR passes for assigned courses.
+This means the student does not need to enter a different RRR for every course. One verified payment clears the student for the active exam session.
 
-Meaning:
+### Meaning
 
 - school fees/payment is done once for a session
 - one verified RRR clears the student for the session
@@ -166,7 +174,7 @@ Meaning:
 
 > **Important:** Payment is verified once per session, but QR passes are generated per course.
 
-Simple payment flow:
+### Payment flow diagram
 
 ```text
 One RRR Payment
@@ -180,17 +188,13 @@ Course 2 QR Pass
 Course 3 QR Pass
 ```
 
-This makes the payment flow easier to understand and closer to how school payment normally works.
-
 ---
 
 ## 7. QR Pass Logic
 
-The QR pass is course-specific. This means one QR pass belongs to one course or exam.
+The QR pass is one of the most important parts of CERNIX. It is used to verify that the student is eligible for a particular exam.
 
-Each assigned course can have its own QR pass. The QR pass can only be generated once for that course, and it can only be used once during verification.
-
-QR pass rules:
+### How the QR pass works
 
 - QR pass is tied to one course/exam
 - each course has its own QR pass
@@ -201,7 +205,7 @@ QR pass rules:
 - QR contains secure verification data
 - scanner verifies the QR before approving entry
 
-QR status table:
+### QR statuses
 
 | Status | Meaning |
 |------|---------|
@@ -211,7 +215,7 @@ QR status table:
 | Rejected | QR is invalid, tampered, expired, or does not match records |
 | Already Used | QR was valid before but has already been scanned |
 
-Simple QR status flow:
+### QR flow diagram
 
 ```text
 Course Assigned
@@ -231,30 +235,34 @@ QR Used
 
 ## 8. Examiner Flow
 
-The examiner uses CERNIX to verify students at the exam hall.
+The examiner uses the scanner to verify students at the exam hall.
 
-The examiner logs in, opens the scanner, and scans the student's QR pass. The system checks the QR code and returns the correct result.
+The examiner scan result should make the student identity easy to see first, because the main job of the examiner is to confirm that the student standing in front of them matches the student information on the screen.
 
-The examiner result screen shows the student identity first because that is the most important information during exam entry.
+### Examiner flow details
 
-Student identity section includes:
+- examiner logs in
+- examiner opens scanner
+- examiner scans student QR
+- system checks QR
+- examiner sees result
+- student identity is shown clearly first
+- identity section includes:
+  - student photo
+  - name
+  - matric number
+  - department
+  - faculty
+  - level
+- exam details are shown after identity:
+  - course
+  - hall
+  - date
+  - time
+  - session
+- system records scan result
 
-- student photo
-- name
-- matric number
-- department
-- faculty
-- level
-
-Exam details are shown after identity:
-
-- course
-- hall
-- date
-- time
-- session
-
-Simple examiner flow diagram:
+### Examiner flow diagram
 
 ```text
 Examiner Login
@@ -276,9 +284,9 @@ Save Verification Record
 
 ## 9. Admin Flow
 
-The admin manages daily exam verification activities.
+The admin manages the operational side of the system.
 
-Admin features include:
+### Admin features
 
 - admin dashboard
 - student records
@@ -292,15 +300,15 @@ Admin features include:
 - notes
 - audit/risk monitoring
 
-The admin pages were improved to reduce clutter, align lists better, and make mobile views more readable. The goal was to make the admin interface easier to use without making it too heavy.
+Admin pages were improved to reduce clutter, align lists better, and make mobile views more readable. The aim was to make the admin area cleaner and easier to use without making it look too complicated.
 
 ---
 
 ## 10. Super Admin Flow
 
-The super admin has higher-level control over the system.
+The super admin controls higher-level system functions.
 
-Super admin features include:
+### Super admin features
 
 - access to higher-level control center
 - system settings
@@ -310,13 +318,15 @@ Super admin features include:
 - verification monitoring
 - management of important system configuration
 
-During development, super admin login and baseline access were repaired so that the super admin role could work properly.
+During development, super admin login and baseline access were repaired so that higher-level system access could work more reliably.
 
 ---
 
 ## 11. Database and Data Flow
 
-CERNIX uses different data areas to keep the system organized.
+CERNIX stores records for students, payments, QR passes, timetables, examiners, verification logs, and audit activities.
+
+### Main data areas
 
 | Data area | Purpose |
 |---------|---------|
@@ -330,7 +340,7 @@ CERNIX uses different data areas to keep the system organized.
 | Verification Logs | Stores scanner results |
 | Audit Logs | Stores important system actions |
 
-Simple data flow:
+### Data flow diagram
 
 ```text
 Student
@@ -346,15 +356,13 @@ QR Token
 Verification Log
 ```
 
-This structure helps the system know who the student is, whether payment is verified, what course the student is writing, which QR pass belongs to that course, and what happened during the scan.
-
 ---
 
 ## 12. Security Summary
 
-CERNIX includes security features to reduce impersonation and fake access.
+CERNIX includes several security features to protect exam verification.
 
-Security features include:
+### Security features
 
 - role-based login
 - student/admin/examiner/super admin separation
@@ -363,21 +371,21 @@ Security features include:
 - HMAC/signature check
 - encrypted payload
 - audit logs
-- no raw token or HMAC shown in the UI
+- no raw token or HMAC shown in UI
 - rejected QR for tampered/invalid data
 - Already Used status for repeated scans
 
-The system is designed so that examiners do not need to understand the technical details. They only need to scan the QR and check the student identity and result shown by the system.
+In simple terms, the system does not just read any QR code and approve it. It checks whether the QR is genuine, whether it belongs to the right student and exam, and whether it has already been used.
 
-No app secrets, keys, or raw secure payloads should be exposed to users.
+Sensitive data such as secret keys, raw encrypted payloads, and HMAC values should not be displayed to users.
 
 ---
 
 ## 13. UI and Design Improvements Made
 
-Several UI improvements were made during the project.
+Several design improvements were made to make CERNIX easier to use and more professional.
 
-Major design improvements include:
+### UI improvements
 
 - cleaner student dashboard
 - improved Generate QR Pass page
@@ -395,13 +403,15 @@ Major design improvements include:
 - improved spacing and alignment
 - mobile-first improvements
 
-The design goal was to keep the interface minimal, readable, and useful without making it look too heavy.
+The general design direction became simpler, cleaner, and more focused on the most important information.
 
 ---
 
 ## 14. Major Fixes and Improvements Made
 
-The following features and fixes were implemented or improved during development:
+The project went through several changes, implementations, and improvements during development.
+
+### Implemented or improved
 
 - registration flow repaired
 - department selection fixed
@@ -423,7 +433,7 @@ The following features and fixes were implemented or improved during development
 - admin/super admin list alignment improved
 - UI simplified and made more minimalist
 
-These improvements helped move the project from a basic exam verification idea into a more complete student, examiner, admin, and super admin system.
+These improvements made the system closer to a real exam verification workflow.
 
 ---
 
@@ -441,11 +451,11 @@ QR becomes used
 Admin/super admin can review records
 ```
 
-This is better than manual exam checking because it reduces guesswork. Instead of relying only on printed slips or verbal confirmation, the examiner can scan a QR pass and immediately see the student identity and exam details.
+CERNIX is better than manual exam checking because it reduces the chances of fake exam passes and impersonation. Instead of relying only on paper or verbal confirmation, the examiner can scan a QR pass and immediately see the student's identity and exam details.
 
-It also improves record keeping. Each scan creates a verification record, making it easier for the school to review what happened later.
+It also improves record keeping. Every verification attempt can be saved, which makes it easier for admins and super admins to review who was checked, when the scan happened, and what decision was returned by the system.
 
-It also improves control. Students must be registered, payment must be verified for the session, and QR passes are tied to assigned courses. This makes unauthorized entry harder.
+The system is also more organized because payment, timetable, student identity, QR pass generation, and verification all work together. This makes exam access easier to manage than checking each student manually without a reliable digital trail.
 
 ---
 
@@ -493,10 +503,30 @@ flowchart TD
 
 ---
 
-## 17. Conclusion
+## 17. Short Feature Summary
 
-CERNIX is a secure exam verification system that improves how students are cleared for exams. It brings student registration, payment verification, timetable assignment, QR pass generation, examiner scanning, and admin monitoring into one system.
+### Student side
 
-The project focuses on reducing impersonation, preventing fake exam access, improving exam hall verification, and keeping proper records of every scan.
+Students can register, verify session payment, view assigned courses, and generate QR exam passes for each course.
 
-In its final flow, payment is verified once per session, QR passes are generated per course, examiners scan QR passes at the hall, and admins can review the records. This makes exam verification more organized, traceable, and secure.
+### Examiner side
+
+Examiners can scan student QR passes, verify exam eligibility, view student identity clearly, and record scan decisions.
+
+### Admin side
+
+Admins can manage students, examiners, payments, timetables, scan records, and system monitoring areas.
+
+### Super admin side
+
+Super admins can oversee higher-level settings, control center features, risk/audit areas, and system-wide monitoring.
+
+---
+
+## 18. Simple Conclusion
+
+CERNIX is a secure exam verification system that improves the way students are checked before entering an exam hall. It combines registration, payment verification, course-specific QR passes, examiner scanning, and admin monitoring into one system.
+
+The project was improved step by step to make the flow more realistic, especially by separating registration from payment, making RRR session-level, making QR passes course-specific, and improving the design of student identity display.
+
+Overall, CERNIX provides a clearer, safer, and more reliable way to manage exam entry than a fully manual process.
