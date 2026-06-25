@@ -13,6 +13,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Str;
 use RuntimeException;
 use Throwable;
 
@@ -26,6 +27,41 @@ class StudentDashboardController extends Controller
     public function profile(Request $request)
     {
         return $this->portalView($request, 'student.profile', 'profile');
+    }
+
+    public function uploadPhoto(Request $request): RedirectResponse
+    {
+        $payload = $this->dashboardPayload($request);
+        if ($payload instanceof RedirectResponse) {
+            return $payload;
+        }
+
+        $request->validate([
+            'passport_photo' => ['required', 'image', 'mimes:jpg,jpeg', 'max:2048'],
+        ]);
+
+        $photoPath = $this->storePassportPhoto($request, $payload['student']->matric_no);
+
+        DB::table('students')
+            ->where('matric_no', $payload['student']->matric_no)
+            ->where('session_id', $payload['student']->session_id)
+            ->update([
+                'photo_path' => $photoPath,
+                'photo_status' => 'pending_admin_approval',
+                'photo_rejection_reason' => null,
+                'photo_reviewed_by' => null,
+                'photo_reviewed_at' => null,
+                'updated_at' => now(),
+            ]);
+
+        app(AuditService::class)->logAction(
+            $payload['student']->matric_no,
+            'student',
+            'student.photo_uploaded',
+            ['session_id' => $payload['student']->session_id, 'photo_status' => 'pending_admin_approval']
+        );
+
+        return back()->with('status', 'Photo uploaded. Your profile is waiting for admin approval.');
     }
 
     public function examAccessId(Request $request, ?int $timetable = null)
@@ -372,6 +408,7 @@ class StudentDashboardController extends Controller
         $statusSummary = [
             'registration' => 'Complete',
             'payment' => $paymentRecord ? 'Verified' : 'Pending',
+            'profile' => $this->photoStatusLabel($student->photo_status ?? 'pending_photo_upload'),
             'qr' => match (strtoupper((string) ($qrToken->status ?? ''))) {
                 'UNUSED' => 'Generated / Unused',
                 'USED' => 'Used',
@@ -533,6 +570,17 @@ class StudentDashboardController extends Controller
     {
         $message = strtolower($exception->getMessage());
 
+        if (
+            $exception instanceof RuntimeException
+            && (
+                str_contains($message, 'profile')
+                || str_contains($message, 'official student list')
+                || str_contains($message, 'photo')
+            )
+        ) {
+            return $exception->getMessage();
+        }
+
         if ($this->isTechnicalExamPassFailure($exception)) {
             return 'The course QR pass could not be generated yet. Please try again shortly.';
         }
@@ -576,6 +624,17 @@ class StudentDashboardController extends Controller
         return 'The course QR pass could not be generated yet. Please try again shortly.';
     }
 
+    private function photoStatusLabel(?string $status): string
+    {
+        return match ($status) {
+            'pending_admin_approval' => 'Pending Approval',
+            'approved' => 'Approved',
+            'rejected' => 'Rejected',
+            'flagged' => 'Flagged',
+            default => 'Pending Photo Upload',
+        };
+    }
+
     private function isTechnicalExamPassFailure(Throwable $exception): bool
     {
         $message = strtolower($exception->getMessage());
@@ -604,5 +663,26 @@ class StudentDashboardController extends Controller
             ->implode('/');
 
         return url('/photo-thumb/' . $encoded);
+    }
+
+    private function storePassportPhoto(Request $request, string $matricNo): string
+    {
+        $file = $request->file('passport_photo');
+        $directory = public_path('photos/student-submissions');
+
+        if (! is_dir($directory)) {
+            mkdir($directory, 0755, true);
+        }
+
+        $filename = Str::slug(str_replace('/', '-', $matricNo))
+            . '-'
+            . now()->format('YmdHis')
+            . '-'
+            . Str::random(8)
+            . '.jpg';
+
+        file_put_contents($directory . DIRECTORY_SEPARATOR . $filename, file_get_contents($file->getRealPath()));
+
+        return 'photos/student-submissions/' . $filename;
     }
 }

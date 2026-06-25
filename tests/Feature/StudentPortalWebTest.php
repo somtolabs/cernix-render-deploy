@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Services\ExamPassService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use RuntimeException;
@@ -21,14 +22,9 @@ class StudentPortalWebTest extends TestCase
 
     public function test_student_registration_redirects_to_dashboard_overview(): void
     {
-        $departmentId = DB::table('departments')->where('dept_name', 'Computer Science')->value('dept_id');
+        $this->createOfficialStudent('220404008');
 
-        $response = $this->postJson('/student/register', [
-            'faculty' => 'Faculty of Computing',
-            'department_id' => $departmentId,
-            'level' => '400',
-            'student_number' => '008',
-        ]);
+        $response = $this->postOfficialRegistration('220404008');
 
         $response->assertOk()
             ->assertJsonPath('success', true)
@@ -39,41 +35,20 @@ class StudentPortalWebTest extends TestCase
             ->assertSessionHas('student_session_id');
     }
 
-    public function test_demo_sample_fails_cleanly_when_demo_mode_is_disabled_and_sis_record_is_missing(): void
+    public function test_registration_fails_cleanly_when_official_record_is_missing(): void
     {
-        $this->withoutMiddleware(\Illuminate\Foundation\Http\Middleware\ValidateCsrfToken::class);
-        config()->set('app.cernix_demo_mode', false);
-        app()->detectEnvironment(fn () => 'production');
-        DB::table('cernix_settings')->where('key', 'demo_mode_enabled')->update(['value' => 'false']);
-        DB::table('mock_sis')->where('matric_no', '220404008')->delete();
-        $departmentId = DB::table('departments')->where('dept_name', 'Computer Science')->value('dept_id');
-
-        try {
-            $this->postJson('/student/register', [
-                'faculty' => 'Faculty of Computing',
-                'department_id' => $departmentId,
-                'level' => '400',
-                'student_number' => '008',
-            ])->assertUnprocessable()
-              ->assertJsonPath('success', false)
-              ->assertJsonPath('message', 'Sample student registration is not enabled on this deployment.')
-              ->assertDontSee('SQLSTATE');
-        } finally {
-            app()->detectEnvironment(fn () => 'testing');
-        }
+        $this->postOfficialRegistration('220404008')->assertUnprocessable()
+          ->assertJsonPath('success', false)
+          ->assertJsonPath('message', 'your matric number was not found in the official student list. please contact the admin or exam officer.')
+          ->assertDontSee('SQLSTATE');
     }
 
     public function test_missing_active_session_returns_clean_error(): void
     {
         DB::table('exam_sessions')->update(['is_active' => false]);
-        $departmentId = DB::table('departments')->where('dept_name', 'Computer Science')->value('dept_id');
+        $this->createOfficialStudent('220404008');
 
-        $this->postJson('/student/register', [
-            'faculty' => 'Faculty of Computing',
-            'department_id' => $departmentId,
-            'level' => '400',
-            'student_number' => '008',
-        ])->assertUnprocessable()
+        $this->postOfficialRegistration('220404008')->assertUnprocessable()
           ->assertJsonPath('message', 'No active exam session found.')
           ->assertDontSee('SQLSTATE');
     }
@@ -81,7 +56,7 @@ class StudentPortalWebTest extends TestCase
     public function test_registration_database_failure_is_logged_and_sanitized(): void
     {
         Log::spy();
-        $departmentId = DB::table('departments')->where('dept_name', 'Computer Science')->value('dept_id');
+        $this->createOfficialStudent('220404008');
 
         $this->mock(\App\Services\RegistrationService::class, function ($mock) {
             $mock->shouldReceive('registerStudent')->andThrow(new RuntimeException(
@@ -89,12 +64,7 @@ class StudentPortalWebTest extends TestCase
             ));
         });
 
-        $this->postJson('/student/register', [
-            'faculty' => 'Faculty of Computing',
-            'department_id' => $departmentId,
-            'level' => '400',
-            'student_number' => '008',
-        ])->assertUnprocessable()
+        $this->postOfficialRegistration('220404008')->assertUnprocessable()
           ->assertJsonPath(
               'message',
               'Registration could not be completed right now. Please check your details and try again.'
@@ -107,34 +77,25 @@ class StudentPortalWebTest extends TestCase
             ->with('Student registration failed.', \Mockery::type('array'));
     }
 
-    public function test_student_registration_form_uses_student_number_preview_flow(): void
+    public function test_student_registration_form_uses_official_matric_and_photo_flow(): void
     {
         $response = $this->get('/student/register')->assertOk();
 
-        $response->assertSee('Student Number')
-            ->assertSee('Generated Matric Number')
-            ->assertSee('Need demo credentials?')
+        $response->assertSee('Matric Number')
+            ->assertSee('Passport Photo')
+            ->assertSee('official student list')
             ->assertDontSee('name="rrr_number"', false)
             ->assertDontSee('Remita RRR')
-            ->assertSee('001')
-            ->assertSee('014')
-            ->assertSee('Uche David Nnamdi')
-            ->assertSee('250404001')
-            ->assertSee('Computer Science')
-            ->assertSee('Software Engineering')
-            ->assertSee('No departments are configured. Ask an admin to seed or create departments.')
-            ->assertSee('departmentSelect.replaceChildren', false)
-            ->assertDontSee('name="matric_no"', false);
+            ->assertSee('name="matric_no"', false)
+            ->assertSee('name="passport_photo"', false)
+            ->assertDontSee('Generated Matric Number')
+            ->assertDontSee('Need demo credentials?')
+            ->assertDontSee('student_number');
     }
 
-    public function test_student_registration_rejects_unknown_department(): void
+    public function test_student_registration_rejects_unknown_matric(): void
     {
-        $this->postJson('/student/register', [
-            'faculty' => 'Faculty of Computing',
-            'department_id' => 999999,
-            'level' => '400',
-            'student_number' => '008',
-        ])->assertUnprocessable();
+        $this->postOfficialRegistration('UNKNOWN/001')->assertUnprocessable();
     }
 
     public function test_student_portal_routes_redirect_without_student_session(): void
@@ -233,35 +194,30 @@ class StudentPortalWebTest extends TestCase
             ->assertNotFound();
     }
 
-    public function test_generated_matric_uses_selected_department_code(): void
+    public function test_registration_uses_official_department_details(): void
     {
-        $softwareId = DB::table('departments')->where('dept_name', 'Software Engineering')->value('dept_id');
+        $this->createOfficialStudent('SWE/2021/008', [
+            'full_name' => 'Software Engineering Student',
+            'department' => 'Software Engineering',
+            'level' => '400',
+        ]);
 
-        $this->postJson('/student/register', [
-            'faculty' => 'Faculty of Computing',
+        $this->postOfficialRegistration('SWE/2021/008')->assertOk()
+          ->assertJsonPath('success', true)
+          ->assertJsonPath('data.matric_no', 'SWE/2021/008');
+
+        $softwareId = DB::table('departments')->where('dept_name', 'Software Engineering')->value('dept_id');
+        $this->assertDatabaseHas('students', [
+            'matric_no' => 'SWE/2021/008',
             'department_id' => $softwareId,
             'level' => '400',
-            'student_number' => '008',
-        ])->assertOk()
-          ->assertJsonPath('success', true)
-          ->assertJsonPath('data.matric_no', '220405008');
-
-        $this->assertDatabaseHas('mock_sis', [
-            'matric_no' => '220405008',
-            'department' => 'Software Engineering',
-            'photo_path' => 'demo-passports/student-008.jpg',
         ]);
     }
 
     public function test_generate_exam_pass_accepts_valid_demo_rrr_and_binds_course(): void
     {
         $departmentId = DB::table('departments')->where('dept_name', 'Computer Science')->value('dept_id');
-        $this->postJson('/student/register', [
-            'faculty' => 'Faculty of Computing',
-            'department_id' => $departmentId,
-            'level' => '400',
-            'student_number' => '008',
-        ])->assertOk();
+        $this->registerDemoStudent();
         $examId = DB::table('timetables')
             ->where('department_id', $departmentId)
             ->where('level', '400')
@@ -429,8 +385,7 @@ class StudentPortalWebTest extends TestCase
 
         $this->from('/student/generate-exam-pass')
             ->post('/student/generate-exam-pass', ['rrr_number' => 'TEST-DEMO'])
-            ->assertRedirect('/student/generate-exam-pass')
-            ->assertSessionHasErrors('timetable_id');
+            ->assertStatus(422);
 
         $this->assertDatabaseCount('payment_records', 0);
         $this->assertDatabaseCount('qr_tokens', 0);
@@ -457,111 +412,77 @@ class StudentPortalWebTest extends TestCase
 
     public function test_registration_does_not_validate_or_store_rrr(): void
     {
-        $departmentId = DB::table('departments')->where('dept_name', 'Computer Science')->value('dept_id');
+        $this->createOfficialStudent('220404008');
 
-        $this->postJson('/student/register', [
-            'faculty' => 'Faculty of Computing',
-            'department_id' => $departmentId,
-            'level' => '400',
-            'student_number' => '008',
-        ])->assertOk();
+        $this->postOfficialRegistration('220404008')->assertOk();
 
         $this->assertDatabaseCount('payment_records', 0);
         $this->assertDatabaseCount('qr_tokens', 0);
     }
 
-    public function test_generated_data_science_sample_builds_expected_matric(): void
+    public function test_data_science_official_student_registers_with_expected_matric(): void
     {
-        $departmentId = DB::table('departments')->where('dept_name', 'Data Science')->value('dept_id');
-
-        $this->postJson('/student/register', [
-            'faculty' => 'Faculty of Computing',
-            'department_id' => $departmentId,
+        $this->createOfficialStudent('DS/2021/010', [
+            'full_name' => 'Data Science Student',
+            'department' => 'Data Science',
             'level' => '300',
-            'student_number' => '010',
-        ])->assertOk()
+        ]);
+
+        $this->postOfficialRegistration('DS/2021/010')->assertOk()
           ->assertJsonPath('success', true)
-          ->assertJsonPath('data.matric_no', '230408010');
+          ->assertJsonPath('data.matric_no', 'DS/2021/010');
     }
 
-    public function test_registration_creates_missing_generated_demo_student_without_payment(): void
+    public function test_registration_creates_official_student_profile_without_payment(): void
     {
-        $departmentId = DB::table('departments')->where('dept_name', 'Computer Science')->value('dept_id');
-
-        DB::table('mock_sis')->where('matric_no', '230404001')->delete();
-
-        $this->postJson('/student/register', [
-            'faculty' => 'Faculty of Computing',
-            'department_id' => $departmentId,
-            'level' => '300',
-            'student_number' => '001',
-        ])->assertOk()
-          ->assertJsonPath('success', true)
-          ->assertJsonPath('data.matric_no', '230404001');
-
-        $this->assertDatabaseHas('mock_sis', [
-            'matric_no' => '230404001',
+        $this->createOfficialStudent('CSC/2021/001', [
             'full_name' => 'Chidera Favour Nnamdi',
-            'department' => 'Computer Science',
             'level' => '300',
-            'photo_path' => 'demo-passports/student-001.jpg',
+        ]);
+
+        $this->postOfficialRegistration('CSC/2021/001')->assertOk()
+          ->assertJsonPath('success', true)
+          ->assertJsonPath('data.matric_no', 'CSC/2021/001');
+
+        $this->assertDatabaseHas('students', [
+            'matric_no' => 'CSC/2021/001',
+            'full_name' => 'Chidera Favour Nnamdi',
+            'level' => '300',
+            'photo_status' => 'pending_admin_approval',
         ]);
 
         $this->assertDatabaseCount('payment_records', 0);
     }
 
-    public function test_all_controlled_demo_student_numbers_can_register_and_resume_in_demo_mode(): void
+    public function test_official_students_can_register_and_resume_without_duplicate_profiles(): void
     {
-        $departmentId = DB::table('departments')->where('dept_name', 'Computer Science')->value('dept_id');
-
-        foreach (range(1, 14) as $number) {
+        foreach (range(1, 5) as $number) {
             $studentNumber = str_pad((string) $number, 3, '0', STR_PAD_LEFT);
+            $matricNo = 'CSC/2021/' . $studentNumber;
+            $this->createOfficialStudent($matricNo, ['full_name' => 'Official Student ' . $studentNumber]);
 
-            $this->postJson('/student/register', [
-                'faculty' => 'Faculty of Computing',
-                'department_id' => $departmentId,
-                'level' => '400',
-                'student_number' => $studentNumber,
-            ])->assertOk()
+            $this->postOfficialRegistration($matricNo)->assertOk()
               ->assertJsonPath('success', true)
-              ->assertJsonPath('data.matric_no', '220404' . $studentNumber);
+              ->assertJsonPath('data.matric_no', $matricNo);
         }
 
-        $this->postJson('/student/register', [
-            'faculty' => 'Faculty of Computing',
-            'department_id' => $departmentId,
-            'level' => '400',
-            'student_number' => '001',
-        ])->assertOk()
+        $this->postOfficialRegistration('CSC/2021/001')->assertOk()
           ->assertJsonPath('success', true)
           ->assertJsonPath('redirect_url', route('student.dashboard'));
 
-        $this->assertSame(14, DB::table('students')->where('department_id', $departmentId)->count());
+        $this->assertSame(5, DB::table('students')->count());
         $this->assertDatabaseCount('payment_records', 0);
         $this->assertDatabaseCount('qr_tokens', 0);
     }
 
-    public function test_student_number_validation_and_demo_photo_range(): void
+    public function test_matric_and_photo_are_required_for_registration(): void
     {
-        $departmentId = DB::table('departments')->where('dept_name', 'Computer Science')->value('dept_id');
+        $this->postJson('/student/register', [])->assertStatus(422);
 
-        foreach (['1', '01', '0001', 'ABC', '12A'] as $studentNumber) {
-            $this->postJson('/student/register', [
-                'faculty' => 'Faculty of Computing',
-                'department_id' => $departmentId,
-                'level' => '400',
-                'student_number' => $studentNumber,
-            ])->assertStatus(422);
-        }
-
+        $this->createOfficialStudent('220404008');
         $this->postJson('/student/register', [
-            'faculty' => 'Faculty of Computing',
-            'department_id' => $departmentId,
-            'level' => '400',
-            'student_number' => '015',
-        ])->assertStatus(422)
-          ->assertJsonPath('success', false)
-          ->assertJsonPath('message', 'Demo passport photo is only available for student numbers 001 to 014 right now.');
+            'matric_no' => '220404008',
+        ])->assertStatus(422);
     }
 
     public function test_dashboard_uses_scroll_safe_mobile_history_for_many_scans(): void
@@ -593,14 +514,15 @@ class StudentPortalWebTest extends TestCase
 
     private function registerDemoStudent(): void
     {
-        $departmentId = DB::table('departments')->where('dept_name', 'Computer Science')->value('dept_id');
-
-        $this->postJson('/student/register', [
-            'faculty' => 'Faculty of Computing',
-            'department_id' => $departmentId,
-            'level' => '400',
-            'student_number' => '008',
-        ])->assertOk();
+        $this->createOfficialStudent('220404008');
+        $this->postOfficialRegistration('220404008')->assertOk();
+        DB::table('students')
+            ->where('matric_no', '220404008')
+            ->update([
+                'photo_status' => 'approved',
+                'photo_reviewed_by' => 'test-admin',
+                'photo_reviewed_at' => now(),
+            ]);
     }
 
     private function generateDemoPass(): void
@@ -611,5 +533,33 @@ class StudentPortalWebTest extends TestCase
             'timetable_id' => $examId,
             'rrr_number' => 'TEST-DEMO',
         ])->assertRedirect(route('student.generate-exam-pass'));
+    }
+
+    private function postOfficialRegistration(string $matricNo)
+    {
+        return $this
+            ->withHeaders(['Accept' => 'application/json'])
+            ->post('/student/register', [
+                'matric_no' => $matricNo,
+                'passport_photo' => UploadedFile::fake()->image('passport.jpg', 240, 320),
+            ]);
+    }
+
+    private function createOfficialStudent(string $matricNo, array $overrides = []): void
+    {
+        DB::table('official_students')->updateOrInsert(
+            ['matric_number' => $matricNo],
+            array_merge([
+                'full_name' => 'Adebayo Oluwaseun Emmanuel',
+                'department' => 'Computer Science',
+                'faculty' => 'Faculty of Computing',
+                'level' => '400',
+                'programme' => 'BSc Computer Science',
+                'academic_session' => '2025/2026',
+                'status' => 'active',
+                'created_at' => now(),
+                'updated_at' => now(),
+            ], $overrides)
+        );
     }
 }

@@ -10,6 +10,8 @@
     $adminNav = [
         ['label' => 'Control Center', 'route' => 'admin.dashboard', 'match' => 'admin/dashboard'],
         ['label' => 'Risk Intelligence', 'route' => 'admin.intelligence', 'match' => 'admin/intelligence*', 'badge' => $warningCounts['risk'] ?? 0],
+        ['label' => 'Student Registry', 'route' => 'admin.student-registry', 'match' => 'admin/student-registry*'],
+        ['label' => 'Photo Approvals', 'route' => 'admin.photo-approvals', 'match' => 'admin/photo-approvals*'],
         ['label' => 'Students', 'route' => 'admin.students', 'match' => 'admin/students*', 'badge' => $warningCounts['students'] ?? 0],
         ['label' => 'Student Trace', 'route' => 'admin.student-trace', 'match' => 'admin/student-trace*'],
         ['label' => 'Examiners', 'route' => 'admin.examiners', 'match' => 'admin/examiners*', 'badge' => $warningCounts['examiners'] ?? 0],

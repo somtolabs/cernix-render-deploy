@@ -5,7 +5,6 @@ namespace Tests\Feature;
 use App\Services\AuditService;
 use App\Services\CryptoService;
 use App\Services\ExamPassService;
-use App\Services\MockSISService;
 use App\Services\QrTokenService;
 use App\Services\RegistrationService;
 use App\Services\RemitaService;
@@ -23,7 +22,7 @@ use Tests\TestCase;
  * End-to-End System Validation
  *
  * Proves the full CERNIX lifecycle as a closed loop:
- *   SIS lookup → Student Registration → Payment Verification →
+ *   Official registry lookup → Student Registration → Payment Verification →
  *   QR Token Issuance → QR Scan → Examiner Verification → Audit Log
  *
  * Uses real seeders (same data as production) and mocks only the external
@@ -43,7 +42,7 @@ class EndToEndSystemTest extends TestCase
     private int    $sessionId;
     private int    $examinerId;
     private float  $feeAmount;
-    private string $matricNo = 'CSC/2021/001'; // from MockSISSeeder
+    private string $matricNo = 'CSC/2021/001';
 
     protected function setUp(): void
     {
@@ -66,6 +65,17 @@ class EndToEndSystemTest extends TestCase
         $examiner = DB::table('examiners')->where('username', 'admin1')->first();
         $this->examinerId = (int) $examiner->examiner_id;
 
+        DB::table('official_students')->insert([
+            'matric_number' => $this->matricNo,
+            'full_name' => 'Adebayo Oluwaseun Emmanuel',
+            'department' => 'Computer Science',
+            'faculty' => 'Faculty of Computing',
+            'level' => '400',
+            'status' => 'active',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
         // RemitaService is the only external dependency — mock the HTTP layer
         $remita = $this->createMock(RemitaService::class);
         $remita->method('verifyPayment')
@@ -73,7 +83,7 @@ class EndToEndSystemTest extends TestCase
 
         $crypto = new CryptoService();
 
-        $this->registrationService = new RegistrationService(new MockSISService());
+        $this->registrationService = new RegistrationService();
         $this->verificationService = new VerificationService($crypto);
         $this->qrTokenService      = new QrTokenService($crypto);
         $this->examPassService     = new ExamPassService($remita, $this->qrTokenService);
@@ -92,15 +102,17 @@ class EndToEndSystemTest extends TestCase
         $result = $this->registrationService->registerStudent([
             'matric_no' => $this->matricNo,
             'session_id' => $this->sessionId,
+            'photo_path' => 'photos/student-submissions/test.jpg',
         ]);
 
         $this->assertTrue($result['success']);
         $this->assertSame('Registration successful', $result['message']);
-        $this->assertSame('Adebayo Oluwaseun Emmanuel', $result['data']['full_name']); // from SIS
-        $this->assertSame('demo-passports/student-020.jpg',        $result['data']['photo_path']); // from SIS
+        $this->assertSame('Adebayo Oluwaseun Emmanuel', $result['data']['full_name']); // from official registry
+        $this->assertSame('photos/student-submissions/test.jpg', $result['data']['photo_path']);
         $this->assertDatabaseCount('payment_records', 0);
         $this->assertDatabaseCount('qr_tokens', 0);
 
+        $this->approveProfile();
         $pass = $this->generatePass('TEST-DEMO');
         $this->assertNotEmpty($pass['token_id']);
     }
@@ -148,7 +160,7 @@ class EndToEndSystemTest extends TestCase
         $this->assertNotNull($scan['student']);
         $this->assertSame($this->matricNo,                $scan['student']['matric_no']);
         $this->assertSame('Adebayo Oluwaseun Emmanuel',   $scan['student']['full_name']);
-        $this->assertSame('demo-passports/student-020.jpg',          $scan['student']['photo_path']);
+        $this->assertSame('photos/student-submissions/test.jpg', $scan['student']['photo_path']);
         $this->assertSame($result['data']['token_id'],    $scan['token_id']);
         $this->assertNotEmpty($scan['timestamp']);
     }
@@ -263,7 +275,9 @@ class EndToEndSystemTest extends TestCase
         $this->registrationService->registerStudent([
             'matric_no' => $this->matricNo,
             'session_id' => $this->sessionId,
+            'photo_path' => 'photos/student-submissions/test.jpg',
         ]);
+        $this->approveProfile();
 
         return ['data' => $this->generatePass($rrr)];
     }
@@ -283,6 +297,16 @@ class EndToEndSystemTest extends TestCase
             $rrr,
             $this->feeAmount,
         );
+    }
+
+    private function approveProfile(): void
+    {
+        DB::table('students')->where('matric_no', $this->matricNo)->update([
+            'photo_status' => 'approved',
+            'photo_reviewed_by' => 'test-admin',
+            'photo_reviewed_at' => now(),
+            'updated_at' => now(),
+        ]);
     }
 
     /**

@@ -116,7 +116,19 @@ class ExamPassServiceTest extends TestCase
             'level' => '400',
             'session_id' => $session,
             'photo_path' => 'demo-passports/student-002.jpg',
+            'photo_status' => 'approved',
             'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        DB::table('official_students')->insert([
+            'matric_number' => $secondStudent,
+            'full_name' => 'Second Demo Student',
+            'department' => 'Computer Science',
+            'faculty' => 'Faculty of Computing',
+            'level' => '400',
+            'status' => 'active',
+            'created_at' => now(),
+            'updated_at' => now(),
         ]);
         $second = $service->generate($secondStudent, $session, $exam, 'TEST-DEMO', 10000);
 
@@ -211,6 +223,16 @@ class ExamPassServiceTest extends TestCase
             'updated_at' => now(),
         ]);
         $student = 'CSC/2021/001';
+        DB::table('official_students')->insert([
+            'matric_number' => $student,
+            'full_name' => 'Test Student',
+            'department' => 'Computer Science',
+            'faculty' => 'Faculty of Computing',
+            'level' => '400',
+            'status' => 'active',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
         DB::table('students')->insert([
             'matric_no' => $student,
             'full_name' => 'Test Student',
@@ -218,7 +240,9 @@ class ExamPassServiceTest extends TestCase
             'level' => '400',
             'session_id' => $session,
             'photo_path' => 'demo-passports/student-020.jpg',
+            'photo_status' => 'approved',
             'created_at' => now(),
+            'updated_at' => now(),
         ]);
         $exam = DB::table('timetables')->insertGetId([
             'exam_session_id' => $session,

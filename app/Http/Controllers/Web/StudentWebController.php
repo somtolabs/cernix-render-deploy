@@ -4,43 +4,34 @@ namespace App\Http\Controllers\Web;
 
 use App\Http\Controllers\Controller;
 use App\Services\AuditService;
-use App\Services\MockSISService;
 use App\Services\RegistrationService;
-use App\Support\DepartmentFees;
-use App\Support\MatricNumber;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Str;
 
 class StudentWebController extends Controller
 {
     public function __construct(
         private readonly RegistrationService $registrationService,
-        private readonly MockSISService $sisService,
     ) {}
 
     public function index()
     {
         $session = DB::table('exam_sessions')->where('is_active', true)->first();
-        $departments = DB::table('departments')->orderBy('dept_name')->get();
-        $faculties = $departments->pluck('faculty')->filter()->unique()->values();
-        if ($faculties->isEmpty()) {
-            $faculties = collect([DepartmentFees::FACULTY]);
-        }
 
-        return view('student.register', compact('session', 'departments', 'faculties'));
+        return view('student.register', compact('session'));
     }
 
     public function register(Request $request): JsonResponse|RedirectResponse
     {
         $data = $request->validate([
-            'faculty' => 'nullable|string|max:100',
-            'department_id' => 'required|integer|exists:departments,dept_id',
-            'level' => 'required|string|in:100,200,300,400',
-            'student_number' => ['required', 'string', 'regex:/^\d{3}$/'],
+            'matric_no' => ['required_without:matric_number', 'nullable', 'string', 'max:50'],
+            'matric_number' => ['required_without:matric_no', 'nullable', 'string', 'max:50'],
+            'passport_photo' => ['required', 'image', 'mimes:jpg,jpeg', 'max:2048'],
         ]);
 
         $session = DB::table('exam_sessions')->where('is_active', true)->first();
@@ -50,44 +41,15 @@ class StudentWebController extends Controller
         }
 
         try {
-            $department = DB::table('departments')->where('dept_id', $data['department_id'])->first();
-            $data['faculty'] = ($data['faculty'] ?? null) ?: ($department->faculty ?? DepartmentFees::FACULTY);
-            $data['matric_no'] = MatricNumber::generate(
-                (string) $data['level'],
-                (string) $data['faculty'],
-                (string) ($department->dept_name ?? ''),
-                (string) $data['student_number']
-            );
+            $data['matric_no'] = strtoupper(trim((string) ($data['matric_no'] ?? $data['matric_number'])));
+            $this->assertOfficialStudentCanRegister($data['matric_no']);
+            $data['photo_path'] = $this->storePassportPhoto($request, $data['matric_no']);
 
-            if (! DepartmentFees::isDemoMode()
-                && MatricNumber::hasDemoPhoto((string) $data['student_number'])
-                && ! DB::table('mock_sis')->where('matric_no', $data['matric_no'])->exists()) {
-                throw new \RuntimeException(
-                    'Sample student registration is not enabled on this deployment.'
-                );
-            }
-
-            if (DepartmentFees::isDemoMode() && ! MatricNumber::hasDemoPhoto((string) $data['student_number'])) {
-                throw new \RuntimeException('Demo passport photo is only available for student numbers 001 to 014 right now.');
-            }
-
-            $this->ensureDemoStudentIfAllowed($data, $department);
-            $this->validateSelectedIdentity($data);
-            $isDemoSample = DepartmentFees::isDemoMode()
-                && MatricNumber::hasDemoPhoto((string) $data['student_number']);
-            $existingDemoStudent = $isDemoSample
-                ? DB::table('students')
-                    ->where('matric_no', $data['matric_no'])
-                    ->where('session_id', $session->session_id)
-                    ->exists()
-                : false;
-
-            if (! $existingDemoStudent) {
-                $this->registrationService->registerStudent([
-                    'matric_no' => $data['matric_no'],
-                    'session_id' => (int) $session->session_id,
-                ]);
-            }
+            $result = $this->registrationService->registerStudent([
+                'matric_no' => $data['matric_no'],
+                'session_id' => (int) $session->session_id,
+                'photo_path' => $data['photo_path'],
+            ]);
 
             $request->session()->put('student_matric_no', $data['matric_no']);
             $request->session()->put('student_session_id', (int) $session->session_id);
@@ -95,8 +57,11 @@ class StudentWebController extends Controller
             app(AuditService::class)->logAction(
                 $data['matric_no'],
                 'student',
-                $existingDemoStudent ? 'student.demo_session_resumed' : 'student.registered',
-                ['session_id' => $session->session_id]
+                'student.registered',
+                [
+                    'session_id' => $session->session_id,
+                    'photo_status' => $result['data']['photo_status'] ?? 'pending_admin_approval',
+                ]
             );
 
             if (! $request->expectsJson()) {
@@ -105,10 +70,11 @@ class StudentWebController extends Controller
 
             return response()->json([
                 'success' => true,
-                'message' => 'Registration successful. Opening your exam dashboard.',
+                'message' => 'Registration successful. Your profile is waiting for admin approval.',
                 'redirect_url' => route('student.dashboard'),
                 'data' => [
                     'matric_no' => $data['matric_no'],
+                    'photo_status' => $result['data']['photo_status'] ?? 'pending_admin_approval',
                 ],
             ]);
         } catch (\Throwable $e) {
@@ -121,67 +87,6 @@ class StudentWebController extends Controller
 
             return response()->json(['success' => false, 'message' => $message], 422);
         }
-    }
-
-    private function validateSelectedIdentity(array $data): void
-    {
-        $sis = $this->sisService->getStudentByMatric($data['matric_no']);
-        $department = DB::table('departments')->where('dept_id', $data['department_id'])->first();
-
-        if (! $department || strcasecmp((string) $department->dept_name, (string) $sis['department']) !== 0) {
-            throw new \RuntimeException('Selected department does not match this matric number. Expected department: ' . ($sis['department'] ?? 'Not available') . '.');
-        }
-
-        if (strcasecmp((string) $department->faculty, (string) $data['faculty']) !== 0) {
-            throw new \RuntimeException('Selected faculty does not match the selected department.');
-        }
-
-        if (($sis['level'] ?? null) && (string) $sis['level'] !== (string) $data['level']) {
-            throw new \RuntimeException('Selected level does not match this matric number. Expected level: ' . $sis['level'] . '.');
-        }
-
-        if (($sis['photo_path'] ?? null) && DepartmentFees::isDemoMode()) {
-            $expectedPhoto = MatricNumber::demoPhotoPath((string) $data['student_number']);
-            if ((string) $sis['photo_path'] !== $expectedPhoto) {
-                throw new \RuntimeException('Demo passport photo is only available for student numbers 001 to 014 right now.');
-            }
-        }
-
-        if (preg_match('/^\d{9}$/', $data['matric_no']) === 1) {
-            $facultyCode = substr($data['matric_no'], 2, 2);
-            $departmentCode = substr($data['matric_no'], 4, 2);
-            if (($department->department_code ?? null) && $departmentCode !== $department->department_code) {
-                throw new \RuntimeException('Matric number department code does not match the selected department.');
-            }
-            if (($department->faculty_code ?? null) && $facultyCode !== $department->faculty_code) {
-                throw new \RuntimeException('Matric number faculty code does not match the selected department.');
-            }
-        } elseif (preg_match('/^[A-Z]{3}\/\d{4}\/\d{3}$/i', $data['matric_no']) !== 1) {
-            throw new \RuntimeException('Enter a valid 9-digit AAUA matric number or a legacy matric number.');
-        }
-    }
-
-    private function ensureDemoStudentIfAllowed(array $data, object $department): void
-    {
-        if (! DepartmentFees::isDemoMode()) {
-            return;
-        }
-
-        if (! MatricNumber::hasDemoPhoto((string) $data['student_number'])) {
-            throw new \RuntimeException('Demo passport photo is only available for student numbers 001 to 014 right now.');
-        }
-
-        DB::table('mock_sis')->updateOrInsert(
-            ['matric_no' => $data['matric_no']],
-            [
-                'full_name' => MatricNumber::demoName((string) $data['student_number']),
-                'department' => $department->dept_name,
-                'department_code' => $department->department_code ?? MatricNumber::DEPARTMENT_CODES[$department->dept_name] ?? null,
-                'faculty_code' => $department->faculty_code ?? MatricNumber::FACULTY_CODES[$department->faculty] ?? null,
-                'level' => (string) $data['level'],
-                'photo_path' => MatricNumber::demoPhotoPath((string) $data['student_number']),
-            ]
-        );
     }
 
     private function registrationErrorMessage(\Throwable $exception): string
@@ -202,30 +107,24 @@ class StudentWebController extends Controller
 
     private function logRegistrationFailure(\Throwable $exception, array $data, object $session): void
     {
-        $studentNumber = (string) ($data['student_number'] ?? '');
         $matricNo = (string) ($data['matric_no'] ?? '');
-        $departmentId = $data['department_id'] ?? null;
 
         try {
             $context = [
                 'exception_class' => $exception::class,
                 'database_driver' => DB::getDriverName(),
-                'demo_mode' => DepartmentFees::isDemoMode(),
-                'is_demo_student_number' => MatricNumber::hasDemoPhoto($studentNumber),
                 'active_session_exists' => (bool) $session,
-                'department_exists' => $departmentId
-                    ? DB::table('departments')->where('dept_id', $departmentId)->exists()
-                    : false,
-                'mock_sis_record_exists' => $matricNo !== ''
-                    && Schema::hasTable('mock_sis')
-                    && DB::table('mock_sis')->where('matric_no', $matricNo)->exists(),
+                'official_student_exists' => $matricNo !== ''
+                    && Schema::hasTable('official_students')
+                    && DB::table('official_students')->where('matric_number', $matricNo)->exists(),
                 'schema' => [
                     'departments' => Schema::hasTable('departments'),
                     'exam_sessions' => Schema::hasTable('exam_sessions'),
-                    'mock_sis' => Schema::hasTable('mock_sis'),
+                    'official_students' => Schema::hasTable('official_students'),
                     'students' => Schema::hasTable('students'),
                     'students_session_id' => Schema::hasColumn('students', 'session_id'),
                     'students_level' => Schema::hasColumn('students', 'level'),
+                    'students_photo_status' => Schema::hasColumn('students', 'photo_status'),
                 ],
             ];
         } catch (\Throwable $diagnosticException) {
@@ -238,4 +137,39 @@ class StudentWebController extends Controller
         Log::warning('Student registration failed.', $context);
     }
 
+    private function storePassportPhoto(Request $request, string $matricNo): string
+    {
+        $file = $request->file('passport_photo');
+        $directory = public_path('photos/student-submissions');
+
+        if (! is_dir($directory)) {
+            mkdir($directory, 0755, true);
+        }
+
+        $filename = Str::slug(str_replace('/', '-', $matricNo))
+            . '-'
+            . now()->format('YmdHis')
+            . '-'
+            . Str::random(8)
+            . '.jpg';
+
+        file_put_contents($directory . DIRECTORY_SEPARATOR . $filename, file_get_contents($file->getRealPath()));
+
+        return 'photos/student-submissions/' . $filename;
+    }
+
+    private function assertOfficialStudentCanRegister(string $matricNo): void
+    {
+        $officialStudent = DB::table('official_students')
+            ->where('matric_number', $matricNo)
+            ->first();
+
+        if (! $officialStudent) {
+            throw new \RuntimeException('your matric number was not found in the official student list. please contact the admin or exam officer.');
+        }
+
+        if (strtolower((string) $officialStudent->status) !== 'active') {
+            throw new \RuntimeException('This matric number is not active on the official student list. Please contact the admin or exam officer.');
+        }
+    }
 }

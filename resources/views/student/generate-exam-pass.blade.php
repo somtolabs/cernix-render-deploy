@@ -51,6 +51,23 @@
 @php
     $unusedCount = $coursePasses->where('qr_status', 'Generated / Unused')->count();
     $usedCount = $coursePasses->where('qr_status', 'Used')->count();
+    $photoStatus = $student->photo_status ?? 'pending_photo_upload';
+    $profileApproved = $photoStatus === 'approved';
+    $profileLabel = match($photoStatus) {
+        'pending_admin_approval' => 'Pending Approval',
+        'approved' => 'Approved',
+        'rejected' => 'Rejected',
+        'flagged' => 'Flagged',
+        default => 'Pending Photo Upload',
+    };
+    $profileMessage = match($photoStatus) {
+        'approved' => null,
+        'rejected' => $student->photo_rejection_reason
+            ? 'Your profile photo was rejected. Reason: ' . $student->photo_rejection_reason
+            : 'Your profile photo was rejected. Upload a new passport photo from your profile page.',
+        'flagged' => 'Your profile is flagged for manual review before you can generate an exam pass.',
+        default => 'your profile is awaiting admin approval before you can generate an exam pass.',
+    };
 @endphp
 
 <div class="cx-page-head">
@@ -62,6 +79,7 @@
 <div class="course-pass-flow">
     <section class="course-pass-strip" aria-label="Course QR pass summary">
         <div><span>Registration</span><b>Complete</b></div>
+        <div><span>Profile</span><b>{{ $profileLabel }}</b></div>
         <div><span>Session Payment</span><b>{{ $payment ? 'Verified' : 'Pending' }}</b></div>
         <div><span>Assigned Courses</span><b>{{ $coursePasses->count() }}</b></div>
         <div><span>Course QR Passes</span><b>{{ $unusedCount + $usedCount }} generated</b></div>
@@ -69,6 +87,10 @@
 
     @if(session('exam_pass_error'))
         <div class="course-pass-notice error" role="alert"><strong>Course QR not generated</strong>{{ session('exam_pass_error') }}</div>
+    @elseif(! $profileApproved)
+        <div class="course-pass-notice error" role="alert">
+            <strong>Profile approval required</strong>{{ $profileMessage }}
+        </div>
     @elseif(session('status'))
         <div class="course-pass-notice success" role="status">
             <strong>{{ session('status') }}</strong>
@@ -78,6 +100,8 @@
 
     @if($coursePasses->isEmpty())
         <div class="cx-empty"><strong>No exam timetable assigned yet</strong><br>Your department and level do not have an available paper for this exam session.</div>
+    @elseif(! $profileApproved)
+        <div class="cx-empty"><strong>QR generation locked</strong><br><a href="{{ route('student.profile') }}">Open your profile</a> to review or resubmit your passport photo.</div>
     @elseif(! $payment)
         <section class="course-pass-panel">
             <div class="course-pass-head">

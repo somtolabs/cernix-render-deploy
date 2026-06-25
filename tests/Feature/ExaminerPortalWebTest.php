@@ -5,7 +5,6 @@ namespace Tests\Feature;
 use App\Services\AuditService;
 use App\Services\CryptoService;
 use App\Services\ExamPassService;
-use App\Services\MockSISService;
 use App\Services\QrTokenService;
 use App\Services\RegistrationService;
 use App\Services\RemitaService;
@@ -213,9 +212,28 @@ class ExaminerPortalWebTest extends TestCase
     private function registerToken(): object
     {
         $session = DB::table('exam_sessions')->where('is_active', true)->first();
-        (new RegistrationService(new MockSISService))->registerStudent([
+        DB::table('official_students')->updateOrInsert(
+            ['matric_number' => '220404008'],
+            [
+                'full_name' => 'Demo Student',
+                'department' => 'Computer Science',
+                'faculty' => 'Faculty of Computing',
+                'level' => '400',
+                'status' => 'active',
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]
+        );
+        (new RegistrationService())->registerStudent([
             'matric_no' => '220404008',
             'session_id' => (int) $session->session_id,
+            'photo_path' => 'photos/student-submissions/test.jpg',
+        ]);
+        DB::table('students')->where('matric_no', '220404008')->update([
+            'photo_status' => 'approved',
+            'photo_reviewed_by' => 'test-admin',
+            'photo_reviewed_at' => now(),
+            'updated_at' => now(),
         ]);
         $timetableId = DB::table('timetables')
             ->where('exam_session_id', $session->session_id)

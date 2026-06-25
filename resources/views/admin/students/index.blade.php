@@ -58,6 +58,7 @@
                         <th>Department</th>
                         <th>Level</th>
                         <th>Payment</th>
+                        <th>Profile</th>
                         <th>Exam Pass</th>
                         <th>Review</th>
                         <th>Registered</th>
@@ -74,6 +75,20 @@
                                 ->implode('') ?: 'ST';
                             $tokenStatus = strtoupper((string) ($student->token_status ?? ''));
                             $warning = $studentWarnings[$student->matric_no] ?? null;
+                            $profileStatus = $student->photo_status ?? 'pending_photo_upload';
+                            $profileLabel = match ($profileStatus) {
+                                'pending_admin_approval' => 'Pending Approval',
+                                'approved' => 'Approved',
+                                'rejected' => 'Rejected',
+                                'flagged' => 'Flagged',
+                                default => 'Pending Upload',
+                            };
+                            $profileClass = match ($profileStatus) {
+                                'approved' => 'green',
+                                'rejected' => 'red',
+                                'flagged' => 'amber',
+                                default => 'amber',
+                            };
                             $passLabel = match ($tokenStatus) {
                                 'UNUSED' => 'Generated / Unused',
                                 'USED' => 'Used',
@@ -95,6 +110,7 @@
                             <td data-label="Department">{{ $student->dept_name ?? 'Not available' }}</td>
                             <td data-label="Level">{{ $student->level ?? 'Not available' }}</td>
                             <td data-label="Payment"><span class="admin-status {{ $student->verified_at ? 'green' : 'amber' }}">{{ $student->verified_at ? 'Verified' : 'Pending' }}</span></td>
+                            <td data-label="Profile"><span class="admin-status {{ $profileClass }}">{{ $profileLabel }}</span></td>
                             <td data-label="Exam Pass"><span class="admin-status {{ $tokenStatus === 'UNUSED' ? 'green' : ($tokenStatus === 'USED' ? 'amber' : 'red') }}">{{ $passLabel }}</span></td>
                             <td data-label="Review">
                                 @if($warning)
@@ -107,7 +123,7 @@
                             <td data-label="Action"><div class="student-actions"><a class="admin-action ghost" href="{{ route('admin.students.show', ['student' => $student->matric_no]) }}">View</a></div></td>
                         </tr>
                     @empty
-                        <tr><td colspan="9"><div class="admin-empty">No registered students match this filter.</div></td></tr>
+                        <tr><td colspan="10"><div class="admin-empty">No registered students match this filter.</div></td></tr>
                     @endforelse
                 </tbody>
             </table>

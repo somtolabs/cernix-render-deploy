@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Services\AuditService;
 use App\Services\QrTokenService;
 use App\Services\RiskIntelligenceService;
+use App\Services\StudentRegistryImportService;
 use App\Support\Branding;
 use App\Support\DepartmentFees;
 use App\Support\Roles;
@@ -109,6 +110,133 @@ class AdminWebController extends Controller
         $studentWarnings = app(RiskIntelligenceService::class)->getStudentsNeedingReview();
 
         return view('admin.students.index', compact('students', 'departments', 'levels', 'studentWarnings'));
+    }
+
+    public function studentRegistry(Request $request)
+    {
+        if ($response = $this->guardAdmin($request)) {
+            return $response;
+        }
+
+        $students = DB::table('official_students')
+            ->when($request->filled('q'), function ($query) use ($request) {
+                $q = '%' . $request->input('q') . '%';
+                $query->where(fn ($inner) => $inner
+                    ->where('matric_number', 'like', $q)
+                    ->orWhere('full_name', 'like', $q)
+                    ->orWhere('department', 'like', $q));
+            })
+            ->when($request->filled('status'), fn ($query) => $query->where('status', $request->input('status')))
+            ->orderBy('department')
+            ->orderBy('level')
+            ->orderBy('full_name')
+            ->paginate(25)
+            ->withQueryString();
+
+        $imports = DB::table('student_registry_imports')
+            ->orderByDesc('created_at')
+            ->limit(10)
+            ->get();
+
+        $metrics = [
+            'official_students' => DB::table('official_students')->count(),
+            'active_students' => DB::table('official_students')->where('status', 'active')->count(),
+            'inactive_students' => DB::table('official_students')->where('status', 'inactive')->count(),
+            'imports' => DB::table('student_registry_imports')->count(),
+        ];
+
+        return view('admin.student-registry.index', compact('students', 'imports', 'metrics'));
+    }
+
+    public function studentRegistryImport(Request $request, StudentRegistryImportService $importService): RedirectResponse
+    {
+        if ($response = $this->guardAdmin($request)) {
+            return $response;
+        }
+
+        $data = $request->validate([
+            'registry_csv' => ['required', 'file', 'mimes:csv,txt', 'max:5120'],
+        ]);
+
+        try {
+            $import = $importService->import(
+                $data['registry_csv'],
+                (string) $request->session()->get('examiner_id', 'admin-web')
+            );
+
+            $this->audit('student_registry.imported', [
+                'import_id' => $import->id,
+                'original_filename' => $import->original_filename,
+                'total_rows' => $import->total_rows,
+                'imported_rows' => $import->imported_rows,
+                'skipped_rows' => $import->skipped_rows,
+                'failed_rows' => $import->failed_rows,
+            ], $request);
+
+            return redirect()->route('admin.student-registry')
+                ->with('status', "Registry import complete: {$import->imported_rows} imported, {$import->skipped_rows} skipped, {$import->failed_rows} failed.");
+        } catch (\Throwable $exception) {
+            return back()->withErrors(['registry_csv' => $exception->getMessage()]);
+        }
+    }
+
+    public function photoApprovals(Request $request)
+    {
+        if ($response = $this->guardAdmin($request)) {
+            return $response;
+        }
+
+        $status = $request->input('status', 'pending_admin_approval');
+        $allowedStatuses = ['pending_photo_upload', 'pending_admin_approval', 'approved', 'rejected', 'flagged'];
+        if (! in_array($status, $allowedStatuses, true)) {
+            $status = 'pending_admin_approval';
+        }
+
+        $students = DB::table('students')
+            ->leftJoin('departments', 'students.department_id', '=', 'departments.dept_id')
+            ->where('students.photo_status', $status)
+            ->when($request->filled('q'), function ($query) use ($request) {
+                $q = '%' . $request->input('q') . '%';
+                $query->where(fn ($inner) => $inner
+                    ->where('students.full_name', 'like', $q)
+                    ->orWhere('students.matric_no', 'like', $q)
+                    ->orWhere('departments.dept_name', 'like', $q));
+            })
+            ->select('students.*', 'departments.dept_name', 'departments.faculty')
+            ->orderByDesc('students.updated_at')
+            ->orderByDesc('students.created_at')
+            ->paginate(20)
+            ->withQueryString();
+
+        $counts = DB::table('students')
+            ->select('photo_status', DB::raw('COUNT(*) as total'))
+            ->groupBy('photo_status')
+            ->pluck('total', 'photo_status');
+
+        return view('admin.photo-approvals.index', compact('students', 'counts', 'status', 'allowedStatuses'));
+    }
+
+    public function photoApprove(Request $request): RedirectResponse
+    {
+        return $this->reviewPhoto($request, 'approved', 'student_profile.approved', 'Profile photo approved.');
+    }
+
+    public function photoReject(Request $request): RedirectResponse
+    {
+        $request->validate([
+            'reason' => ['required', 'string', 'max:500'],
+        ]);
+
+        return $this->reviewPhoto($request, 'rejected', 'student_profile.rejected', 'Profile photo rejected.', $request->input('reason'));
+    }
+
+    public function photoFlag(Request $request): RedirectResponse
+    {
+        $request->validate([
+            'reason' => ['nullable', 'string', 'max:500'],
+        ]);
+
+        return $this->reviewPhoto($request, 'flagged', 'student_profile.flagged', 'Profile flagged for manual review.', $request->input('reason'));
     }
 
     public function studentShow(Request $request, string $matricNo)
@@ -1553,6 +1681,72 @@ class AdminWebController extends Controller
         };
 
         return $note;
+    }
+
+    private function reviewPhoto(
+        Request $request,
+        string $status,
+        string $action,
+        string $message,
+        ?string $reason = null
+    ): RedirectResponse {
+        if ($response = $this->guardAdmin($request)) {
+            return $response;
+        }
+
+        $data = $request->validate([
+            'matric_no' => ['required', 'string', 'max:50'],
+            'session_id' => ['required', 'integer'],
+        ]);
+
+        $student = DB::table('students')
+            ->where('matric_no', $data['matric_no'])
+            ->where('session_id', $data['session_id'])
+            ->first();
+
+        abort_unless($student, 404);
+
+        $before = [
+            'photo_status' => $student->photo_status ?? 'pending_photo_upload',
+            'photo_rejection_reason' => $student->photo_rejection_reason ?? null,
+        ];
+
+        $after = [
+            'photo_status' => $status,
+            'photo_rejection_reason' => $status === 'approved' ? null : $reason,
+        ];
+
+        DB::table('students')
+            ->where('matric_no', $data['matric_no'])
+            ->where('session_id', $data['session_id'])
+            ->update([
+                'photo_status' => $status,
+                'photo_rejection_reason' => $after['photo_rejection_reason'],
+                'photo_reviewed_by' => (string) $request->session()->get('examiner_id', 'admin-web'),
+                'photo_reviewed_at' => now(),
+                'updated_at' => now(),
+            ]);
+
+        app(AuditService::class)->logAction(
+            (string) $request->session()->get('examiner_id', 'admin-web'),
+            'admin',
+            $action,
+            [
+                'actor_role' => $request->session()->get('examiner_role'),
+                'actor_username' => $request->session()->get('examiner_username'),
+                'matric_no' => $data['matric_no'],
+                'session_id' => (int) $data['session_id'],
+                'reason' => $reason,
+            ],
+            'student',
+            $data['matric_no'],
+            $before,
+            $after,
+            null,
+            (int) $data['session_id']
+        );
+
+        return back()->with('status', $message);
     }
 
     private function audit(string $action, array $metadata, Request $request): void

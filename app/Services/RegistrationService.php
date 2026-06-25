@@ -7,21 +7,30 @@ use RuntimeException;
 
 class RegistrationService
 {
-    public function __construct(private readonly MockSISService $sisService) {}
-
     /**
      * Register a student for an exam session.
      *
-     * Registration creates only the SIS-backed student profile. Payment
+     * Registration creates only the official-registry-backed student profile. Payment
      * verification and QR issuance happen later in ExamPassService.
      *
-     * @param  array{matric_no: string, session_id: int} $data
+     * @param  array{matric_no: string, session_id: int, photo_path?: string|null} $data
      * @return array{success: bool, message: string, data: array}
      * @throws RuntimeException on any validation or verification failure
      */
     public function registerStudent(array $data): array
     {
-        $sisStudent = $this->sisService->getStudentByMatric($data['matric_no']);
+        $matricNo = strtoupper(trim($data['matric_no']));
+        $officialStudent = DB::table('official_students')
+            ->where('matric_number', $matricNo)
+            ->first();
+
+        if (! $officialStudent) {
+            throw new RuntimeException('your matric number was not found in the official student list. please contact the admin or exam officer.');
+        }
+
+        if (strtolower((string) $officialStudent->status) !== 'active') {
+            throw new RuntimeException('This matric number is not active on the official student list. Please contact the admin or exam officer.');
+        }
 
         $session = DB::table('exam_sessions')
             ->where('session_id', $data['session_id'])
@@ -33,34 +42,39 @@ class RegistrationService
         }
 
         $alreadyRegistered = DB::table('students')
-            ->where('matric_no', $data['matric_no'])
+            ->where('matric_no', $matricNo)
             ->where('session_id', $data['session_id'])
-            ->exists();
-
-        if ($alreadyRegistered) {
-            throw new RuntimeException('Student already registered for this session');
-        }
-
-        $dept = DB::table('departments')
-            ->where('dept_name', $sisStudent['department'])
             ->first();
 
-        if (! $dept) {
-            throw new RuntimeException(
-                "Department not found for SIS value: \"{$sisStudent['department']}\""
-            );
+        if ($alreadyRegistered) {
+            return [
+                'success' => true,
+                'message' => 'Registration successful',
+                'data'    => [
+                    'matric_no' => $matricNo,
+                    'full_name' => $alreadyRegistered->full_name,
+                    'photo_path' => $alreadyRegistered->photo_path,
+                    'photo_status' => $alreadyRegistered->photo_status ?? 'pending_photo_upload',
+                ],
+            ];
         }
 
+        $dept = $this->departmentForOfficialStudent($officialStudent);
+        $photoPath = trim((string) ($data['photo_path'] ?? ''));
+
         $studentData = [
-            'matric_no'     => $data['matric_no'],
-            'full_name'     => $sisStudent['full_name'],   // SIS only — never user input
+            'matric_no'     => $matricNo,
+            'full_name'     => $officialStudent->full_name,
             'department_id' => $dept->dept_id,
-            'level'         => $sisStudent['level'] ?? null,
-            'department_code' => $sisStudent['department_code'] ?? ($dept->department_code ?? null),
-            'faculty_code'  => $sisStudent['faculty_code'] ?? ($dept->faculty_code ?? null),
+            'level'         => $officialStudent->level,
+            'department_code' => $dept->department_code ?? null,
+            'faculty_code'  => $dept->faculty_code ?? null,
             'session_id'    => $data['session_id'],
-            'photo_path'    => $sisStudent['photo_path'],  // SIS only — never user input
+            'photo_path'    => $photoPath,
+            'photo_status'  => $photoPath === '' ? 'pending_photo_upload' : 'pending_admin_approval',
+            'photo_rejection_reason' => null,
             'created_at'    => now(),
+            'updated_at'    => now(),
         ];
 
         DB::table('students')->insert($studentData);
@@ -69,11 +83,32 @@ class RegistrationService
             'success' => true,
             'message' => 'Registration successful',
             'data'    => [
-                'matric_no'  => $data['matric_no'],
-                'full_name'  => $sisStudent['full_name'],
-                'photo_path' => $sisStudent['photo_path'],
+                'matric_no'  => $matricNo,
+                'full_name'  => $officialStudent->full_name,
+                'photo_path' => $photoPath,
+                'photo_status' => $studentData['photo_status'],
             ],
         ];
     }
 
+    private function departmentForOfficialStudent(object $officialStudent): object
+    {
+        $department = trim((string) $officialStudent->department);
+        $faculty = trim((string) $officialStudent->faculty);
+
+        $existing = DB::table('departments')
+            ->whereRaw('LOWER(dept_name) = ?', [strtolower($department)])
+            ->first();
+
+        if ($existing) {
+            return $existing;
+        }
+
+        $id = DB::table('departments')->insertGetId([
+            'dept_name' => $department,
+            'faculty' => $faculty,
+        ]);
+
+        return DB::table('departments')->where('dept_id', $id)->first();
+    }
 }

@@ -3,7 +3,6 @@
 namespace Tests\Feature;
 
 use App\Models\User;
-use App\Services\MockSISService;
 use App\Services\RegistrationService;
 use App\Services\RemitaService;
 use Database\Seeders\DepartmentsSeeder;
@@ -45,9 +44,26 @@ class StudentExamApiTest extends TestCase
                    ->willReturn(['status' => 'Payment Successful', 'amount' => (string) $this->feeAmount]);
 
         $this->app->instance(RemitaService::class, $mockRemita);
-        (new RegistrationService(new MockSISService()))->registerStudent([
+        DB::table('official_students')->insert([
+            'matric_number' => 'CSC/2021/001',
+            'full_name' => 'Adebayo Oluwaseun Emmanuel',
+            'department' => 'Computer Science',
+            'faculty' => 'Faculty of Computing',
+            'level' => '400',
+            'status' => 'active',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        (new RegistrationService())->registerStudent([
             'matric_no' => 'CSC/2021/001',
             'session_id' => (int) $session->session_id,
+            'photo_path' => 'photos/student-submissions/test.jpg',
+        ]);
+        DB::table('students')->where('matric_no', 'CSC/2021/001')->update([
+            'photo_status' => 'approved',
+            'photo_reviewed_by' => 'test-admin',
+            'photo_reviewed_at' => now(),
+            'updated_at' => now(),
         ]);
     }
 

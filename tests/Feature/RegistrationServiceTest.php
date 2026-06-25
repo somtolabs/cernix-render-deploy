@@ -2,7 +2,6 @@
 
 namespace Tests\Feature;
 
-use App\Services\MockSISService;
 use App\Services\RegistrationService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
@@ -35,11 +34,15 @@ class RegistrationServiceTest extends TestCase
             'created_at' => now(),
             'updated_at' => now(),
         ]);
-        DB::table('mock_sis')->insert([
-            'matric_no' => $this->matricNo,
+        DB::table('official_students')->insert([
+            'matric_number' => $this->matricNo,
             'full_name' => 'Adebayo Oluwaseun Emmanuel',
             'department' => 'Computer Science',
-            'photo_path' => 'demo-passports/student-020.jpg',
+            'faculty' => 'Faculty of Computing',
+            'level' => '400',
+            'status' => 'active',
+            'created_at' => now(),
+            'updated_at' => now(),
         ]);
     }
 
@@ -66,13 +69,13 @@ class RegistrationServiceTest extends TestCase
         $result = $this->service()->registerStudent($this->validInput());
 
         $this->assertSame('Adebayo Oluwaseun Emmanuel', $result['data']['full_name']);
-        $this->assertSame('demo-passports/student-020.jpg', $result['data']['photo_path']);
+        $this->assertSame('photos/student-submissions/test.jpg', $result['data']['photo_path']);
     }
 
-    public function test_invalid_sis_student_fails(): void
+    public function test_invalid_official_student_fails(): void
     {
         $this->expectException(RuntimeException::class);
-        $this->expectExceptionMessage('Student not found in SIS');
+        $this->expectExceptionMessage('your matric number was not found in the official student list. please contact the admin or exam officer.');
 
         $this->service()->registerStudent($this->validInput(['matric_no' => 'NONEXISTENT/999']));
     }
@@ -86,18 +89,19 @@ class RegistrationServiceTest extends TestCase
         $this->service()->registerStudent($this->validInput());
     }
 
-    public function test_duplicate_registration_fails(): void
+    public function test_duplicate_registration_resumes_without_creating_another_student(): void
     {
         $this->service()->registerStudent($this->validInput());
 
-        $this->expectException(RuntimeException::class);
-        $this->expectExceptionMessage('Student already registered for this session');
-        $this->service()->registerStudent($this->validInput());
+        $result = $this->service()->registerStudent($this->validInput());
+
+        $this->assertTrue($result['success']);
+        $this->assertSame(1, DB::table('students')->where('matric_no', $this->matricNo)->count());
     }
 
     private function service(): RegistrationService
     {
-        return new RegistrationService(new MockSISService());
+        return new RegistrationService();
     }
 
     private function validInput(array $overrides = []): array
@@ -105,6 +109,7 @@ class RegistrationServiceTest extends TestCase
         return array_merge([
             'matric_no' => $this->matricNo,
             'session_id' => $this->sessionId,
+            'photo_path' => 'photos/student-submissions/test.jpg',
         ], $overrides);
     }
 }

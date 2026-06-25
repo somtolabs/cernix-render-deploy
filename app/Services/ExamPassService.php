@@ -35,6 +35,8 @@ class ExamPassService
             throw new RuntimeException('Student registration was not found for this exam session.');
         }
 
+        $this->assertStudentCanGenerateQr($student);
+
         $exam = DB::table('timetables')
             ->where('id', $timetableId)
             ->where('exam_session_id', $sessionId)
@@ -203,5 +205,54 @@ class ExamPassService
         }
 
         return $this->remita->verifyPayment($rrrNumber, $expectedAmount);
+    }
+
+    private function assertStudentCanGenerateQr(object $student): void
+    {
+        $officialStudent = DB::table('official_students')
+            ->where('matric_number', $student->matric_no)
+            ->first();
+
+        if (! $officialStudent) {
+            throw new RuntimeException('your matric number was not found in the official student list. please contact the admin or exam officer.');
+        }
+
+        if (strtolower((string) $officialStudent->status) !== 'active') {
+            throw new RuntimeException('This matric number is not active on the official student list. Please contact the admin or exam officer.');
+        }
+
+        $photoStatus = $student->photo_status ?? 'pending_photo_upload';
+        if ($photoStatus === 'approved') {
+            return;
+        }
+
+        app(AuditService::class)->logAction(
+            $student->matric_no,
+            'student',
+            'exam_pass.blocked_profile_not_approved',
+            [
+                'session_id' => $student->session_id,
+                'photo_status' => $photoStatus,
+            ],
+            'student',
+            $student->matric_no,
+            null,
+            null,
+            null,
+            (int) $student->session_id
+        );
+
+        if ($photoStatus === 'rejected') {
+            $reason = trim((string) ($student->photo_rejection_reason ?? ''));
+            throw new RuntimeException($reason === ''
+                ? 'Your profile photo was rejected. Please upload a new passport photo for admin approval.'
+                : 'Your profile photo was rejected. Reason: ' . $reason);
+        }
+
+        if ($photoStatus === 'flagged') {
+            throw new RuntimeException('Your profile is flagged for manual review before you can generate an exam pass.');
+        }
+
+        throw new RuntimeException('your profile is awaiting admin approval before you can generate an exam pass.');
     }
 }

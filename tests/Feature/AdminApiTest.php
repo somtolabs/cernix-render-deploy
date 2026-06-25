@@ -4,7 +4,6 @@ namespace Tests\Feature;
 
 use App\Models\User;
 use App\Services\CryptoService;
-use App\Services\MockSISService;
 use App\Services\QrTokenService;
 use App\Services\RegistrationService;
 use Database\Seeders\DepartmentsSeeder;
@@ -201,12 +200,22 @@ class AdminApiTest extends TestCase
     public function test_admin_can_revoke_token(): void
     {
         $session   = DB::table('exam_sessions')->where('is_active', true)->first();
-        $feeAmount = (float) $session->fee_amount;
+        DB::table('official_students')->insert([
+            'matric_number' => 'CSC/2021/001',
+            'full_name' => 'Adebayo Oluwaseun Emmanuel',
+            'department' => 'Computer Science',
+            'faculty' => 'Faculty of Computing',
+            'level' => '400',
+            'status' => 'active',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
 
-        $regService = new RegistrationService(new MockSISService());
+        $regService = new RegistrationService();
         $regService->registerStudent([
             'matric_no'       => 'CSC/2021/001',
             'session_id'      => (int) $session->session_id,
+            'photo_path'      => 'photos/student-submissions/test.jpg',
         ]);
 
         $tokenId = (new QrTokenService(new CryptoService()))

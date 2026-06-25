@@ -9,6 +9,14 @@
     $notGeneratedCount = $coursePasses->where('qr_status', 'Not Generated')->count();
     $unusedCount = $coursePasses->where('qr_status', 'Generated / Unused')->count();
     $usedCount = $coursePasses->where('qr_status', 'Used')->count();
+    $photoStatus = $student->photo_status ?? 'pending_photo_upload';
+    $photoStatusLabel = match($photoStatus) {
+        'pending_admin_approval' => 'Pending Approval',
+        'approved' => 'Approved',
+        'rejected' => 'Rejected',
+        'flagged' => 'Flagged',
+        default => 'Pending Upload',
+    };
     $visibleScans = $scanHistory->take(3);
     $additionalScans = $scanHistory->slice(3);
 @endphp
@@ -78,6 +86,7 @@
                 <p class="cx-muted student-detail-line">{{ $student->dept_name ?? 'Department unavailable' }} · {{ $student->level ?? 'Level unavailable' }} Level · Faculty of Computing</p>
                 <div class="student-status-line" style="margin-top:10px">
                     <span class="is-ok">Registration: Complete</span>
+                    <span class="{{ $photoStatus === 'approved' ? 'is-ok' : 'is-pending' }}">Profile: {{ $photoStatusLabel }}</span>
                     <span class="{{ $payment ? 'is-ok' : 'is-pending' }}">Payment: {{ $payment ? 'Verified' : 'Pending' }}</span>
                     <span class="{{ $unusedCount > 0 ? 'is-ok' : 'is-pending' }}">Course QR: {{ $unusedCount }} unused</span>
                     <span class="{{ $timetable->count() ? 'is-ok' : 'is-pending' }}">{{ $timetable->count() ? $timetable->count() . ' exams assigned' : 'No timetable yet' }}</span>
