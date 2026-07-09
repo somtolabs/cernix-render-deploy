@@ -79,18 +79,35 @@ class StudentPortalWebTest extends TestCase
 
     public function test_student_registration_form_uses_official_matric_and_photo_flow(): void
     {
+        // Step 1: matric lookup page — shows matric input, no old demo/RRR fields
         $response = $this->get('/student/register')->assertOk();
 
         $response->assertSee('Matric Number')
-            ->assertSee('Passport Photo')
-            ->assertSee('official student list')
+            ->assertSee('name="matric_no"', false)
             ->assertDontSee('name="rrr_number"', false)
             ->assertDontSee('Remita RRR')
-            ->assertSee('name="matric_no"', false)
-            ->assertSee('name="passport_photo"', false)
             ->assertDontSee('Generated Matric Number')
             ->assertDontSee('Need demo credentials?')
             ->assertDontSee('student_number');
+
+        // Step 2: onboard page (identity + verification) for an official student
+        DB::table('official_students')->insert([
+            'matric_number' => '220404008',
+            'full_name'     => 'Chukwuemeka Daniel Nwosu',
+            'department'    => 'Computer Science',
+            'faculty'       => 'Faculty of Computing',
+            'level'         => '400',
+            'status'        => 'active',
+            'created_at'    => now(),
+            'updated_at'    => now(),
+        ]);
+
+        $this->get('/student/onboard?matric=220404008')
+            ->assertOk()
+            ->assertSee('School ID Card')
+            ->assertSee('Create your exam profile')
+            ->assertDontSee('Remita RRR')
+            ->assertDontSee('Need demo credentials?');
     }
 
     public function test_student_registration_rejects_unknown_matric(): void
@@ -110,7 +127,7 @@ class StudentPortalWebTest extends TestCase
 
         $this->get('/student/dashboard')
             ->assertOk()
-            ->assertSee('Payment: Pending')
+            ->assertSee('Payment pending')
             ->assertSee('Course QR Access')
             ->assertSee('Not Generated')
             ->assertSee('Generate QR Pass')
@@ -151,8 +168,8 @@ class StudentPortalWebTest extends TestCase
             ->assertOk();
 
         $response->assertSee('exam-access-id-card')
-            ->assertSee('data-qr-pass-version="student-identity-card-v2"', false)
-            ->assertSee('Course QR Pass')
+            ->assertSee('data-qr-pass-version="student-identity-card-v4"', false)
+            ->assertSee('Examination Admission Pass')
             ->assertSee('qr-pass-masthead', false)
             ->assertSee('qr-pass-body', false)
             ->assertSee('qr-pass-student', false)
@@ -165,20 +182,21 @@ class StudentPortalWebTest extends TestCase
             ->assertSee('Computer Science')
             ->assertSee('Faculty of Computing')
             ->assertSee('400 Level')
-            ->assertSee('AAUA / CERNIX VERIFIED')
+            ->assertSee('CERNIX Verified')
             ->assertDontSee('encrypted_payload')
             ->assertDontSee('hmac_signature')
             ->assertDontSee('aes_key')
             ->assertDontSee('hmac_secret');
 
         $html = $response->getContent();
-        $this->assertLessThan(strpos($html, 'class="qr-pass-exam"'), strpos($html, 'qr-pass-identity-card'));
-        $this->assertLessThan(strpos($html, 'class="qr-pass-code"'), strpos($html, 'class="qr-pass-exam"'));
+        // Layout order: identity → QR code (scan focus) → exam details
+        $this->assertLessThan(strpos($html, 'class="qp-qr-section qr-pass-code"'), strpos($html, 'qr-pass-identity-card'));
+        $this->assertLessThan(strpos($html, 'class="qp-exam-section qr-pass-exam"'), strpos($html, 'class="qp-qr-section qr-pass-code"'));
 
         $this->get(route('student.exam-pass.course', ['timetable' => $examId]))
             ->assertOk()
             ->assertSee('Print Course QR Pass')
-            ->assertSee('data-qr-pass-version="student-identity-card-v2"', false);
+            ->assertSee('data-qr-pass-version="student-identity-card-v4"', false);
     }
 
     public function test_course_qr_view_requires_assigned_course_with_generated_qr(): void
@@ -196,19 +214,19 @@ class StudentPortalWebTest extends TestCase
 
     public function test_registration_uses_official_department_details(): void
     {
-        $this->createOfficialStudent('SWE/2021/008', [
+        $this->createOfficialStudent('220405008', [
             'full_name' => 'Software Engineering Student',
             'department' => 'Software Engineering',
             'level' => '400',
         ]);
 
-        $this->postOfficialRegistration('SWE/2021/008')->assertOk()
+        $this->postOfficialRegistration('220405008')->assertOk()
           ->assertJsonPath('success', true)
-          ->assertJsonPath('data.matric_no', 'SWE/2021/008');
+          ->assertJsonPath('data.matric_no', '220405008');
 
         $softwareId = DB::table('departments')->where('dept_name', 'Software Engineering')->value('dept_id');
         $this->assertDatabaseHas('students', [
-            'matric_no' => 'SWE/2021/008',
+            'matric_no' => '220405008',
             'department_id' => $softwareId,
             'level' => '400',
         ]);
@@ -337,7 +355,7 @@ class StudentPortalWebTest extends TestCase
         $this->get('/student/generate-exam-pass')
             ->assertOk()
             ->assertSee('Generate QR Pass')
-            ->assertSee('Enter your Remita RRR once for this session')
+            ->assertSee('Enter your Remita RRR for payment-required exams')
             ->assertSee('Assigned Course')
             ->assertSee('CSC401')
             ->assertSee('Artificial Intelligence')
@@ -422,30 +440,30 @@ class StudentPortalWebTest extends TestCase
 
     public function test_data_science_official_student_registers_with_expected_matric(): void
     {
-        $this->createOfficialStudent('DS/2021/010', [
+        $this->createOfficialStudent('230408010', [
             'full_name' => 'Data Science Student',
             'department' => 'Data Science',
             'level' => '300',
         ]);
 
-        $this->postOfficialRegistration('DS/2021/010')->assertOk()
+        $this->postOfficialRegistration('230408010')->assertOk()
           ->assertJsonPath('success', true)
-          ->assertJsonPath('data.matric_no', 'DS/2021/010');
+          ->assertJsonPath('data.matric_no', '230408010');
     }
 
     public function test_registration_creates_official_student_profile_without_payment(): void
     {
-        $this->createOfficialStudent('CSC/2021/001', [
+        $this->createOfficialStudent('230404001', [
             'full_name' => 'Chidera Favour Nnamdi',
             'level' => '300',
         ]);
 
-        $this->postOfficialRegistration('CSC/2021/001')->assertOk()
+        $this->postOfficialRegistration('230404001')->assertOk()
           ->assertJsonPath('success', true)
-          ->assertJsonPath('data.matric_no', 'CSC/2021/001');
+          ->assertJsonPath('data.matric_no', '230404001');
 
         $this->assertDatabaseHas('students', [
-            'matric_no' => 'CSC/2021/001',
+            'matric_no' => '230404001',
             'full_name' => 'Chidera Favour Nnamdi',
             'level' => '300',
             'photo_status' => 'pending_admin_approval',
@@ -458,7 +476,7 @@ class StudentPortalWebTest extends TestCase
     {
         foreach (range(1, 5) as $number) {
             $studentNumber = str_pad((string) $number, 3, '0', STR_PAD_LEFT);
-            $matricNo = 'CSC/2021/' . $studentNumber;
+            $matricNo = '230404' . $studentNumber;
             $this->createOfficialStudent($matricNo, ['full_name' => 'Official Student ' . $studentNumber]);
 
             $this->postOfficialRegistration($matricNo)->assertOk()
@@ -466,7 +484,7 @@ class StudentPortalWebTest extends TestCase
               ->assertJsonPath('data.matric_no', $matricNo);
         }
 
-        $this->postOfficialRegistration('CSC/2021/001')->assertOk()
+        $this->postOfficialRegistration('230404001')->assertOk()
           ->assertJsonPath('success', true)
           ->assertJsonPath('redirect_url', route('student.dashboard'));
 
@@ -506,8 +524,7 @@ class StudentPortalWebTest extends TestCase
 
         $this->get('/student/dashboard')
             ->assertOk()
-            ->assertSee('student-history-mobile', false)
-            ->assertSee('student-history-desktop', false)
+            ->assertSee('sp-scan-row', false)
             ->assertSee('Showing the latest 3 of 10 access records')
             ->assertSee('Repeated scan recorded');
     }

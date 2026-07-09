@@ -144,8 +144,8 @@
 
         <div style="max-width:600px; margin:0 auto;">
             <div class="logo-mark">
-                <img src="{{ $brandingLogoUrl }}" alt="CERNIX branding" style="height:32px;width:auto;flex-shrink:0;display:block;">
-                <span>CERNIX &nbsp;·&nbsp; AAUA</span>
+                <x-brand-mark :size="32" tone="light" />
+                <span>{{ $brandingSystemName }} &nbsp;·&nbsp; {{ $brandingInstitutionName }}</span>
             </div>
 
             <h1 class="brand">
@@ -153,7 +153,7 @@
             </h1>
 
             <p class="tag">
-                Secure exam access for Adekunle Ajasin University, linking student identity,
+                Secure exam access for {{ $brandingInstitutionName }}, linking student identity,
                 payment status, timetable context, and a server-verifiable QR exam pass.
             </p>
 
@@ -243,7 +243,7 @@
         <span class="chip emerald" id="status-chip" style="display:none">LIVE</span>
     </div>
 
-    <p class="footer-meta">CERNIX v1.0 · Secure exam access and verification</p>
+    <p class="footer-meta">{{ $brandingSystemName ?? 'Exam Verification System' }} v1.0 · Secure exam access and verification</p>
 </div>
 @endsection
 

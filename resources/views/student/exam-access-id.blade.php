@@ -36,6 +36,7 @@
 </div>
 @if($token)
     @include('student.partials.exam-access-id')
+    <p id="save-qr-err" style="text-align:center;font-size:12px;font-weight:700;color:var(--red);margin:10px 0 0;display:none"></p>
     <div class="qr-pass-actions no-print">
         <button class="btn btn-primary" type="button" id="saveExamAccessId">Save Course QR</button>
         <a class="btn btn-ghost" href="{{ route('student.exam-pass.course', ['timetable' => $passExam->id]) }}">Print Course QR</a>
@@ -53,10 +54,15 @@
 @push('student-scripts')
 <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js" defer></script>
 <script>
+    const _saveErrEl = document.getElementById('save-qr-err');
+    function _showSaveErr(msg) {
+        if (_saveErrEl) { _saveErrEl.textContent = msg; _saveErrEl.style.display = ''; }
+    }
     document.getElementById('saveExamAccessId')?.addEventListener('click', async () => {
+        if (_saveErrEl) _saveErrEl.style.display = 'none';
         const card = document.getElementById('exam-access-id-card');
         if (!card || !window.html2canvas) {
-            alert('Could not save the course QR pass. Please use Print Course QR instead.');
+            _showSaveErr('Could not save — use Print Course QR instead.');
             return;
         }
 
@@ -67,11 +73,11 @@
                 useCORS: true
             });
             const link = document.createElement('a');
-            link.download = 'cernix-course-qr-{{ preg_replace('/[^A-Za-z0-9_-]/', '-', $passExam->course_code ?? 'course') }}-{{ preg_replace('/[^A-Za-z0-9_-]/', '-', $student->matric_no ?? 'student') }}.png';
+            link.download = 'exam-pass-{{ preg_replace('/[^A-Za-z0-9_-]/', '-', $passExam->course_code ?? 'course') }}-{{ preg_replace('/[^A-Za-z0-9_-]/', '-', $student->matric_no ?? 'student') }}.png';
             link.href = canvas.toDataURL('image/png');
             link.click();
         } catch (error) {
-            alert('Could not save the course QR pass. Please use Print Course QR instead.');
+            _showSaveErr('Could not save — use Print Course QR instead.');
         }
     });
 </script>

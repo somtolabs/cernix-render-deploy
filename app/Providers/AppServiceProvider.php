@@ -28,6 +28,13 @@ class AppServiceProvider extends ServiceProvider
             $app->make(MockSISService::class),
         ));
         $this->app->singleton(ExamPassService::class);
+
+        // Lazy singleton — resolved at first view render (after DB is seeded), not at boot
+        $this->app->singleton('branding', fn () => [
+            'logoUrl'         => Branding::logoUrl(),
+            'institutionName' => Branding::institutionName(),
+            'systemName'      => Branding::systemName(),
+        ]);
     }
 
     public function boot(): void
@@ -36,6 +43,11 @@ class AppServiceProvider extends ServiceProvider
             URL::forceScheme('https');
         }
 
-        View::share('brandingLogoUrl', Branding::logoUrl());
+        View::composer('*', function ($view) {
+            $b = $this->app->make('branding');
+            $view->with('brandingLogoUrl',         $b['logoUrl']);
+            $view->with('brandingInstitutionName',  $b['institutionName']);
+            $view->with('brandingSystemName',       $b['systemName']);
+        });
     }
 }

@@ -16,7 +16,7 @@
 
 <style>
     .scan-case { display:grid; gap:24px; }
-    .scan-case-head { background:rgba(235,241,255,.28); border-left:3px solid var(--navy); padding:16px; display:grid; gap:14px; }
+    .scan-case-head { background:var(--bg-2); border-left:3px solid var(--navy); padding:16px; display:grid; gap:14px; }
     .scan-id-row { display:flex; gap:14px; align-items:center; min-width:0; }
     .scan-id-row h1 { margin:0; font-size:clamp(22px,4vw,34px); line-height:1.02; letter-spacing:-.045em; overflow-wrap:break-word; word-break:normal; }
     .scan-id-row p { margin:5px 0 0; }
@@ -37,7 +37,7 @@
         .scan-history { min-width:0; }
         .scan-history, .scan-history tbody, .scan-history tr, .scan-history td { display:block; width:100%; }
         .scan-history thead { display:none; }
-        .scan-history tr { margin-bottom:4px; padding:11px 12px; border-left:3px solid rgba(15,32,80,.35); border-bottom:1px solid var(--line); background:rgba(235,241,255,.16); }
+        .scan-history tr { margin-bottom:4px; padding:11px 12px; border-left:3px solid rgba(15,32,80,.35); border-bottom:1px solid var(--line); background:var(--bg-2); }
         .scan-history td { border:0; padding:6px 0; display:grid; grid-template-columns:minmax(90px,.34fr) minmax(0,1fr); gap:10px; overflow-wrap:break-word; word-break:normal; }
         .scan-history td::before { content:attr(data-label); color:var(--ink-3); font-size:10px; font-weight:900; letter-spacing:.08em; text-transform:uppercase; }
     }
@@ -76,12 +76,24 @@
         </div>
     </section>
 
-    <section class="metric-strip">
-        <div class="metric-cell"><span class="metric-label">Total Scans</span><span class="metric-value">{{ $studentScans->count() }}</span></div>
-        <div class="metric-cell"><span class="metric-label">Approved</span><span class="metric-value">{{ $counts['APPROVED'] ?? 0 }}</span></div>
-        <div class="metric-cell"><span class="metric-label">Rejected</span><span class="metric-value">{{ $counts['REJECTED'] ?? 0 }}</span></div>
-        <div class="metric-cell"><span class="metric-label">Repeated</span><span class="metric-value">{{ $counts['DUPLICATE'] ?? 0 }}</span></div>
-    </section>
+    <div class="stat-row" style="border:1px solid var(--line);border-radius:12px;overflow:hidden">
+        <div class="stat-cell">
+            <span class="stat-label">Total Scans</span>
+            <span class="stat-value">{{ $studentScans->count() }}</span>
+        </div>
+        <div class="stat-cell">
+            <span class="stat-label">Approved</span>
+            <span class="stat-value ok">{{ $counts['APPROVED'] ?? 0 }}</span>
+        </div>
+        <div class="stat-cell">
+            <span class="stat-label">Rejected</span>
+            <span class="stat-value {{ ($counts['REJECTED'] ?? 0) > 0 ? 'bad' : '' }}">{{ $counts['REJECTED'] ?? 0 }}</span>
+        </div>
+        <div class="stat-cell">
+            <span class="stat-label">Repeated</span>
+            <span class="stat-value {{ ($counts['DUPLICATE'] ?? 0) > 0 ? 'warn' : '' }}">{{ $counts['DUPLICATE'] ?? 0 }}</span>
+        </div>
+    </div>
 
     <div class="scan-compact-grid">
         <section class="scan-panel">
@@ -131,23 +143,18 @@
 
     <section class="scan-panel">
         <h2>Previous Scan History</h2>
-        <div class="admin-table-wrap" style="border:0;border-radius:0">
-            <table class="scan-history">
-                <thead><tr><th>Time</th><th>Decision</th><th>Examiner</th><th>Review Status</th><th>Action</th></tr></thead>
-                <tbody>
-                    @forelse($studentScans as $row)
-                        <tr>
-                            <td class="mono" data-label="Time">{{ $row->timestamp }}</td>
-                            <td data-label="Decision"><span class="admin-status {{ $row->decision === 'APPROVED' ? 'green' : ($row->decision === 'DUPLICATE' ? 'amber' : 'red') }}">{{ $row->decision === 'DUPLICATE' ? 'REPEATED' : $row->decision }}</span></td>
-                            <td data-label="Examiner">{{ $row->examiner_name ?? $row->examiner_username ?? 'Unavailable' }}</td>
-                            <td data-label="Review">{{ $row->decision === 'DUPLICATE' ? 'Repeated scan needs review' : 'Recorded' }}</td>
-                            <td data-label="Action"><a class="admin-action ghost" href="{{ route('admin.scan-logs.show', $row->log_id) }}">View</a></td>
-                        </tr>
-                    @empty
-                        <tr><td colspan="5"><div class="admin-empty">No previous scans found.</div></td></tr>
-                    @endforelse
-                </tbody>
-            </table>
+        <div style="display:grid;gap:6px;margin-top:4px">
+            @forelse($studentScans as $row)
+                @php $dc = $row->decision === 'APPROVED' ? 'green' : ($row->decision === 'DUPLICATE' ? 'amber' : 'red'); @endphp
+                <div style="display:flex;align-items:center;gap:10px;padding:9px 12px;background:#fff;border:1px solid var(--line);border-radius:10px;flex-wrap:wrap">
+                    <span class="admin-status {{ $dc }}">{{ $row->decision === 'DUPLICATE' ? 'REPEATED' : $row->decision }}</span>
+                    <span class="mono" style="font-size:11px;color:var(--ink-3);flex:1;min-width:0">{{ $row->timestamp }}</span>
+                    <span style="font-size:12px;color:var(--ink-2)">{{ $row->examiner_name ?? $row->examiner_username ?? 'Unavailable' }}</span>
+                    <a class="admin-action ghost" href="{{ route('admin.scan-logs.show', $row->log_id) }}" style="font-size:12px;min-height:30px;padding:0 10px">View</a>
+                </div>
+            @empty
+                <div class="admin-empty">No previous scans found.</div>
+            @endforelse
         </div>
     </section>
 </div>

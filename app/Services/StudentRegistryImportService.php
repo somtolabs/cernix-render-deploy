@@ -24,6 +24,9 @@ class StudentRegistryImportService
         'status',
     ];
 
+    /** Fields that trigger a conflict notice when they change on re-import */
+    private const CONFLICT_FIELDS = ['full_name', 'department', 'faculty', 'level'];
+
     public function import(UploadedFile $file, ?string $uploadedBy): StudentRegistryImport
     {
         $handle = fopen($file->getRealPath(), 'rb');
@@ -51,11 +54,14 @@ class StudentRegistryImportService
                 }
             }
 
-            $totalRows = 0;
+            $totalRows    = 0;
             $importedRows = 0;
-            $skippedRows = 0;
-            $failedRows = 0;
-            $errors = [];
+            $skippedRows  = 0;
+            $failedRows   = 0;
+            $newRows      = 0;
+            $updatedRows  = 0;
+            $errors       = [];
+            $conflicts    = [];
 
             DB::transaction(function () use (
                 $handle,
@@ -64,7 +70,10 @@ class StudentRegistryImportService
                 &$importedRows,
                 &$skippedRows,
                 &$failedRows,
-                &$errors
+                &$newRows,
+                &$updatedRows,
+                &$errors,
+                &$conflicts
             ) {
                 while (($row = fgetcsv($handle)) !== false) {
                     if ($row === [null] || count(array_filter($row, fn ($value) => trim((string) $value) !== '')) === 0) {
@@ -80,8 +89,34 @@ class StudentRegistryImportService
                         if ($validationError !== null) {
                             $skippedRows++;
                             $failedRows++;
-                            $errors[] = ['row' => $totalRows + 1, 'reason' => $validationError];
+                            $errors[] = ['row' => $totalRows + 1, 'reason' => $validationError, 'data' => $record];
                             continue;
+                        }
+
+                        // Detect conflicts with existing record before updating
+                        $existing = OfficialStudent::where('matric_number', $record['matric_number'])->first();
+
+                        if ($existing) {
+                            $changes = [];
+                            foreach (self::CONFLICT_FIELDS as $field) {
+                                $oldVal = trim((string) ($existing->{$field} ?? ''));
+                                $newVal = trim((string) ($record[$field] ?? ''));
+                                if ($newVal !== '' && strtolower($oldVal) !== strtolower($newVal)) {
+                                    $changes[$field] = ['from' => $oldVal, 'to' => $newVal];
+                                }
+                            }
+
+                            if ($changes) {
+                                $conflicts[] = [
+                                    'matric' => $record['matric_number'],
+                                    'name'   => $record['full_name'],
+                                    'fields' => $changes,
+                                ];
+                            }
+
+                            $updatedRows++;
+                        } else {
+                            $newRows++;
                         }
 
                         OfficialStudent::updateOrCreate(
@@ -89,27 +124,59 @@ class StudentRegistryImportService
                             $record
                         );
 
+                        // Propagate name/dept/faculty/level changes to registered students too
+                        if ($existing && ! empty($changes)) {
+                            $this->syncRegisteredStudent($record);
+                        }
+
                         $importedRows++;
                     } catch (\Throwable $exception) {
                         $skippedRows++;
                         $failedRows++;
-                        $errors[] = ['row' => $totalRows + 1, 'reason' => $exception->getMessage()];
+                        $errors[] = ['row' => $totalRows + 1, 'reason' => $exception->getMessage(), 'data' => $record ?? []];
                     }
                 }
             });
 
             return StudentRegistryImport::create([
-                'uploaded_by' => $uploadedBy,
+                'uploaded_by'       => $uploadedBy,
                 'original_filename' => $file->getClientOriginalName(),
-                'total_rows' => $totalRows,
-                'imported_rows' => $importedRows,
-                'skipped_rows' => $skippedRows,
-                'failed_rows' => $failedRows,
-                'error_summary' => array_slice($errors, 0, 25),
+                'total_rows'        => $totalRows,
+                'imported_rows'     => $importedRows,
+                'skipped_rows'      => $skippedRows,
+                'failed_rows'       => $failedRows,
+                'error_summary'     => [
+                    'errors'        => array_slice($errors, 0, 25),
+                    'conflicts'     => array_slice($conflicts, 0, 50),
+                    'new_records'   => $newRows,
+                    'updated_records' => $updatedRows,
+                    'conflict_count'  => count($conflicts),
+                ],
             ]);
         } finally {
             fclose($handle);
         }
+    }
+
+    /** Push name/department/faculty/level changes from official_students → students table */
+    private function syncRegisteredStudent(array $record): void
+    {
+        if (! \Illuminate\Support\Facades\Schema::hasTable('students')) {
+            return;
+        }
+
+        $dept = DB::table('departments')
+            ->whereRaw('LOWER(dept_name) = ?', [strtolower($record['department'])])
+            ->first();
+
+        $updates = ['full_name' => $record['full_name'], 'level' => $record['level'], 'updated_at' => now()];
+        if ($dept) {
+            $updates['department_id'] = $dept->dept_id;
+        }
+
+        DB::table('students')
+            ->where('matric_no', $record['matric_number'])
+            ->update($updates);
     }
 
     private function rowRecord(array $row, array $columnIndexes): array

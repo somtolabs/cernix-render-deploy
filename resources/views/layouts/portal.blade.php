@@ -5,9 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     @php
         $rawTitle = trim($__env->yieldContent('title', 'Exam Verification System'));
-        $documentTitle = \Illuminate\Support\Str::startsWith($rawTitle, 'CERNIX')
+        $_sysName = $brandingSystemName ?? 'Exam Verification System';
+        $documentTitle = \Illuminate\Support\Str::startsWith($rawTitle, $_sysName)
             ? $rawTitle
-            : 'CERNIX — ' . $rawTitle;
+            : $_sysName . ' — ' . $rawTitle;
     @endphp
     <title>{{ $documentTitle }}</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">

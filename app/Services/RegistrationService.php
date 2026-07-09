@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use RuntimeException;
 
 class RegistrationService
@@ -19,7 +20,11 @@ class RegistrationService
      */
     public function registerStudent(array $data): array
     {
-        $matricNo = strtoupper(trim($data['matric_no']));
+        $matricNo = preg_replace('/\s+/', '', strtoupper(trim($data['matric_no']))) ?? '';
+        if (! Schema::hasTable('official_students')) {
+            throw new RuntimeException('Student registry is not ready. Please contact the admin or exam officer.');
+        }
+
         $officialStudent = DB::table('official_students')
             ->where('matric_number', $matricNo)
             ->first();
@@ -63,21 +68,24 @@ class RegistrationService
         $photoPath = trim((string) ($data['photo_path'] ?? ''));
 
         $studentData = [
-            'matric_no'     => $matricNo,
-            'full_name'     => $officialStudent->full_name,
-            'department_id' => $dept->dept_id,
-            'level'         => $officialStudent->level,
+            'matric_no'       => $matricNo,
+            'full_name'       => $officialStudent->full_name,
+            'department_id'   => $dept->dept_id,
+            'level'           => $officialStudent->level,
             'department_code' => $dept->department_code ?? null,
-            'faculty_code'  => $dept->faculty_code ?? null,
-            'session_id'    => $data['session_id'],
-            'photo_path'    => $photoPath,
-            'photo_status'  => $photoPath === '' ? 'pending_photo_upload' : 'pending_admin_approval',
+            'faculty_code'    => $dept->faculty_code ?? null,
+            'session_id'      => $data['session_id'],
+            'photo_path'      => $photoPath,
+            'photo_status'    => $photoPath === '' ? 'pending_photo_upload' : 'pending_admin_approval',
             'photo_rejection_reason' => null,
-            'created_at'    => now(),
-            'updated_at'    => now(),
+            'id_card_path'    => $data['id_card_path'] ?? null,
+            'password'        => $data['password'] ?? null,
+            'account_status'  => $data['account_status'] ?? 'pending',
+            'created_at'      => now(),
+            'updated_at'      => now(),
         ];
 
-        DB::table('students')->insert($studentData);
+        DB::table('students')->insert($this->studentColumnData($studentData));
 
         return [
             'success' => true,
@@ -104,11 +112,30 @@ class RegistrationService
             return $existing;
         }
 
-        $id = DB::table('departments')->insertGetId([
+        $insert = [
             'dept_name' => $department,
             'faculty' => $faculty,
-        ]);
+        ];
+
+        if (Schema::hasColumn('departments', 'department_code')) {
+            $insert['department_code'] = null;
+        }
+
+        if (Schema::hasColumn('departments', 'faculty_code')) {
+            $insert['faculty_code'] = null;
+        }
+
+        $id = DB::table('departments')->insertGetId($insert);
 
         return DB::table('departments')->where('dept_id', $id)->first();
+    }
+
+    private function studentColumnData(array $data): array
+    {
+        $columns = Schema::getColumnListing('students');
+
+        return collect($data)
+            ->filter(fn ($value, $column) => in_array($column, $columns, true))
+            ->all();
     }
 }

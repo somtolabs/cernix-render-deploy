@@ -10,11 +10,14 @@ use App\Services\StudentRegistryImportService;
 use App\Support\Branding;
 use App\Support\DepartmentFees;
 use App\Support\Roles;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -118,18 +121,63 @@ class AdminWebController extends Controller
             return $response;
         }
 
-        $students = DB::table('official_students')
-            ->when($request->filled('q'), function ($query) use ($request) {
+        $registryReady = Schema::hasTable('official_students') && Schema::hasTable('student_registry_imports');
+
+        if (! $registryReady) {
+            $students = $this->emptyPaginator($request, 25);
+            $imports = collect();
+            $metrics = [
+                'official_students' => 0,
+                'active_students' => 0,
+                'inactive_students' => 0,
+                'imports' => 0,
+            ];
+
+            return view('admin.student-registry.index', compact('students', 'imports', 'metrics', 'registryReady'));
+        }
+
+        $hasStudents  = Schema::hasTable('students');
+        $hasPayments  = Schema::hasTable('payment_records');
+
+        $query = DB::table('official_students as os');
+
+        if ($hasStudents) {
+            $query->leftJoin('students as st', 'st.matric_no', '=', 'os.matric_number')
+                  ->addSelect([
+                      'os.*',
+                      'st.photo_status',
+                      'st.account_status',
+                      'st.photo_path as selfie_path',
+                      'st.profile_photo_path',
+                  ]);
+
+            if ($hasPayments) {
+                $query->selectSub(
+                    DB::table('payment_records')->selectRaw('COUNT(*)')->whereColumn('student_id', 'os.matric_number'),
+                    'payment_count'
+                );
+            } else {
+                $query->addSelect(DB::raw('NULL as payment_count'));
+            }
+        } else {
+            $query->addSelect(['os.*', DB::raw('NULL as photo_status'), DB::raw('NULL as account_status'), DB::raw('NULL as selfie_path'), DB::raw('NULL as profile_photo_path'), DB::raw('NULL as payment_count')]);
+        }
+
+        $students = $query
+            ->when($request->filled('q'), function ($q2) use ($request) {
                 $q = '%' . $request->input('q') . '%';
-                $query->where(fn ($inner) => $inner
-                    ->where('matric_number', 'like', $q)
-                    ->orWhere('full_name', 'like', $q)
-                    ->orWhere('department', 'like', $q));
+                $q2->where(fn ($inner) => $inner
+                    ->where('os.matric_number', 'like', $q)
+                    ->orWhere('os.full_name', 'like', $q)
+                    ->orWhere('os.department', 'like', $q));
             })
-            ->when($request->filled('status'), fn ($query) => $query->where('status', $request->input('status')))
-            ->orderBy('department')
-            ->orderBy('level')
-            ->orderBy('full_name')
+            ->when($request->filled('status'), fn ($q2) => $q2->where('os.status', $request->input('status')))
+            ->when($request->filled('photo_status'), fn ($q2) => $hasStudents
+                ? $q2->where('st.photo_status', $request->input('photo_status'))
+                : $q2)
+            ->orderBy('os.department')
+            ->orderBy('os.level')
+            ->orderBy('os.full_name')
             ->paginate(25)
             ->withQueryString();
 
@@ -140,12 +188,15 @@ class AdminWebController extends Controller
 
         $metrics = [
             'official_students' => DB::table('official_students')->count(),
-            'active_students' => DB::table('official_students')->where('status', 'active')->count(),
+            'active_students'   => DB::table('official_students')->where('status', 'active')->count(),
             'inactive_students' => DB::table('official_students')->where('status', 'inactive')->count(),
-            'imports' => DB::table('student_registry_imports')->count(),
+            'imports'           => DB::table('student_registry_imports')->count(),
+            'registered'        => $hasStudents ? DB::table('students')->count() : 0,
+            'identity_approved' => $hasStudents && Schema::hasColumn('students', 'photo_status')
+                ? DB::table('students')->where('photo_status', 'approved')->count() : 0,
         ];
 
-        return view('admin.student-registry.index', compact('students', 'imports', 'metrics'));
+        return view('admin.student-registry.index', compact('students', 'imports', 'metrics', 'registryReady'));
     }
 
     public function studentRegistryImport(Request $request, StudentRegistryImportService $importService): RedirectResponse
@@ -157,6 +208,14 @@ class AdminWebController extends Controller
         $data = $request->validate([
             'registry_csv' => ['required', 'file', 'mimes:csv,txt', 'max:5120'],
         ]);
+
+        if (! Schema::hasTable('official_students') || ! Schema::hasTable('student_registry_imports')) {
+            return back()->withErrors(['registry_csv' => 'Student registry storage is not ready. Run the pending migrations first.']);
+        }
+
+        if (! $this->settingBoolean('allow_csv_student_import', true)) {
+            return back()->withErrors(['registry_csv' => 'CSV student registry import is currently disabled by Super Admin settings.']);
+        }
 
         try {
             $import = $importService->import(
@@ -173,11 +232,52 @@ class AdminWebController extends Controller
                 'failed_rows' => $import->failed_rows,
             ], $request);
 
+            $statusMsg = "Registry import complete: {$import->imported_rows} imported, {$import->skipped_rows} skipped, {$import->failed_rows} failed.";
+
             return redirect()->route('admin.student-registry')
-                ->with('status', "Registry import complete: {$import->imported_rows} imported, {$import->skipped_rows} skipped, {$import->failed_rows} failed.");
+                ->with('status', $statusMsg)
+                ->with('last_import_id', $import->id);
         } catch (\Throwable $exception) {
             return back()->withErrors(['registry_csv' => $exception->getMessage()]);
         }
+    }
+
+    public function studentRegistryRejectedRows(Request $request, int $import): \Symfony\Component\HttpFoundation\StreamedResponse
+    {
+        if ($response = $this->guardAdmin($request)) {
+            abort(403);
+        }
+
+        $record = DB::table('student_registry_imports')->where('id', $import)->first();
+        if (! $record) {
+            abort(404);
+        }
+
+        $summary = is_string($record->error_summary) ? json_decode($record->error_summary, true) : (array) $record->error_summary;
+        $errors  = $summary['errors'] ?? [];
+
+        $filename = 'rejected-rows-import-' . $import . '.csv';
+
+        return response()->streamDownload(function () use ($errors) {
+            $handle = fopen('php://output', 'w');
+            fputcsv($handle, ['row', 'matric_number', 'full_name', 'department', 'faculty', 'level', 'programme', 'academic_session', 'status', 'rejection_reason']);
+            foreach ($errors as $err) {
+                $data = $err['data'] ?? [];
+                fputcsv($handle, [
+                    $err['row'] ?? '',
+                    $data['matric_number'] ?? '',
+                    $data['full_name']     ?? '',
+                    $data['department']    ?? '',
+                    $data['faculty']       ?? '',
+                    $data['level']         ?? '',
+                    $data['programme']     ?? '',
+                    $data['academic_session'] ?? '',
+                    $data['status']        ?? '',
+                    $err['reason']         ?? '',
+                ]);
+            }
+            fclose($handle);
+        }, $filename, ['Content-Type' => 'text/csv']);
     }
 
     public function photoApprovals(Request $request)
@@ -190,6 +290,15 @@ class AdminWebController extends Controller
         $allowedStatuses = ['pending_photo_upload', 'pending_admin_approval', 'approved', 'rejected', 'flagged'];
         if (! in_array($status, $allowedStatuses, true)) {
             $status = 'pending_admin_approval';
+        }
+
+        $photoSchemaReady = Schema::hasTable('students') && Schema::hasColumn('students', 'photo_status');
+
+        if (! $photoSchemaReady) {
+            $students = $this->emptyPaginator($request, 20);
+            $counts = collect();
+
+            return view('admin.photo-approvals.index', compact('students', 'counts', 'status', 'allowedStatuses', 'photoSchemaReady'));
         }
 
         $students = DB::table('students')
@@ -213,7 +322,7 @@ class AdminWebController extends Controller
             ->groupBy('photo_status')
             ->pluck('total', 'photo_status');
 
-        return view('admin.photo-approvals.index', compact('students', 'counts', 'status', 'allowedStatuses'));
+        return view('admin.photo-approvals.index', compact('students', 'counts', 'status', 'allowedStatuses', 'photoSchemaReady'));
     }
 
     public function photoApprove(Request $request): RedirectResponse
@@ -237,6 +346,80 @@ class AdminWebController extends Controller
         ]);
 
         return $this->reviewPhoto($request, 'flagged', 'student_profile.flagged', 'Profile flagged for manual review.', $request->input('reason'));
+    }
+
+    public function serveIdCard(Request $request, string $matric)
+    {
+        if ($response = $this->guardAdmin($request)) {
+            return $response;
+        }
+
+        $idCardPath = DB::table('students')
+            ->where('matric_no', $matric)
+            ->orderByDesc('updated_at')
+            ->value('id_card_path');
+
+        abort_unless($idCardPath, 404);
+
+        $idCardPath = ltrim(str_replace('\\', '/', trim($idCardPath)), '/');
+
+        // Support both public (photos/) and private local-disk (id-cards/) storage paths.
+        // Storage::disk('local') is rooted at storage/app/private — NOT storage/app/.
+        $fullPath = str_starts_with($idCardPath, 'photos/')
+            ? public_path($idCardPath)
+            : Storage::disk('local')->path($idCardPath);
+
+        abort_unless(file_exists($fullPath), 404);
+
+        $raw  = file_get_contents($fullPath);
+        $mime = 'image/jpeg';
+        $info = @getimagesizefromstring($raw);
+        if ($info && isset($info['mime'])) {
+            $mime = $info['mime'];
+        }
+
+        return response($raw, 200, [
+            'Content-Type'  => $mime,
+            'Cache-Control' => 'no-store, private',
+        ]);
+    }
+
+    public function serveVerificationSelfie(Request $request, string $matric)
+    {
+        if ($response = $this->guardAdmin($request)) {
+            return $response;
+        }
+
+        $photoPath = DB::table('students')
+            ->where('matric_no', $matric)
+            ->value('photo_path');
+
+        abort_unless($photoPath, 404);
+
+        $photoPath = ltrim(str_replace('\\', '/', trim($photoPath)), '/');
+
+        // Support both public (photos/) and private local-disk storage paths.
+        if (str_starts_with($photoPath, 'photos/')) {
+            $fullPath = public_path($photoPath);
+        } else {
+            $fullPath = Storage::disk('local')->path($photoPath);
+        }
+
+        abort_unless(file_exists($fullPath), 404);
+
+        $raw  = file_get_contents($fullPath);
+        $mime = 'image/jpeg';
+
+        // Detect image type from content
+        $info = @getimagesizefromstring($raw);
+        if ($info && isset($info['mime'])) {
+            $mime = $info['mime'];
+        }
+
+        return response($raw, 200, [
+            'Content-Type'  => $mime,
+            'Cache-Control' => 'no-store, private',
+        ]);
     }
 
     public function studentShow(Request $request, string $matricNo)
@@ -377,6 +560,27 @@ class AdminWebController extends Controller
         ));
     }
 
+    public function studentAccountStatus(Request $request, string $matricNo)
+    {
+        if ($response = $this->guardAdmin($request)) {
+            return $response;
+        }
+        if (! Schema::hasColumn('students', 'account_status')) {
+            return back()->with('status', 'Account status feature is not available yet. Run pending migrations.');
+        }
+        $allowed = ['active', 'suspended'];
+        $newStatus = $request->input('account_status');
+        if (! in_array($newStatus, $allowed, true)) {
+            return back()->withErrors(['account_status' => 'Invalid account status.']);
+        }
+        $student = DB::table('students')->where('matric_no', $matricNo)->first();
+        abort_unless($student, 404);
+        DB::table('students')->where('matric_no', $matricNo)->update(['account_status' => $newStatus]);
+        $this->audit('student.account.' . $newStatus, ['matric_no' => $matricNo, 'account_status' => $newStatus], $request);
+        $label = $newStatus === 'suspended' ? 'suspended' : 'activated';
+        return back()->with('status', "Account {$label} for {$matricNo}.");
+    }
+
     public function examiners(Request $request)
     {
         if ($response = $this->guardAdmin($request)) {
@@ -402,7 +606,17 @@ class AdminWebController extends Controller
         $examiners = DB::table('examiners')
             ->leftJoinSub($scanStats, 'scan_stats', fn ($join) => $join->on('examiners.examiner_id', '=', 'scan_stats.examiner_id'))
             ->select($select)
-            ->whereRaw('UPPER(examiners.role) = ?', [Roles::EXAMINER])
+            ->when(
+                ! Roles::canManageRoles($request->session()->get('examiner_role')),
+                fn ($query) => $query->whereRaw('UPPER(examiners.role) = ?', [Roles::EXAMINER])
+            )
+            ->when(
+                $request->filled('q'),
+                fn ($query) => $query->where(fn ($q) => $q
+                    ->where('examiners.full_name', 'LIKE', '%' . $request->input('q') . '%')
+                    ->orWhere('examiners.username', 'LIKE', '%' . $request->input('q') . '%')
+                )
+            )
             ->orderByDesc('examiners.created_at')
             ->orderByDesc('examiners.examiner_id')
             ->paginate(25);
@@ -437,7 +651,6 @@ class AdminWebController extends Controller
                 DB::raw('scan_stats.last_scan_at as last_scan_at')
             )
             ->where('examiners.examiner_id', $examiner)
-            ->whereRaw('UPPER(examiners.role) = ?', [Roles::EXAMINER])
             ->first();
 
         abort_unless($record, 404);
@@ -470,18 +683,27 @@ class AdminWebController extends Controller
             return $response;
         }
 
+        $canManageRoles = Roles::canManageRoles($request->session()->get('examiner_role'));
+        $allowedRoles = $canManageRoles ? ['examiner', 'admin', 'super_admin'] : ['examiner'];
+
         $data = $request->validate([
             'full_name' => 'required|string|max:100',
             'username' => 'required|string|max:100|unique:examiners,username',
+            'email' => ['nullable', 'email', 'max:255', Rule::unique('users', 'email')],
             'password' => 'required|string|min:8',
-            'role' => ['nullable', 'string', Rule::in(['examiner'])],
+            'role' => ['nullable', 'string', Rule::in($allowedRoles)],
         ]);
+        $role = $data['role'] ?? 'examiner';
+
+        if ($role !== 'examiner' && empty($data['email'])) {
+            return back()->withErrors(['email' => 'Email is required when creating admin or super admin accounts.'])->withInput($request->except('password'));
+        }
 
         $insert = [
             'full_name' => $data['full_name'],
             'username' => $data['username'],
             'password_hash' => Hash::make($data['password']),
-            'role' => 'examiner',
+            'role' => $role,
             'is_active' => true,
             'created_at' => now(),
         ];
@@ -494,19 +716,43 @@ class AdminWebController extends Controller
             $insert['last_active_at'] = null;
         }
 
-        $id = DB::transaction(function () use ($insert, $data, $request) {
-            $id = DB::table('examiners')->insertGetId($insert);
-            $this->audit('user.created', [
-                'entity_type' => 'examiner',
-                'entity_id' => $id,
-                'username' => $data['username'],
-                'created_role' => 'examiner',
-            ], $request);
+        try {
+            $id = DB::transaction(function () use ($insert, $data, $request, $role) {
+                if ($role !== 'examiner' && Schema::hasTable('users')) {
+                    $userId = DB::table('users')->insertGetId([
+                        'name' => $data['full_name'],
+                        'email' => $data['email'],
+                        'password' => Hash::make($data['password']),
+                        'role' => strtoupper($role),
+                        'created_at' => now(),
+                        'updated_at' => now(),
+                    ]);
 
-            return $id;
-        });
+                    if ($this->examinerHasColumn('admin_user_id')) {
+                        $insert['admin_user_id'] = $userId;
+                    }
+                }
 
-        return redirect()->route('admin.examiners.show', $id)->with('status', 'Examiner account created.');
+                $id = DB::table('examiners')->insertGetId($insert);
+                $this->audit('user.created', [
+                    'entity_type' => $role === 'examiner' ? 'examiner' : 'admin_user',
+                    'entity_id' => $id,
+                    'username' => $data['username'],
+                    'email' => $data['email'] ?? null,
+                    'created_role' => $role,
+                ], $request);
+
+                return $id;
+            });
+        } catch (UniqueConstraintViolationException) {
+            return back()->withErrors(['username' => 'That username or email is already taken. Choose a different one.'])->withInput($request->except('password'));
+        }
+
+        if ($role === 'examiner') {
+            return redirect()->route('admin.examiners.show', $id)->with('status', 'Examiner account created.');
+        }
+
+        return redirect()->route('admin.examiners')->with('status', Str::headline($role) . ' account created.');
     }
 
     public function examinerToggle(Request $request, int $examiner): RedirectResponse
@@ -517,7 +763,6 @@ class AdminWebController extends Controller
 
         $record = DB::table('examiners')->where('examiner_id', $examiner)->first();
         abort_unless($record, 404);
-        abort_unless(Roles::isExaminer($record->role), 404);
 
         if (! $this->canToggleExaminer($request, $record)) {
             return back()->withErrors(['permission' => 'You do not have permission to change this account status.']);
@@ -617,14 +862,22 @@ class AdminWebController extends Controller
             return $response;
         }
 
+        $allowedTypes = ['exam', 'test', 'makeup'];
+        $typeFilter   = in_array($request->input('type'), $allowedTypes, true) ? $request->input('type') : '';
+
+        $hasExaminerId = Schema::hasColumn('timetables', 'examiner_id');
+
         $entries = DB::table('timetables')
             ->leftJoin('exam_sessions', 'timetables.exam_session_id', '=', 'exam_sessions.session_id')
             ->leftJoin('departments', 'timetables.department_id', '=', 'departments.dept_id')
-            ->select('timetables.*', 'exam_sessions.semester', 'exam_sessions.academic_year', 'departments.dept_name')
+            ->when($hasExaminerId, fn ($q) => $q->leftJoin('examiners', 'timetables.examiner_id', '=', 'examiners.examiner_id'))
+            ->select('timetables.*', 'exam_sessions.semester', 'exam_sessions.academic_year', 'departments.dept_name',
+                     ...$hasExaminerId ? ['examiners.full_name as examiner_name'] : [])
             ->when($request->filled('session_id'), fn ($query) => $query->where('timetables.exam_session_id', $request->integer('session_id')))
             ->when($request->filled('department_id'), fn ($query) => $query->where('timetables.department_id', $request->integer('department_id')))
             ->when($request->filled('level'), fn ($query) => $query->where('timetables.level', $request->input('level')))
             ->when($request->filled('date'), fn ($query) => $query->whereDate('timetables.exam_date', $request->input('date')))
+            ->when($typeFilter !== '' && Schema::hasColumn('timetables', 'assessment_type'), fn ($query) => $query->where('timetables.assessment_type', $typeFilter))
             ->orderBy('exam_date')
             ->orderBy('start_time')
             ->paginate(30)
@@ -632,12 +885,29 @@ class AdminWebController extends Controller
 
         $sessions = DB::table('exam_sessions')->orderByDesc('session_id')->get();
         $departments = DB::table('departments')->orderBy('dept_name')->get();
+        $examiners = DB::table('examiners')->where('is_active', true)->orderBy('full_name')->get(['examiner_id', 'full_name', 'username']);
         $timetableKey = $this->timetableKey();
         $editEntry = $request->filled('edit')
             ? DB::table('timetables')->where($timetableKey, $request->integer('edit'))->first()
             : null;
+        $defaultExamPaymentRequired = $this->settingBoolean('default_exam_payment_required', true);
 
-        return view('admin.timetable.index', compact('entries', 'sessions', 'departments', 'editEntry', 'timetableKey'));
+        // Roster data for test/makeup edit
+        $roster = collect();
+        $rosterCount = 0;
+        if ($editEntry && in_array($editEntry->assessment_type ?? 'exam', ['test', 'makeup'])
+            && Schema::hasTable('timetable_students')) {
+            $roster = DB::table('timetable_students')
+                ->where('timetable_id', $editEntry->{$timetableKey})
+                ->leftJoin('students', 'timetable_students.matric_no', '=', 'students.matric_no')
+                ->leftJoin('departments', 'students.department_id', '=', 'departments.dept_id')
+                ->select('timetable_students.matric_no', 'students.full_name', 'students.level', 'departments.dept_name')
+                ->orderBy('timetable_students.matric_no')
+                ->get();
+            $rosterCount = $roster->count();
+        }
+
+        return view('admin.timetable.index', compact('entries', 'sessions', 'departments', 'examiners', 'editEntry', 'timetableKey', 'defaultExamPaymentRequired', 'typeFilter', 'roster', 'rosterCount', 'hasExaminerId'));
     }
 
     public function timetableStore(Request $request): RedirectResponse
@@ -647,10 +917,53 @@ class AdminWebController extends Controller
         }
 
         $data = $this->validateTimetable($request);
-        DB::table('timetables')->insert($data + ['created_at' => now(), 'updated_at' => now()]);
+        $timetableKey = $this->timetableKey();
+
+        try {
+            $id = DB::table('timetables')->insertGetId($data + ['created_at' => now(), 'updated_at' => now()]);
+        } catch (UniqueConstraintViolationException) {
+            return back()->withInput()->withErrors([
+                'course_code' => 'A timetable entry with the same course, date, time, venue, and assessment type already exists for this session.',
+            ]);
+        }
+
         $this->audit('timetable.created', ['course_code' => $data['course_code'], 'exam_date' => $data['exam_date']], $request);
 
-        return redirect()->route('admin.timetable')->with('status', 'Timetable entry created.');
+        $rosterAdded = 0;
+        $enrollmentMode = $request->input('enrollment_mode', 'manual');
+        $isTestType = in_array($data['assessment_type'] ?? 'exam', ['test', 'makeup']);
+
+        if ($isTestType && Schema::hasTable('timetable_students')) {
+            if ($enrollmentMode === 'all') {
+                $students = DB::table('students')
+                    ->where('department_id', $data['department_id'])
+                    ->where('level', $data['level'])
+                    ->pluck('matric_no');
+
+                $rows = $students->map(fn ($m) => [
+                    'timetable_id' => $id,
+                    'matric_no'    => $m,
+                    'created_at'   => now(),
+                ])->all();
+
+                if ($rows) {
+                    DB::table('timetable_students')->insertOrIgnore($rows);
+                    $rosterAdded = count($rows);
+                }
+            } elseif ($enrollmentMode === 'csv' && $request->hasFile('roster_csv')) {
+                $rosterAdded = $this->importRosterFromCsv($id, $request->file('roster_csv')->getRealPath());
+            }
+        }
+
+        $typeParam = $isTestType ? ($data['assessment_type'] === 'makeup' ? 'makeup' : 'test') : 'exam';
+        $msg = 'Timetable entry created.' . ($rosterAdded ? " {$rosterAdded} students enrolled." : '');
+
+        if ($isTestType) {
+            return redirect()->route('admin.timetable', ['type' => $typeParam, 'edit' => $id])
+                ->with('status', $msg . ' You can manage the roster below.');
+        }
+
+        return redirect()->route('admin.timetable', ['type' => $typeParam])->with('status', $msg);
     }
 
     public function timetableUpdate(Request $request, int $entry): RedirectResponse
@@ -662,10 +975,19 @@ class AdminWebController extends Controller
         $key = $this->timetableKey();
         abort_unless(DB::table('timetables')->where($key, $entry)->exists(), 404);
         $data = $this->validateTimetable($request);
-        DB::table('timetables')->where($key, $entry)->update($data + ['updated_at' => now()]);
+
+        try {
+            DB::table('timetables')->where($key, $entry)->update($data + ['updated_at' => now()]);
+        } catch (UniqueConstraintViolationException) {
+            return back()->withInput()->withErrors([
+                'course_code' => 'This update conflicts with an existing timetable entry (same course, date, time, venue, and assessment type).',
+            ]);
+        }
+
         $this->audit('timetable.updated', ['timetable_id' => $entry, 'course_code' => $data['course_code']], $request);
 
-        return redirect()->route('admin.timetable')->with('status', 'Timetable entry updated.');
+        $typeParam = match($data['assessment_type'] ?? 'exam') { 'makeup' => 'makeup', 'test' => 'test', default => 'exam' };
+        return redirect()->route('admin.timetable', ['type' => $typeParam])->with('status', 'Timetable entry updated.');
     }
 
     public function timetableDestroy(Request $request, int $entry): RedirectResponse
@@ -681,6 +1003,260 @@ class AdminWebController extends Controller
         $this->audit('timetable.deleted', ['timetable_id' => $entry, 'course_code' => $record->course_code ?? null], $request);
 
         return redirect()->route('admin.timetable')->with('status', 'Timetable entry deleted.');
+    }
+
+    public function timetableRosterAdd(Request $request, int $entry): RedirectResponse
+    {
+        if ($response = $this->guardAdmin($request)) {
+            return $response;
+        }
+
+        $key    = $this->timetableKey();
+        $record = DB::table('timetables')->where($key, $entry)->first();
+        abort_unless($record && in_array($record->assessment_type ?? 'exam', ['test', 'makeup']), 404);
+
+        $matric = strtoupper(trim($request->input('matric_no', '')));
+        if (!$matric) {
+            return back()->withErrors(['matric_no' => 'Matric number is required.']);
+        }
+
+        if (Schema::hasTable('timetable_students')) {
+            DB::table('timetable_students')->insertOrIgnore([
+                'timetable_id' => $entry,
+                'matric_no'    => $matric,
+                'created_at'   => now(),
+            ]);
+        }
+        $this->audit('roster.student_added', ['timetable_id' => $entry, 'matric_no' => $matric], $request);
+
+        $typeParam = match($record->assessment_type ?? 'test') { 'makeup' => 'makeup', default => 'test' };
+        return redirect()->route('admin.timetable', ['type' => $typeParam, 'edit' => $entry])
+            ->with('status', "Student {$matric} added to roster.");
+    }
+
+    public function timetableRosterRemove(Request $request, int $entry, string $matric): RedirectResponse
+    {
+        if ($response = $this->guardAdmin($request)) {
+            return $response;
+        }
+
+        $key    = $this->timetableKey();
+        $record = DB::table('timetables')->where($key, $entry)->first();
+        abort_unless($record && in_array($record->assessment_type ?? 'exam', ['test', 'makeup']), 404);
+
+        $matric = strtoupper($matric);
+        if (Schema::hasTable('timetable_students')) {
+            DB::table('timetable_students')
+                ->where('timetable_id', $entry)
+                ->where('matric_no', $matric)
+                ->delete();
+        }
+        $this->audit('roster.student_removed', ['timetable_id' => $entry, 'matric_no' => $matric], $request);
+
+        $typeParam = match($record->assessment_type ?? 'test') { 'makeup' => 'makeup', default => 'test' };
+        return redirect()->route('admin.timetable', ['type' => $typeParam, 'edit' => $entry])
+            ->with('status', "Student {$matric} removed from roster.");
+    }
+
+    public function timetableRosterImport(Request $request, int $entry): RedirectResponse
+    {
+        if ($response = $this->guardAdmin($request)) {
+            return $response;
+        }
+
+        $key    = $this->timetableKey();
+        $record = DB::table('timetables')->where($key, $entry)->first();
+        abort_unless($record && in_array($record->assessment_type ?? 'exam', ['test', 'makeup']), 404);
+
+        $request->validate(['roster_csv' => 'required|file|mimes:csv,txt|max:4096']);
+
+        $added = 0;
+        if (Schema::hasTable('timetable_students')) {
+            $added = $this->importRosterFromCsv($entry, $request->file('roster_csv')->getRealPath());
+        }
+        $this->audit('roster.csv_imported', ['timetable_id' => $entry, 'added' => $added], $request);
+
+        $typeParam = match($record->assessment_type ?? 'test') { 'makeup' => 'makeup', default => 'test' };
+        return redirect()->route('admin.timetable', ['type' => $typeParam, 'edit' => $entry])
+            ->with('status', "{$added} student(s) added from CSV.");
+    }
+
+    private function importRosterFromCsv(int $timetableId, string $filePath): int
+    {
+        $handle = fopen($filePath, 'r');
+        if (!$handle) return 0;
+
+        $added = 0;
+        $firstRow = true;
+
+        while (($line = fgetcsv($handle)) !== false) {
+            $raw = strtoupper(trim((string) ($line[0] ?? '')));
+            if (!$raw) continue;
+
+            // Skip header row (looks like column label not a matric number)
+            if ($firstRow) {
+                $firstRow = false;
+                if (preg_match('/^(matric|id|student|no\.?|number)$/i', $raw)) continue;
+            }
+
+            DB::table('timetable_students')->insertOrIgnore([
+                'timetable_id' => $timetableId,
+                'matric_no'    => $raw,
+                'created_at'   => now(),
+            ]);
+            $added++;
+        }
+
+        fclose($handle);
+        return $added;
+    }
+
+    public function timetableImport(Request $request): RedirectResponse
+    {
+        if ($response = $this->guardAdmin($request)) {
+            return $response;
+        }
+
+        $hasExaminerCol = Schema::hasColumn('timetables', 'examiner_id');
+
+        $request->validate([
+            'exam_session_id'          => 'required|integer|exists:exam_sessions,session_id',
+            'csv_file'                 => 'required|file|mimes:csv,txt|max:4096',
+            'override_assessment_type' => ['nullable', Rule::in(['exam', 'test', 'makeup'])],
+            'override_level'           => ['nullable', Rule::in(['100', '200', '300', '400', '500'])],
+            'override_examiner_id'     => $hasExaminerCol
+                ? ['required', 'integer', 'exists:examiners,examiner_id']
+                : ['nullable'],
+        ]);
+
+        $sessionId              = $request->integer('exam_session_id');
+        $overrideAssessmentType = $request->input('override_assessment_type');
+        $overrideLevel          = $request->input('override_level');
+        $overrideExaminerId     = $hasExaminerCol ? (int) $request->input('override_examiner_id') : null;
+
+        $hasAssessmentType = Schema::hasColumn('timetables', 'assessment_type');
+        $hasPaymentRequired = Schema::hasColumn('timetables', 'payment_required');
+
+        // Build department lookup: lowercase name → dept_id
+        $deptLookup = [];
+        foreach (DB::table('departments')->select('dept_id', 'dept_name')->get() as $d) {
+            $deptLookup[strtolower(trim($d->dept_name))] = $d->dept_id;
+        }
+
+        $handle = fopen($request->file('csv_file')->getRealPath(), 'r');
+        $headers = null;
+        $toInsert = [];
+        $errors = [];
+        $rowNum = 0;
+
+        while (($line = fgetcsv($handle)) !== false) {
+            $rowNum++;
+            if ($headers === null) {
+                $headers = array_map(fn($h) => strtolower(trim((string) $h)), $line);
+                continue;
+            }
+            if (count(array_filter($line, fn($v) => trim((string) $v) !== '')) === 0) {
+                continue; // skip blank rows
+            }
+            $row = array_combine($headers, array_pad(array_map(fn($v) => trim((string) $v), $line), count($headers), ''));
+
+            $get = function (string ...$keys) use ($row): string {
+                foreach ($keys as $k) {
+                    if (isset($row[$k]) && $row[$k] !== '') return $row[$k];
+                }
+                return '';
+            };
+
+            // Department resolution: name first, then numeric id column
+            $deptNameRaw = strtolower($get('dept_name', 'department', 'department_name'));
+            $deptId = $deptLookup[$deptNameRaw] ?? null;
+            if (!$deptId && isset($row['department_id']) && is_numeric($row['department_id'])) {
+                $deptId = (int) $row['department_id'];
+            }
+
+            $courseCode = strtoupper($get('course_code', 'code'));
+            $level = $overrideLevel ?? $get('level');
+            $examDate = $get('exam_date', 'date');
+            $startTime = $get('start_time', 'time');
+            $venue = $get('venue', 'hall');
+
+            $rowErrors = [];
+            if (!$deptId) $rowErrors[] = 'department not found ("' . ($row['dept_name'] ?? $row['department'] ?? '') . '")';
+            if (!$courseCode) $rowErrors[] = 'course_code missing';
+            if (!in_array($level, ['100', '200', '300', '400', '500'], true)) $rowErrors[] = "invalid level ({$level})";
+            if (!$examDate) $rowErrors[] = 'exam_date missing';
+            if (!$startTime) $rowErrors[] = 'start_time missing';
+            if (!$venue) $rowErrors[] = 'venue missing';
+
+            if ($rowErrors) {
+                $errors[] = "Row {$rowNum}: " . implode(', ', $rowErrors);
+                continue;
+            }
+
+            $parsedDate = date('Y-m-d', strtotime($examDate));
+            if ($parsedDate === '1970-01-01') {
+                $errors[] = "Row {$rowNum}: exam_date could not be parsed ({$examDate})";
+                continue;
+            }
+
+            $statusRaw = strtolower($get('status'));
+            $data = [
+                'exam_session_id' => $sessionId,
+                'department_id' => $deptId,
+                'level' => $level,
+                'course_code' => $courseCode,
+                'course_title' => $get('course_title', 'title') ?: null,
+                'exam_date' => $parsedDate,
+                'start_time' => $startTime,
+                'end_time' => $get('end_time') ?: null,
+                'venue' => $venue,
+                'status' => in_array($statusRaw, ['scheduled', 'active', 'completed', 'cancelled'], true) ? $statusRaw : 'scheduled',
+                'created_at' => now(),
+                'updated_at' => now(),
+            ];
+
+            if ($hasAssessmentType) {
+                $typeRaw = $overrideAssessmentType ?? strtolower($get('assessment_type', 'type'));
+                $data['assessment_type'] = in_array($typeRaw, ['exam', 'test', 'makeup'], true) ? $typeRaw : 'exam';
+            }
+
+            if ($hasPaymentRequired) {
+                $data['payment_required'] = null; // inherit default for CSV imports
+            }
+
+            if ($hasExaminerCol) {
+                $data['examiner_id'] = $overrideExaminerId;
+            }
+
+            $toInsert[] = $data;
+        }
+
+        fclose($handle);
+
+        $inserted   = 0;
+        $duplicates = 0;
+        if (!empty($toInsert)) {
+            foreach (array_chunk($toInsert, 100) as $chunk) {
+                $affected    = DB::table('timetables')->insertOrIgnore($chunk);
+                $inserted   += $affected;
+                $duplicates += count($chunk) - $affected;
+            }
+            if ($inserted > 0) {
+                $this->audit('timetable.imported', ['count' => $inserted, 'session_id' => $sessionId], $request);
+            }
+        }
+
+        $parts = [];
+        if ($inserted > 0)   $parts[] = "Imported {$inserted} new row(s)";
+        if ($duplicates > 0) $parts[] = "{$duplicates} duplicate(s) skipped";
+        if ($errors) {
+            $shown   = array_slice($errors, 0, 8);
+            $extra   = count($errors) - count($shown);
+            $parts[] = 'Rows with errors: ' . implode('; ', $shown) . ($extra > 0 ? "; and {$extra} more" : '');
+        }
+        if (!$parts) $parts[] = 'No rows could be imported';
+
+        return redirect()->route('admin.timetable')->with('status', implode('. ', $parts) . '.');
     }
 
     public function scanLogs(Request $request)
@@ -714,7 +1290,6 @@ class AdminWebController extends Controller
         if ($response = $this->guardAdmin($request)) {
             return $response;
         }
-        abort_unless($this->isSuperAdminSession($request), 403);
 
         $tokens = DB::table('qr_tokens')
             ->leftJoin('students', 'qr_tokens.student_id', '=', 'students.matric_no')
@@ -875,8 +1450,32 @@ class AdminWebController extends Controller
         $settingsStorageReady = Schema::hasTable('cernix_settings');
         $branding = [
             'logo_url' => Branding::logoUrl(),
-            'custom' => Branding::logoPath() !== null,
+            'custom' => Branding::hasCustomLogo(),
             'storage_disk' => config('filesystems.default'),
+        ];
+        $liveSettings = [
+            'system_mode' => $this->setting('system_mode', 'live'),
+            // Live phase rules
+            'require_photo_approval_before_qr'    => $this->settingBoolean('require_photo_approval_before_qr', true),
+            'allow_payment_not_required_exams'    => $this->settingBoolean('allow_payment_not_required_exams', true),
+            'default_exam_payment_required'       => $this->settingBoolean('default_exam_payment_required', true),
+            'enable_submission_scan'              => $this->settingBoolean('enable_submission_scan', false),
+            'allow_csv_student_import'            => $this->settingBoolean('allow_csv_student_import', true),
+            'scanner_server_verification_required'=> $this->settingBoolean('scanner_server_verification_required', true),
+            'qr_single_use_enforced'              => $this->settingBoolean('qr_single_use_enforced', true),
+            // Identity policy
+            'require_id_card_upload'              => $this->settingBoolean('require_id_card_upload', true),
+            'photo_resubmit_allowed'              => $this->settingBoolean('photo_resubmit_allowed', true),
+            'auto_flag_unverified_before_exam'    => $this->settingBoolean('auto_flag_unverified_before_exam', false),
+            // Attendance policy
+            'attendance_tracking_enabled'         => $this->settingBoolean('attendance_tracking_enabled', false),
+            'mark_attendance_on_qr_scan'          => $this->settingBoolean('mark_attendance_on_qr_scan', true),
+            // Audit policy
+            'audit_logging_enabled'               => $this->settingBoolean('audit_logging_enabled', true),
+            'audit_retain_days'                   => (int) $this->setting('audit_retain_days', '365'),
+            // System identity (branding)
+            'system_name'                         => $this->setting('system_name', ''),
+            'institution_name'                    => $this->setting('institution_name', ''),
         ];
 
         return view('admin.settings.index', compact(
@@ -891,8 +1490,87 @@ class AdminWebController extends Controller
             'scannerStatus',
             'accessOverview',
             'settingsStorageReady',
-            'branding'
+            'branding',
+            'liveSettings'
         ));
+    }
+
+    public function settingsLivePhaseUpdate(Request $request): RedirectResponse
+    {
+        if ($response = $this->guardAdmin($request)) {
+            return $response;
+        }
+
+        if (! Roles::canManageSettings($request->session()->get('examiner_role'))) {
+            return back()->withErrors(['permission' => 'Only a Super Admin can change live-phase controls.']);
+        }
+
+        if (! Schema::hasTable('cernix_settings')) {
+            return back()->withErrors(['settings' => 'Settings storage is not ready. Run migrations first.']);
+        }
+
+        $data = $request->validate([
+            'system_mode'                      => ['required', Rule::in(['demo', 'live'])],
+            'require_photo_approval_before_qr' => ['nullable', 'boolean'],
+            'allow_payment_not_required_exams' => ['nullable', 'boolean'],
+            'default_exam_payment_required'    => ['nullable', 'boolean'],
+            'enable_submission_scan'           => ['nullable', 'boolean'],
+            'allow_csv_student_import'         => ['nullable', 'boolean'],
+            'require_id_card_upload'           => ['nullable', 'boolean'],
+            'photo_resubmit_allowed'           => ['nullable', 'boolean'],
+            'attendance_tracking_enabled'      => ['nullable', 'boolean'],
+            'system_name'                      => ['nullable', 'string', 'max:80'],
+            'institution_name'                 => ['nullable', 'string', 'max:120'],
+        ]);
+
+        $boolKeys = [
+            'require_photo_approval_before_qr', 'allow_payment_not_required_exams',
+            'default_exam_payment_required', 'enable_submission_scan', 'allow_csv_student_import',
+            'require_id_card_upload', 'photo_resubmit_allowed', 'attendance_tracking_enabled',
+        ];
+
+        $settings = ['system_mode' => $data['system_mode']];
+        foreach ($boolKeys as $k) {
+            $settings[$k] = $request->boolean($k) ? 'true' : 'false';
+        }
+        if (filled($data['system_name'] ?? null)) {
+            $settings['system_name'] = trim($data['system_name']);
+        }
+        if (filled($data['institution_name'] ?? null)) {
+            $settings['institution_name'] = trim($data['institution_name']);
+        }
+
+        $previousMode = $this->setting('system_mode', 'live');
+
+        foreach ($settings as $key => $value) {
+            $this->setSetting($key, $value);
+        }
+
+        // Auto-purge demo data when switching from demo to live
+        $purgeReport = null;
+        if ($data['system_mode'] === 'live' && $previousMode !== 'live') {
+            try {
+                $purgeReport = \App\Support\SystemMode::purgeDemoData();
+                Log::info('Auto-purged demo data on live mode activation', $purgeReport);
+            } catch (\Throwable $e) {
+                Log::error('Demo purge on live-mode switch failed', ['error' => $e->getMessage()]);
+            }
+        }
+
+        $this->audit('settings.live_phase.updated', [
+            'entity_type' => 'setting',
+            'entity_id' => 'live_phase_controls',
+            'settings' => $settings,
+            'demo_purged' => $purgeReport !== null,
+        ], $request);
+
+        $msg = 'Live-phase controls updated.';
+        if ($purgeReport) {
+            $total = array_sum($purgeReport);
+            $msg .= " Demo data purged ({$total} records removed).";
+        }
+
+        return back()->with('status', $msg);
     }
 
     public function settingsFeesUpdate(Request $request): RedirectResponse
@@ -973,26 +1651,36 @@ class AdminWebController extends Controller
             'branding_logo' => ['required', 'image', 'mimes:png,jpg,jpeg,webp', 'max:2048'],
         ]);
 
-        $file = $data['branding_logo'];
+        $file      = $data['branding_logo'];
         $extension = strtolower($file->getClientOriginalExtension() ?: 'png');
-        $path = $file->storeAs('branding', 'cernix-logo.' . $extension, 'public');
+        $mimeType  = match($extension) { 'jpg', 'jpeg' => 'jpeg', 'webp' => 'webp', default => 'png' };
+        $contents  = file_get_contents($file->getRealPath());
 
-        if (! $path) {
-            return back()->withErrors(['branding_logo' => 'The branding image could not be stored.']);
+        if ($contents === false || $contents === '') {
+            return back()->withErrors(['branding_logo' => 'The uploaded file could not be read.']);
         }
 
-        $previous = Branding::logoPath();
-        $this->setSetting(Branding::SETTING_KEY, $path);
+        // Store as base64 data URI in the database — persists across Render redeploys
+        $dataUri = 'data:image/' . $mimeType . ';base64,' . base64_encode($contents);
+        $this->setSetting(Branding::SETTING_KEY_DATA, $dataUri);
 
-        if ($previous && $previous !== $path) {
-            Storage::disk('public')->delete($previous);
+        // Also attempt disk storage for local/non-ephemeral environments
+        $path = $file->storeAs('branding', 'cernix-logo.' . $extension, 'public');
+        if ($path) {
+            $previous = Branding::logoPath();
+            $this->setSetting(Branding::SETTING_KEY, $path);
+            if ($previous && $previous !== $path) {
+                Storage::disk('public')->delete($previous);
+            }
         }
 
         $this->audit('settings.branding.updated', [
             'entity_type' => 'setting',
-            'entity_id' => Branding::SETTING_KEY,
-            'file_type' => $extension,
+            'entity_id'   => Branding::SETTING_KEY_DATA,
+            'file_type'   => $extension,
         ], $request);
+
+        try { \Illuminate\Support\Facades\Artisan::call('view:clear'); } catch (\Throwable) {}
 
         return back()->with('status', 'System branding image updated.');
     }
@@ -1031,6 +1719,404 @@ class AdminWebController extends Controller
         $this->audit('session.closed', ['session_id' => $session], $request);
 
         return back()->with('status', 'Session closed.');
+    }
+
+    public function sessionUpdate(Request $request, int $session): RedirectResponse
+    {
+        if ($response = $this->guardAdmin($request)) {
+            return $response;
+        }
+
+        if (! Roles::canManageSessions($request->session()->get('examiner_role'))) {
+            return back()->withErrors(['permission' => 'Only a Super Admin can edit session details.']);
+        }
+
+        $data = $request->validate([
+            'semester'      => ['required', Rule::in(['First Semester', 'Second Semester'])],
+            'academic_year' => ['required', 'string', 'regex:/^\d{4}\/\d{4}$/'],
+        ]);
+
+        // Validate the year range makes sense (second year = first year + 1)
+        [$y1, $y2] = explode('/', $data['academic_year']);
+        if ((int) $y2 !== (int) $y1 + 1) {
+            return back()->withErrors(['academic_year' => 'Academic year must be in YYYY/YYYY format where second year is first year plus one (e.g. 2025/2026).']);
+        }
+
+        abort_unless(DB::table('exam_sessions')->where('session_id', $session)->exists(), 404);
+
+        DB::table('exam_sessions')->where('session_id', $session)->update([
+            'semester'      => $data['semester'],
+            'academic_year' => $data['academic_year'],
+        ]);
+
+        $this->audit('session.updated', [
+            'session_id'    => $session,
+            'semester'      => $data['semester'],
+            'academic_year' => $data['academic_year'],
+        ], $request);
+
+        return back()->with('status', 'Session details updated.');
+    }
+
+    public function clearDemoData(Request $request): RedirectResponse
+    {
+        if ($response = $this->guardAdmin($request)) {
+            return $response;
+        }
+
+        if (! Roles::canManageSettings($request->session()->get('examiner_role'))) {
+            return back()->withErrors(['permission' => 'Only a Super Admin can clear demo data.']);
+        }
+
+        if ($request->input('confirmation') !== 'CLEAR DEMO') {
+            return back()->withErrors(['confirmation' => 'You must type "CLEAR DEMO" exactly to confirm.']);
+        }
+
+        try {
+            \App\Support\SystemMode::purgeDemoData();
+
+            $this->audit('database.demo_data_cleared', [
+                'action' => 'clear_demo_data',
+            ], $request);
+
+            return back()->with('status', 'Demo data cleared successfully.');
+        } catch (\Throwable $e) {
+            Log::error('Demo data clear failed.', ['exception' => $e::class, 'message' => $e->getMessage()]);
+
+            return back()->withErrors(['clear' => 'Demo data clear failed. Check logs for details.']);
+        }
+    }
+
+    public function clearLiveData(Request $request): RedirectResponse
+    {
+        if ($response = $this->guardAdmin($request)) {
+            return $response;
+        }
+
+        if (! Roles::canManageSettings($request->session()->get('examiner_role'))) {
+            return back()->withErrors(['permission' => 'Only a Super Admin can clear live data.']);
+        }
+
+        if ($request->input('confirmation') !== 'RESET SYSTEM') {
+            return back()->withErrors(['confirmation' => 'You must type "RESET SYSTEM" exactly to confirm.'])->withFragment('danger');
+        }
+
+        try {
+            DB::transaction(function () {
+                // Attendance and timetable roster (must go before timetables)
+                DB::table('attendance_records')->delete();
+                DB::table('timetable_students')->delete();
+                // Exam sessions data
+                if (Schema::hasTable('examiner_sessions')) {
+                    DB::table('examiner_sessions')->delete();
+                }
+                // Verification and audit trails
+                DB::table('verification_logs')->delete();
+                DB::table('audit_log')->delete();
+                // Tokens and passes
+                DB::table('qr_tokens')->delete();
+                // Payments
+                DB::table('payment_records')->delete();
+                // Assessments / timetable
+                DB::table('timetables')->delete();
+                // Students, registry, imports
+                DB::table('students')->delete();
+                DB::table('official_students')->delete();
+                DB::table('student_registry_imports')->delete();
+                // Admin notes
+                if (Schema::hasTable('admin_notes')) {
+                    DB::table('admin_notes')->delete();
+                }
+                // Reset branding settings to defaults (keep key-value rows, just null out customisations)
+                DB::table('cernix_settings')
+                    ->whereIn('key', ['institution_name', 'system_name', 'branding_logo_path'])
+                    ->delete();
+            });
+
+            $this->audit('database.system_reset', [
+                'action' => 'reset_system',
+                'note'   => 'Full system reset via Danger Zone. Admin/superadmin accounts preserved.',
+            ], $request);
+
+            return redirect()->route('admin.settings')->with('status', 'System reset complete. All operational data has been permanently removed. Admin accounts and settings structure are preserved.');
+        } catch (\Throwable $e) {
+            Log::error('System reset failed.', ['exception' => $e::class, 'message' => $e->getMessage()]);
+
+            return back()->withErrors(['clear' => 'System reset failed. Check logs for details.'])->withFragment('danger');
+        }
+    }
+
+    public function clearAssessments(Request $request): RedirectResponse
+    {
+        if ($response = $this->guardAdmin($request)) {
+            return $response;
+        }
+
+        if (! Roles::canManageSettings($request->session()->get('examiner_role'))) {
+            return back()->withErrors(['permission' => 'Only a Super Admin can clear assessments.']);
+        }
+
+        if ($request->input('confirmation') !== 'DELETE') {
+            return back()->withErrors(['confirmation' => 'You must type "DELETE" exactly to confirm.'])->withFragment('danger');
+        }
+
+        try {
+            DB::transaction(function () {
+                DB::table('timetable_students')->delete();
+                DB::table('attendance_records')->delete();
+                DB::table('timetables')->delete();
+            });
+
+            $this->audit('database.assessments_cleared', ['action' => 'clear_assessments'], $request);
+
+            return back()->with('status', 'All assessments and attendance records have been permanently removed.');
+        } catch (\Throwable $e) {
+            Log::error('Assessments clear failed.', ['exception' => $e::class, 'message' => $e->getMessage()]);
+
+            return back()->withErrors(['clear' => 'Assessments clear failed. Check logs for details.']);
+        }
+    }
+
+    public function clearAttendanceRecords(Request $request): RedirectResponse
+    {
+        if ($response = $this->guardAdmin($request)) {
+            return $response;
+        }
+
+        if (! Roles::canManageSettings($request->session()->get('examiner_role'))) {
+            return back()->withErrors(['permission' => 'Only a Super Admin can clear attendance records.']);
+        }
+
+        if ($request->input('confirmation') !== 'DELETE') {
+            return back()->withErrors(['confirmation' => 'You must type "DELETE" exactly to confirm.'])->withFragment('danger');
+        }
+
+        try {
+            DB::table('attendance_records')->delete();
+
+            $this->audit('database.attendance_cleared', ['action' => 'clear_attendance'], $request);
+
+            return back()->with('status', 'All attendance records have been permanently removed.');
+        } catch (\Throwable $e) {
+            Log::error('Attendance clear failed.', ['exception' => $e::class, 'message' => $e->getMessage()]);
+
+            return back()->withErrors(['clear' => 'Attendance records clear failed. Check logs for details.']);
+        }
+    }
+
+    public function clearQrTokens(Request $request): RedirectResponse
+    {
+        if ($response = $this->guardAdmin($request)) {
+            return $response;
+        }
+
+        if (! Roles::canManageSettings($request->session()->get('examiner_role'))) {
+            return back()->withErrors(['permission' => 'Only a Super Admin can clear QR tokens.']);
+        }
+
+        if ($request->input('confirmation') !== 'DELETE') {
+            return back()->withErrors(['confirmation' => 'You must type "DELETE" exactly to confirm.'])->withFragment('danger');
+        }
+
+        try {
+            DB::transaction(function () {
+                DB::table('verification_logs')->delete();
+                DB::table('qr_tokens')->delete();
+            });
+
+            $this->audit('database.qr_tokens_cleared', ['action' => 'clear_qr_tokens'], $request);
+
+            return back()->with('status', 'All QR tokens and verification logs have been permanently removed.');
+        } catch (\Throwable $e) {
+            Log::error('QR tokens clear failed.', ['exception' => $e::class, 'message' => $e->getMessage()]);
+
+            return back()->withErrors(['clear' => 'QR tokens clear failed. Check logs for details.']);
+        }
+    }
+
+    public function clearPaymentRecords(Request $request): RedirectResponse
+    {
+        if ($response = $this->guardAdmin($request)) {
+            return $response;
+        }
+
+        if (! Roles::canManageSettings($request->session()->get('examiner_role'))) {
+            return back()->withErrors(['permission' => 'Only a Super Admin can clear payment records.']);
+        }
+
+        if ($request->input('confirmation') !== 'DELETE') {
+            return back()->withErrors(['confirmation' => 'You must type "DELETE" exactly to confirm.'])->withFragment('danger');
+        }
+
+        try {
+            DB::table('payment_records')->delete();
+
+            $this->audit('database.payments_cleared', ['action' => 'clear_payments'], $request);
+
+            return back()->with('status', 'All payment records have been permanently removed.');
+        } catch (\Throwable $e) {
+            Log::error('Payment records clear failed.', ['exception' => $e::class, 'message' => $e->getMessage()]);
+
+            return back()->withErrors(['clear' => 'Payment records clear failed. Check logs for details.']);
+        }
+    }
+
+    public function clearVerificationLogs(Request $request): RedirectResponse
+    {
+        if ($response = $this->guardAdmin($request)) {
+            return $response;
+        }
+
+        if (! Roles::canManageSettings($request->session()->get('examiner_role'))) {
+            return back()->withErrors(['permission' => 'Only a Super Admin can clear verification logs.']);
+        }
+
+        if ($request->input('confirmation') !== 'DELETE') {
+            return back()->withErrors(['confirmation' => 'You must type "DELETE" exactly to confirm.'])->withFragment('danger');
+        }
+
+        try {
+            DB::table('verification_logs')->delete();
+
+            $this->audit('database.verification_logs_cleared', ['action' => 'clear_verification_logs'], $request);
+
+            return back()->with('status', 'All verification logs have been permanently removed.');
+        } catch (\Throwable $e) {
+            Log::error('Verification logs clear failed.', ['exception' => $e::class, 'message' => $e->getMessage()]);
+
+            return back()->withErrors(['clear' => 'Verification logs clear failed. Check logs for details.']);
+        }
+    }
+
+    public function clearAuditLogs(Request $request): RedirectResponse
+    {
+        if ($response = $this->guardAdmin($request)) {
+            return $response;
+        }
+
+        if (! Roles::canManageSettings($request->session()->get('examiner_role'))) {
+            return back()->withErrors(['permission' => 'Only a Super Admin can clear audit logs.']);
+        }
+
+        if ($request->input('confirmation') !== 'DELETE') {
+            return back()->withErrors(['confirmation' => 'You must type "DELETE" exactly to confirm.'])->withFragment('danger');
+        }
+
+        try {
+            DB::table('audit_log')->whereNotNull('actor_id')->delete();
+
+            $this->audit('database.audit_logs_cleared', ['action' => 'clear_audit_logs'], $request);
+
+            return back()->with('status', 'Audit logs have been permanently cleared. System-level entries are preserved.');
+        } catch (\Throwable $e) {
+            Log::error('Audit logs clear failed.', ['exception' => $e::class, 'message' => $e->getMessage()]);
+
+            return back()->withErrors(['clear' => 'Audit logs clear failed. Check logs for details.']);
+        }
+    }
+
+    public function resetBranding(Request $request): RedirectResponse
+    {
+        if ($response = $this->guardAdmin($request)) {
+            return $response;
+        }
+
+        if (! Roles::canManageSettings($request->session()->get('examiner_role'))) {
+            return back()->withErrors(['permission' => 'Only a Super Admin can reset branding.']);
+        }
+
+        if ($request->input('confirmation') !== 'DELETE') {
+            return back()->withErrors(['confirmation' => 'You must type "DELETE" exactly to confirm.'])->withFragment('danger');
+        }
+
+        try {
+            $previousLogo = \App\Support\Branding::logoPath();
+
+            DB::table('cernix_settings')
+                ->whereIn('key', ['institution_name', 'system_name', 'branding_logo_path', 'branding_logo_data'])
+                ->delete();
+
+            if ($previousLogo) {
+                \Illuminate\Support\Facades\Storage::disk('public')->delete($previousLogo);
+            }
+
+            $this->audit('settings.branding_reset', ['action' => 'reset_branding'], $request);
+
+            return back()->with('status', 'Branding has been reset to defaults.');
+        } catch (\Throwable $e) {
+            Log::error('Branding reset failed.', ['exception' => $e::class, 'message' => $e->getMessage()]);
+
+            return back()->withErrors(['clear' => 'Branding reset failed. Check logs for details.']);
+        }
+    }
+
+    public function clearStudentRecords(Request $request): RedirectResponse
+    {
+        if ($response = $this->guardAdmin($request)) {
+            return $response;
+        }
+
+        if (! Roles::canManageSettings($request->session()->get('examiner_role'))) {
+            return back()->withErrors(['permission' => 'Only a Super Admin can clear student records.']);
+        }
+
+        if ($request->input('confirmation') !== 'DELETE') {
+            return back()->withErrors(['confirmation' => 'You must type "DELETE" exactly to confirm.'])->withFragment('danger');
+        }
+
+        try {
+            $matricNumbers = DB::table('students')->pluck('matric_no');
+
+            DB::table('attendance_records')->whereIn('matric_no', $matricNumbers)->delete();
+            DB::table('verification_logs')
+                ->whereIn('token_id', DB::table('qr_tokens')->whereIn('student_id', $matricNumbers)->pluck('token_id'))
+                ->delete();
+            DB::table('qr_tokens')->whereIn('student_id', $matricNumbers)->delete();
+            DB::table('payment_records')->whereIn('student_id', $matricNumbers)->delete();
+            DB::table('timetable_students')->whereIn('matric_no', $matricNumbers)->delete();
+            DB::table('admin_notes')->whereIn('entity_id', $matricNumbers)->where('entity_type', 'student')->delete();
+            DB::table('students')->delete();
+
+            $this->audit('settings.students_cleared', ['count' => $matricNumbers->count()], $request);
+
+            return back()->with('status', 'All student records have been cleared.');
+        } catch (\Throwable $e) {
+            Log::error('Clear student records failed.', ['exception' => $e::class, 'message' => $e->getMessage()]);
+
+            return back()->withErrors(['clear' => 'Failed to clear student records. Check logs for details.']);
+        }
+    }
+
+    public function clearExaminerAccounts(Request $request): RedirectResponse
+    {
+        if ($response = $this->guardAdmin($request)) {
+            return $response;
+        }
+
+        if (! Roles::canManageSettings($request->session()->get('examiner_role'))) {
+            return back()->withErrors(['permission' => 'Only a Super Admin can clear examiner accounts.']);
+        }
+
+        if ($request->input('confirmation') !== 'DELETE') {
+            return back()->withErrors(['confirmation' => 'You must type "DELETE" exactly to confirm.'])->withFragment('danger');
+        }
+
+        try {
+            $examinerIds = DB::table('examiners')
+                ->where('role', 'examiner')
+                ->pluck('examiner_id');
+
+            DB::table('verification_logs')->whereIn('examiner_id', $examinerIds)->delete();
+            DB::table('examiners')->whereIn('examiner_id', $examinerIds)->delete();
+
+            $this->audit('settings.examiners_cleared', ['count' => $examinerIds->count()], $request);
+
+            return back()->with('status', 'All examiner accounts have been cleared. Admin accounts are unaffected.');
+        } catch (\Throwable $e) {
+            Log::error('Clear examiner accounts failed.', ['exception' => $e::class, 'message' => $e->getMessage()]);
+
+            return back()->withErrors(['clear' => 'Failed to clear examiner accounts. Check logs for details.']);
+        }
     }
 
     public function noteStore(Request $request): RedirectResponse
@@ -1214,10 +2300,16 @@ class AdminWebController extends Controller
     {
         $activeSession = DB::table('exam_sessions')->where('is_active', true)->first();
         $today = now()->toDateString();
+        $isLive = \App\Support\SystemMode::isLive();
+        $demoMatrics = $isLive ? \App\Support\SystemMode::demoMatricNumbers() : collect();
 
         $scanCounts = DB::table('verification_logs')
-            ->select('decision', DB::raw('COUNT(*) as aggregate'))
-            ->groupBy('decision')
+            ->when($isLive && $demoMatrics->isNotEmpty(), function ($q) use ($demoMatrics) {
+                $q->join('qr_tokens', 'verification_logs.token_id', '=', 'qr_tokens.token_id')
+                  ->whereNotIn('qr_tokens.student_id', $demoMatrics);
+            })
+            ->select('verification_logs.decision', DB::raw('COUNT(*) as aggregate'))
+            ->groupBy('verification_logs.decision')
             ->pluck('aggregate', 'decision');
 
         $todaysExams = DB::table('timetables')
@@ -1243,9 +2335,31 @@ class AdminWebController extends Controller
             ->get();
 
         $metrics = [
-            'students' => $this->safeCount('students'),
-            'payments_verified' => $this->safeCount('payment_records'),
-            'qr_issued' => $this->safeCount('qr_tokens'),
+            'official_students' => $this->safeCount('official_students'),
+            'active_official_students' => Schema::hasTable('official_students') ? DB::table('official_students')->where('status', 'active')->count() : 0,
+            'registry_imports' => $this->safeCount('student_registry_imports'),
+            'pending_photo_approvals' => Schema::hasTable('students') && Schema::hasColumn('students', 'photo_status')
+                ? DB::table('students')
+                    ->where('photo_status', 'pending_admin_approval')
+                    ->when($isLive && $demoMatrics->isNotEmpty(), fn ($q) => $q->whereNotIn('matric_no', $demoMatrics))
+                    ->count()
+                : 0,
+            'students' => Schema::hasTable('students')
+                ? DB::table('students')
+                    ->when($isLive && $demoMatrics->isNotEmpty(), fn ($q) => $q->whereNotIn('matric_no', $demoMatrics))
+                    ->count()
+                : 0,
+            'payments_verified' => Schema::hasTable('payment_records')
+                ? DB::table('payment_records')
+                    ->when($isLive, fn ($q) => $q->where('rrr_number', 'not like', 'TEST-%'))
+                    ->when($isLive && $demoMatrics->isNotEmpty(), fn ($q) => $q->whereNotIn('student_id', $demoMatrics))
+                    ->count()
+                : 0,
+            'qr_issued' => Schema::hasTable('qr_tokens')
+                ? DB::table('qr_tokens')
+                    ->when($isLive && $demoMatrics->isNotEmpty(), fn ($q) => $q->whereNotIn('student_id', $demoMatrics))
+                    ->count()
+                : 0,
             'total_scans' => (int) $scanCounts->sum(),
             'approved' => (int) ($scanCounts['APPROVED'] ?? 0),
             'rejected' => (int) ($scanCounts['REJECTED'] ?? 0),
@@ -1255,6 +2369,7 @@ class AdminWebController extends Controller
             'examiner_users' => Schema::hasTable('examiners') ? DB::table('examiners')->where('role', 'examiner')->count() : 0,
             'admin_users' => Schema::hasTable('examiners') ? DB::table('examiners')->whereIn('role', ['admin', 'super_admin'])->count() : 0,
             'departments' => $this->safeCount('departments'),
+            'audit_events' => $this->safeCount('audit_log'),
             'pending_course_passes' => $activeSession && Schema::hasColumn('qr_tokens', 'timetable_id')
                 ? DB::table('students')
                     ->join('timetables', function ($join) {
@@ -1293,10 +2408,10 @@ class AdminWebController extends Controller
 
         $readiness = collect([
             ['label' => 'Active session set', 'ok' => (bool) $activeSession],
-            ['label' => 'Students registered', 'ok' => $metrics['students'] > 0],
-            ['label' => 'Payments verified', 'ok' => $metrics['payments_verified'] > 0],
+            ['label' => 'Official registry imported', 'ok' => $metrics['official_students'] > 0],
+            ['label' => 'Photo approval queue available', 'ok' => Schema::hasTable('students') && Schema::hasColumn('students', 'photo_status')],
+            ['label' => 'Exam timetable available', 'ok' => $metrics['today_exams'] > 0 || $this->safeCount('timetables') > 0],
             ['label' => 'Exam passes issued', 'ok' => $metrics['qr_issued'] > 0],
-            ['label' => 'Today timetable available', 'ok' => $metrics['today_exams'] > 0],
             ['label' => 'Examiners configured', 'ok' => $metrics['examiners'] > 0],
             ['label' => 'Audit logging active', 'ok' => $this->safeCount('audit_log') > 0],
             ['label' => 'Scanner verification active', 'ok' => $metrics['total_scans'] > 0],
@@ -1324,7 +2439,42 @@ class AdminWebController extends Controller
 
         $intelligenceReport = app(RiskIntelligenceService::class)->dashboardSummary();
 
-        return compact('activeSession', 'metrics', 'riskMetrics', 'todaysExams', 'recentLogs', 'recentActivity', 'readiness', 'alerts', 'permissions', 'currentRole', 'intelligenceReport');
+        $liveSessions = collect();
+        if (Schema::hasTable('examiner_sessions')) {
+            $liveSessions = DB::table('examiner_sessions')
+                ->join('examiners', 'examiner_sessions.examiner_id', '=', 'examiners.examiner_id')
+                ->join('timetables', 'examiner_sessions.timetable_id', '=', 'timetables.id')
+                ->leftJoin('departments', 'timetables.department_id', '=', 'departments.dept_id')
+                ->whereNull('examiner_sessions.ended_at')
+                ->select(
+                    'examiner_sessions.id',
+                    'examiner_sessions.examiner_id',
+                    'examiner_sessions.timetable_id',
+                    'examiner_sessions.started_at',
+                    'examiners.full_name as examiner_name',
+                    'timetables.course_code',
+                    'timetables.course_title',
+                    'timetables.venue',
+                    'timetables.assessment_type',
+                    'timetables.exam_session_id as session_id',
+                    'departments.dept_name',
+                )
+                ->orderBy('examiner_sessions.started_at')
+                ->get()
+                ->map(function ($row) {
+                    $checkedIn = Schema::hasTable('attendance_records')
+                        ? DB::table('attendance_records')
+                            ->where('timetable_id', $row->timetable_id)
+                            ->where('session_id', $row->session_id)
+                            ->count()
+                        : 0;
+                    $row->checked_in_count = $checkedIn;
+                    $row->elapsed_minutes  = (int) round(\Carbon\Carbon::parse($row->started_at)->diffInMinutes(now()));
+                    return $row;
+                });
+        }
+
+        return compact('activeSession', 'metrics', 'riskMetrics', 'todaysExams', 'recentLogs', 'recentActivity', 'readiness', 'alerts', 'permissions', 'currentRole', 'intelligenceReport', 'liveSessions');
     }
 
     private function verificationLogQuery(Request $request)
@@ -1480,7 +2630,11 @@ class AdminWebController extends Controller
 
     private function validateTimetable(Request $request): array
     {
-        return $request->validate([
+        $hasExaminerCol = Schema::hasColumn('timetables', 'examiner_id');
+        $examinerRules  = $hasExaminerCol
+            ? ['required', 'integer', 'exists:examiners,examiner_id']
+            : ['sometimes', 'nullable'];
+        $data = $request->validate([
             'exam_session_id' => 'required|integer|exists:exam_sessions,session_id',
             'department_id' => 'required|integer|exists:departments,dept_id',
             'level' => 'required|string|in:100,200,300,400,500',
@@ -1490,8 +2644,36 @@ class AdminWebController extends Controller
             'start_time' => 'required',
             'end_time' => 'nullable|after:start_time',
             'venue' => 'required|string|max:255',
+            'assessment_type' => ['nullable', Rule::in(['exam', 'test', 'makeup'])],
             'status' => 'required|string|in:scheduled,active,completed,cancelled',
+            'payment_required' => ['nullable', Rule::in(['inherit', '1', '0'])],
+            'examiner_id' => $examinerRules,
         ]);
+
+        if (Schema::hasColumn('timetables', 'assessment_type')) {
+            $data['assessment_type'] ??= 'exam';
+        } else {
+            unset($data['assessment_type']);
+        }
+
+        if (! Schema::hasColumn('timetables', 'examiner_id')) {
+            unset($data['examiner_id']);
+        }
+
+        if (array_key_exists('payment_required', $data)) {
+            $paymentRequired = $data['payment_required'];
+            unset($data['payment_required']);
+
+            if (Schema::hasColumn('timetables', 'payment_required')) {
+                $data['payment_required'] = match ($paymentRequired) {
+                    '1' => true,
+                    '0' => false,
+                    default => null,
+                };
+            }
+        }
+
+        return $data;
     }
 
     private function timetableKey(): string
@@ -1591,6 +2773,13 @@ class AdminWebController extends Controller
         } catch (\Throwable) {
             return $default;
         }
+    }
+
+    private function settingBoolean(string $key, bool $default): bool
+    {
+        $value = $this->setting($key, $default ? 'true' : 'false');
+
+        return in_array(strtolower((string) $value), ['1', 'true', 'yes', 'on'], true);
     }
 
     private function setSetting(string $key, string $value): void
@@ -1709,23 +2898,34 @@ class AdminWebController extends Controller
         $before = [
             'photo_status' => $student->photo_status ?? 'pending_photo_upload',
             'photo_rejection_reason' => $student->photo_rejection_reason ?? null,
+            'photo_flag_reason' => $student->photo_flag_reason ?? null,
         ];
 
         $after = [
             'photo_status' => $status,
-            'photo_rejection_reason' => $status === 'approved' ? null : $reason,
+            'photo_rejection_reason' => $status === 'rejected' ? $reason : null,
+            'photo_flag_reason' => $status === 'flagged' ? $reason : null,
         ];
+
+        $updates = $this->studentColumnUpdates([
+            'photo_status' => $status,
+            'photo_rejection_reason' => $status === 'rejected' ? $reason : null,
+            'photo_flag_reason' => $status === 'flagged' ? $reason : null,
+            'photo_approved_by' => $status === 'approved' ? (string) $request->session()->get('examiner_id', 'admin-web') : null,
+            'photo_approved_at' => $status === 'approved' ? now() : null,
+            'photo_reviewed_by' => (string) $request->session()->get('examiner_id', 'admin-web'),
+            'photo_reviewed_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        if (! isset($updates['photo_status'])) {
+            return back()->withErrors(['photo' => 'Photo approval storage is not ready. Run the pending migrations first.']);
+        }
 
         DB::table('students')
             ->where('matric_no', $data['matric_no'])
             ->where('session_id', $data['session_id'])
-            ->update([
-                'photo_status' => $status,
-                'photo_rejection_reason' => $after['photo_rejection_reason'],
-                'photo_reviewed_by' => (string) $request->session()->get('examiner_id', 'admin-web'),
-                'photo_reviewed_at' => now(),
-                'updated_at' => now(),
-            ]);
+            ->update($updates);
 
         app(AuditService::class)->logAction(
             (string) $request->session()->get('examiner_id', 'admin-web'),
@@ -1789,8 +2989,261 @@ class AdminWebController extends Controller
         return Schema::hasTable($table) ? DB::table($table)->count() : 0;
     }
 
+    private function emptyPaginator(Request $request, int $perPage): LengthAwarePaginator
+    {
+        return new LengthAwarePaginator(
+            collect(),
+            0,
+            $perPage,
+            LengthAwarePaginator::resolveCurrentPage(),
+            [
+                'path' => $request->url(),
+                'query' => $request->query(),
+            ]
+        );
+    }
+
+    private function studentColumnUpdates(array $updates): array
+    {
+        if (! Schema::hasTable('students')) {
+            return [];
+        }
+
+        $columns = Schema::getColumnListing('students');
+
+        return collect($updates)
+            ->filter(fn ($value, $column) => in_array($column, $columns, true))
+            ->all();
+    }
+
     private function shortToken(?string $token): string
     {
         return $token ? substr($token, 0, 8) . '...' . substr($token, -4) : 'Not available';
+    }
+
+    public function examSessions(Request $request)
+    {
+        if ($response = $this->guardAdmin($request)) {
+            return $response;
+        }
+
+        $sessions = Schema::hasTable('exam_sessions')
+            ? DB::table('exam_sessions')->orderByDesc('created_at')->get()
+            : collect();
+
+        return view('admin.exam-sessions.index', compact('sessions'));
+    }
+
+    public function attendance(Request $request)
+    {
+        if ($response = $this->guardAdmin($request)) {
+            return $response;
+        }
+
+        $sessions = Schema::hasTable('exam_sessions')
+            ? DB::table('exam_sessions')->orderByDesc('created_at')->get()
+            : collect();
+
+        $selectedSessionId = (int) ($request->query('session_id', 0)
+            ?: ($sessions->firstWhere('is_active', true)?->session_id
+                ?? $sessions->first()?->session_id
+                ?? 0));
+
+        $timetables = collect();
+        $attendanceRows = collect();
+        $selectedTimetableId = (int) $request->query('timetable_id', 0);
+
+        if ($selectedSessionId && Schema::hasTable('timetables')) {
+            $timetables = DB::table('timetables')
+                ->leftJoin('departments', 'timetables.department_id', '=', 'departments.dept_id')
+                ->where('timetables.exam_session_id', $selectedSessionId)
+                ->select('timetables.*', 'departments.dept_name')
+                ->orderBy('timetables.exam_date')
+                ->orderBy('timetables.start_time')
+                ->get();
+        }
+
+        if ($selectedTimetableId && Schema::hasTable('attendance_records')) {
+            $attendanceRows = DB::table('attendance_records')
+                ->join('students', 'attendance_records.matric_no', '=', 'students.matric_no')
+                ->leftJoin('examiners as entry_ex', 'attendance_records.entry_examiner_id', '=', 'entry_ex.examiner_id')
+                ->leftJoin('examiners as exit_ex', 'attendance_records.exit_examiner_id', '=', 'exit_ex.examiner_id')
+                ->where('attendance_records.timetable_id', $selectedTimetableId)
+                ->where('attendance_records.session_id', $selectedSessionId)
+                ->select(
+                    'attendance_records.*',
+                    'students.full_name',
+                    'entry_ex.full_name as entry_examiner_name',
+                    'exit_ex.full_name as exit_examiner_name',
+                )
+                ->orderBy('attendance_records.checked_in_at')
+                ->get();
+        } elseif ($selectedSessionId && Schema::hasTable('attendance_records')) {
+            $attendanceRows = DB::table('attendance_records')
+                ->join('students', 'attendance_records.matric_no', '=', 'students.matric_no')
+                ->leftJoin('timetables', 'attendance_records.timetable_id', '=', 'timetables.id')
+                ->leftJoin('departments', 'timetables.department_id', '=', 'departments.dept_id')
+                ->where('attendance_records.session_id', $selectedSessionId)
+                ->select(
+                    'attendance_records.*',
+                    'students.full_name',
+                    'timetables.course_code',
+                    'timetables.course_title',
+                    'timetables.exam_date',
+                    'timetables.start_time',
+                    'timetables.venue',
+                    'departments.dept_name',
+                )
+                ->orderBy('timetables.exam_date')
+                ->orderBy('attendance_records.checked_in_at')
+                ->get();
+        }
+
+        $summary = Schema::hasTable('attendance_records') && $selectedSessionId
+            ? [
+                'checked_in' => DB::table('attendance_records')->where('session_id', $selectedSessionId)->where('status', 'checked_in')->count(),
+                'submitted'  => DB::table('attendance_records')->where('session_id', $selectedSessionId)->where('status', 'submitted')->count(),
+                'flagged'    => DB::table('attendance_records')->where('session_id', $selectedSessionId)->where('status', 'flagged')->count(),
+                'total'      => DB::table('attendance_records')->where('session_id', $selectedSessionId)->count(),
+            ]
+            : ['checked_in' => 0, 'submitted' => 0, 'flagged' => 0, 'total' => 0];
+
+        return view('admin.attendance.index', compact(
+            'sessions',
+            'selectedSessionId',
+            'timetables',
+            'selectedTimetableId',
+            'attendanceRows',
+            'summary',
+        ));
+    }
+
+    public function liveSessions(Request $request)
+    {
+        if ($response = $this->guardAdmin($request)) {
+            return $response;
+        }
+
+        if (! Schema::hasTable('examiner_sessions')) {
+            return response()->json(['sessions' => []]);
+        }
+
+        $sessions = DB::table('examiner_sessions')
+            ->join('examiners', 'examiner_sessions.examiner_id', '=', 'examiners.examiner_id')
+            ->join('timetables', 'examiner_sessions.timetable_id', '=', 'timetables.id')
+            ->leftJoin('departments', 'timetables.department_id', '=', 'departments.dept_id')
+            ->whereNull('examiner_sessions.ended_at')
+            ->select(
+                'examiner_sessions.id',
+                'examiner_sessions.examiner_id',
+                'examiner_sessions.timetable_id',
+                'examiner_sessions.started_at',
+                'examiners.full_name as examiner_name',
+                'timetables.course_code',
+                'timetables.course_title',
+                'timetables.venue',
+                'timetables.assessment_type',
+                'timetables.start_time',
+                'timetables.exam_session_id as session_id',
+                'departments.dept_name',
+            )
+            ->orderBy('examiner_sessions.started_at')
+            ->get()
+            ->map(function ($row) {
+                $checkedIn = Schema::hasTable('attendance_records')
+                    ? DB::table('attendance_records')
+                        ->where('timetable_id', $row->timetable_id)
+                        ->where('session_id', $row->session_id)
+                        ->count()
+                    : 0;
+                $row->checked_in_count = $checkedIn;
+                $row->elapsed_minutes  = (int) round(\Carbon\Carbon::parse($row->started_at)->diffInMinutes(now()));
+                return $row;
+            });
+
+        if ($request->expectsJson()) {
+            return response()->json(['sessions' => $sessions]);
+        }
+
+        return view('admin.live-sessions', ['liveSessions' => $sessions]);
+    }
+
+    public function sessionAudits(Request $request)
+    {
+        if ($response = $this->guardAdmin($request)) {
+            return $response;
+        }
+
+        if (! Schema::hasTable('examiner_sessions')) {
+            return view('admin.session-audits.index', ['audits' => collect()]);
+        }
+
+        $audits = DB::table('examiner_sessions')
+            ->join('examiners', 'examiner_sessions.examiner_id', '=', 'examiners.examiner_id')
+            ->join('timetables', 'examiner_sessions.timetable_id', '=', 'timetables.id')
+            ->leftJoin('departments', 'timetables.department_id', '=', 'departments.dept_id')
+            ->whereNotNull('examiner_sessions.ended_at')
+            ->select(
+                'examiner_sessions.*',
+                'examiners.full_name as examiner_name',
+                'timetables.course_code',
+                'timetables.course_title',
+                'timetables.venue',
+                'timetables.assessment_type',
+                'timetables.exam_date',
+                'timetables.start_time',
+                'departments.dept_name',
+            )
+            ->orderByDesc('examiner_sessions.ended_at')
+            ->limit(100)
+            ->get()
+            ->map(function ($row) {
+                $row->audit_summary = is_string($row->audit_summary)
+                    ? json_decode($row->audit_summary, true)
+                    : (array) $row->audit_summary;
+                return $row;
+            });
+
+        return view('admin.session-audits.index', compact('audits'));
+    }
+
+    public function sessionAuditShow(Request $request, int $id)
+    {
+        if ($response = $this->guardAdmin($request)) {
+            return $response;
+        }
+
+        abort_unless(Schema::hasTable('examiner_sessions'), 404);
+
+        $audit = DB::table('examiner_sessions')
+            ->join('examiners', 'examiner_sessions.examiner_id', '=', 'examiners.examiner_id')
+            ->join('timetables', 'examiner_sessions.timetable_id', '=', 'timetables.id')
+            ->leftJoin('departments', 'timetables.department_id', '=', 'departments.dept_id')
+            ->leftJoin('exam_sessions', 'timetables.exam_session_id', '=', 'exam_sessions.session_id')
+            ->where('examiner_sessions.id', $id)
+            ->select(
+                'examiner_sessions.*',
+                'examiners.full_name as examiner_name',
+                'timetables.course_code',
+                'timetables.course_title',
+                'timetables.venue',
+                'timetables.assessment_type',
+                'timetables.exam_date',
+                'timetables.start_time',
+                'timetables.end_time',
+                'timetables.level',
+                'departments.dept_name',
+                'exam_sessions.semester',
+                'exam_sessions.academic_year',
+            )
+            ->first();
+
+        abort_unless($audit, 404);
+
+        $audit->audit_summary = is_string($audit->audit_summary)
+            ? json_decode($audit->audit_summary, true)
+            : (array) $audit->audit_summary;
+
+        return view('admin.session-audits.show', compact('audit'));
     }
 }

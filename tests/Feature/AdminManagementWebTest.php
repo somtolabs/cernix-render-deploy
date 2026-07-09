@@ -86,29 +86,32 @@ class AdminManagementWebTest extends TestCase
             ->assertSee('View');
     }
 
-    public function test_examiner_management_only_lists_and_creates_examiner_accounts(): void
+    public function test_super_admin_staff_management_lists_and_creates_admin_like_accounts(): void
     {
         $super = DB::table('examiners')->where('username', 'superadmin')->first();
-        $username = 'focused_examiner_' . Str::lower(Str::random(6));
+        $username = 'focused_admin_' . Str::lower(Str::random(6));
+        $email = $username . '@example.test';
 
         $this->withSession($this->adminSession($super))
             ->get(route('admin.examiners'))
             ->assertOk()
-            ->assertSee('Examiner Management')
-            ->assertDontSee('admin1')
-            ->assertDontSee('superadmin')
-            ->assertDontSee('Super Admin Control');
+            ->assertSee('Staff Account Management')
+            ->assertSee('admin1')
+            ->assertSee('superadmin')
+            ->assertSee('Role Control');
 
         $this->withSession($this->adminSession($super))
             ->post(route('admin.examiners.store'), [
-                'full_name' => 'Focused Examiner',
+                'full_name' => 'Focused Admin',
                 'username' => $username,
+                'email' => $email,
                 'password' => 'strongpass123',
-                'role' => 'super_admin',
+                'role' => 'admin',
             ])
-            ->assertSessionHasErrors('role');
+            ->assertRedirect(route('admin.examiners'));
 
-        $this->assertDatabaseMissing('examiners', ['username' => $username]);
+        $this->assertDatabaseHas('examiners', ['username' => $username, 'role' => 'admin']);
+        $this->assertDatabaseHas('users', ['email' => $email, 'role' => 'ADMIN']);
     }
 
     public function test_student_list_and_view_show_clean_identity_without_qr_internals(): void
@@ -176,7 +179,7 @@ class AdminManagementWebTest extends TestCase
             ->assertDontSee('SQLSTATE');
     }
 
-    public function test_super_admin_can_oversee_course_qr_passes_but_admin_cannot(): void
+    public function test_admins_can_view_course_qr_passes_but_only_super_admin_can_revoke(): void
     {
         $super = DB::table('examiners')->where('username', 'superadmin')->first();
         $admin = DB::table('examiners')->where('username', 'admin1')->first();
@@ -193,7 +196,10 @@ class AdminManagementWebTest extends TestCase
 
         $this->withSession($this->adminSession($admin))
             ->get(route('admin.qr-tokens'))
-            ->assertForbidden();
+            ->assertOk()
+            ->assertSee('Course QR Passes')
+            ->assertSee($student['full_name'])
+            ->assertDontSee('Revoke');
     }
 
     public function test_admin_intelligence_page_does_not_show_developer_paths_or_commands(): void

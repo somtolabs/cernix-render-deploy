@@ -4,176 +4,327 @@
 
 @section('student-content')
 <style>
-    .course-pass-flow { display:grid; gap:24px; }
-    .course-pass-strip { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); border-block:1px solid var(--line); background:rgba(95,112,130,.045); }
-    .course-pass-strip div { padding:13px 14px; min-width:0; border-right:1px solid var(--line); border-bottom:1px solid var(--line); }
-    .course-pass-strip div:nth-child(2n) { border-right:0; }
-    .course-pass-strip span { display:block; color:var(--ink-3); font-size:9px; font-weight:900; letter-spacing:.09em; text-transform:uppercase; }
-    .course-pass-strip b { display:block; margin-top:5px; overflow-wrap:break-word; word-break:normal; }
-    .course-pass-notice { padding:14px 16px; border-left:3px solid var(--navy); background:rgba(95,112,130,.06); line-height:1.55; }
-    .course-pass-notice strong { display:block; margin-bottom:2px; }
-    .course-pass-notice.success { border-left-color:var(--emerald); background:rgba(85,117,101,.08); color:var(--emerald); }
-    .course-pass-notice.error { border-left-color:var(--red); background:rgba(138,91,91,.07); color:var(--red); }
-    .course-pass-panel { min-width:0; }
-    .course-pass-head { padding:0 0 13px; border-bottom:1px solid var(--line); }
-    .course-pass-head h2 { margin:0; font-size:18px; }
-    .course-pass-head p { margin:5px 0 0; color:var(--ink-3); line-height:1.5; }
-    .course-pass-body { padding:4px 0; }
-    .course-pass-row { display:grid; gap:12px; padding:16px 0; border-bottom:1px solid var(--line); }
-    .course-pass-row:last-child { border-bottom:0; }
-    .course-pass-copy { min-width:0; }
-    .course-pass-copy h3 { margin:0; font-size:15px; overflow-wrap:break-word; word-break:normal; }
-    .course-pass-copy p { margin:5px 0 0; color:var(--ink-3); font-size:12px; line-height:1.5; }
-    .course-pass-actions { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
-    .course-pass-form { display:grid; gap:18px; padding:18px 0 0; }
-    .course-pass-field label { display:block; margin-bottom:7px; font-size:12px; font-weight:900; }
-    .course-pass-field input { width:100%; min-height:48px; border:1px solid var(--line-2); border-radius:13px; padding:10px 12px; background:#fff; color:var(--ink); }
-    .course-choice-list { display:grid; gap:9px; }
-    .course-choice { display:grid; grid-template-columns:auto minmax(0,1fr); gap:11px; align-items:start; padding:13px 4px; border-bottom:1px solid var(--line); }
-    .course-choice:has(input:checked) { box-shadow:inset 3px 0 var(--emerald); background:rgba(85,117,101,.055); padding-inline:13px; }
-    .course-choice input { margin-top:4px; }
-    .course-choice b, .course-choice span { display:block; }
-    .course-choice span { margin-top:4px; color:var(--ink-3); font-size:12px; line-height:1.45; }
-    .course-choice small { display:inline-flex; width:fit-content; margin-top:7px; padding:4px 8px; border-radius:999px; background:rgba(138,117,85,.1); color:var(--amber); font-size:10px; font-weight:900; }
-    @media (min-width:720px) {
-        .course-pass-strip { grid-template-columns:repeat(4,minmax(0,1fr)); }
-        .course-pass-strip div { border-bottom:0; }
-        .course-pass-strip div:nth-child(2n) { border-right:1px solid var(--line); }
-        .course-pass-strip div:last-child { border-right:0; }
-        .course-pass-row { grid-template-columns:minmax(0,1fr) auto; align-items:center; }
-        .course-pass-actions { justify-content:flex-end; }
+    /* ── layout shell ─────────────────────────────────────── */
+    .gp-flow        { display: grid; gap: 20px; }
+
+    /* ── status strip ─────────────────────────────────────── */
+    .gp-strip       { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); border-block: 1px solid var(--line); background: rgba(235,241,255,.18); }
+    .gp-strip-cell  { padding: 13px 14px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); min-width: 0; }
+    .gp-strip-cell:nth-child(2n) { border-right: 0; }
+    .gp-strip-label { display: block; color: var(--ink-4); font-size: 9px; font-weight: 900; letter-spacing: .11em; text-transform: uppercase; }
+    .gp-strip-value { display: block; margin-top: 5px; font-size: 13px; font-weight: 700; color: var(--ink); overflow-wrap: break-word; word-break: normal; }
+
+    /* ── notice banners ───────────────────────────────────── */
+    .gp-notice      { padding: 14px 16px; border-left: 3px solid var(--navy); background: rgba(51,71,95,.04); border-radius: 0 8px 8px 0; line-height: 1.55; }
+    .gp-notice strong { display: block; font-size: 13px; font-weight: 800; margin-bottom: 3px; color: var(--ink); }
+    .gp-notice p    { margin: 0; font-size: 13px; color: var(--ink-3); }
+    .gp-notice.success { border-left-color: var(--emerald); background: rgba(85,117,101,.05); }
+    .gp-notice.success strong { color: var(--emerald); }
+    .gp-notice.error   { border-left-color: var(--red);     background: rgba(138,91,91,.05); }
+    .gp-notice.error strong  { color: var(--red); }
+
+    /* ── course card list ─────────────────────────────────── */
+    .gp-course-list  { display: grid; gap: 12px; padding-top: 4px; }
+    .gp-course-card  {
+        display: grid;
+        gap: 12px;
+        padding: 18px 20px;
+        background: #fff;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        box-shadow: 0 2px 8px rgba(0,0,0,.06);
+        transition: box-shadow .15s;
     }
-    @media (max-width:520px) {
-        .course-pass-actions .btn, .course-pass-actions form, .course-pass-actions form .btn { width:100%; }
+    .gp-course-card:hover { box-shadow: 0 6px 20px rgba(0,0,0,.09); }
+    .gp-course-card-top  {
+        display: grid;
+        grid-template-columns: minmax(0,1fr) auto;
+        align-items: start;
+        gap: 10px 14px;
+    }
+    .gp-course-code  {
+        margin: 0;
+        font-size: clamp(16px, 4vw, 20px);
+        font-weight: 900;
+        color: var(--navy);
+        letter-spacing: -.03em;
+        line-height: 1;
+        overflow-wrap: break-word;
+    }
+    .gp-course-title { display: block; margin-top: 4px; font-size: 13px; color: var(--ink-2); line-height: 1.4; overflow-wrap: break-word; }
+    .gp-course-meta  { display: flex; flex-wrap: wrap; align-items: center; gap: 5px 10px; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); }
+    .gp-course-meta-item { font-size: 12px; color: var(--ink-3); }
+    .gp-meta-dot     { display: inline-block; width: 3px; height: 3px; border-radius: 50%; background: var(--line-2); margin: 0 2px; vertical-align: middle; }
+    .gp-course-actions { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+
+    /* ── radio-choice form ────────────────────────────────── */
+    .gp-panel        { min-width: 0; }
+    .gp-panel-head   { padding: 0 0 14px; border-bottom: 1px solid var(--line); }
+    .gp-panel-head h2 { margin: 0; font-size: 17px; font-weight: 800; color: var(--ink); letter-spacing: -.02em; }
+    .gp-panel-head p  { margin: 5px 0 0; font-size: 13px; color: var(--ink-3); line-height: 1.5; }
+    .gp-form         { display: grid; gap: 18px; padding-top: 18px; }
+    .gp-choice-list  { display: grid; gap: 0; }
+    .gp-choice       {
+        display: grid;
+        grid-template-columns: auto minmax(0,1fr);
+        gap: 12px;
+        align-items: start;
+        padding: 14px 4px;
+        border-bottom: 1px solid var(--line);
+        cursor: pointer;
+        transition: background .14s;
+    }
+    .gp-choice:last-child { border-bottom: 0; }
+    .gp-choice:has(input:checked) {
+        background: rgba(85,117,101,.04);
+        padding-inline: 12px;
+        box-shadow: inset 3px 0 0 var(--emerald);
+    }
+    .gp-choice input  { margin-top: 5px; cursor: pointer; }
+    .gp-choice-code   { display: block; font-size: 15px; font-weight: 800; color: var(--navy); letter-spacing: -.02em; line-height: 1; }
+    .gp-choice-title  { display: block; margin-top: 2px; font-size: 12px; color: var(--ink-2); line-height: 1.4; overflow-wrap: break-word; }
+    .gp-choice-detail { display: block; margin-top: 5px; font-size: 11px; color: var(--ink-3); line-height: 1.45; }
+    .gp-choice-badge  {
+        display: inline-flex; width: fit-content; margin-top: 6px;
+        padding: 3px 9px; border-radius: 999px;
+        background: rgba(138,117,85,.1); color: var(--amber);
+        font-size: 10px; font-weight: 800;
+    }
+    .gp-field-label { display: block; font-size: 12px; font-weight: 800; color: var(--ink-2); margin-bottom: 7px; }
+    .gp-input {
+        width: 100%; min-height: 48px;
+        border: 1.5px solid var(--line-2); border-radius: 12px;
+        padding: 11px 13px; background: var(--bg-2); color: var(--ink);
+        font-size: 15px; font-family: 'JetBrains Mono', monospace;
+        transition: border-color .15s, box-shadow .15s; outline: none;
+    }
+    .gp-input:focus { border-color: var(--blue); box-shadow: 0 0 0 3px rgba(96,117,142,.12); background: #fff; }
+    .gp-hint { margin-top: 6px; font-size: 12px; color: var(--ink-3); line-height: 1.5; }
+    .gp-field-error { margin-top: 6px; font-size: 12px; color: var(--red); }
+    .gp-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+
+    /* ── loading state ────────────────────────────────────── */
+    .gp-submit-btn[data-loading] { opacity: .7; pointer-events: none; }
+
+    /* ── responsive ───────────────────────────────────────── */
+    @media (min-width: 720px) {
+        .gp-strip { grid-template-columns: repeat(5, minmax(0,1fr)); }
+        .gp-strip-cell { border-bottom: 0; }
+        .gp-strip-cell:nth-child(2n) { border-right: 1px solid var(--line); }
+        .gp-strip-cell:last-child { border-right: 0; }
+        .gp-course-actions { flex-direction: row; align-items: center; }
+    }
+    @media (max-width: 500px) {
+        .gp-course-card  { grid-template-columns: minmax(0,1fr); }
+        .gp-course-actions { flex-direction: row; }
+        .gp-actions .btn, .gp-actions form, .gp-actions form .btn { width: 100%; }
     }
 </style>
 
 @php
     $unusedCount = $coursePasses->where('qr_status', 'Generated / Unused')->count();
-    $usedCount = $coursePasses->where('qr_status', 'Used')->count();
+    $usedCount   = $coursePasses->where('qr_status', 'Used')->count();
+    $anyPaymentRequired = $coursePasses->contains(fn ($exam) => (bool) ($exam->payment_required_effective ?? true));
     $photoStatus = $student->photo_status ?? 'pending_photo_upload';
     $profileApproved = $photoStatus === 'approved';
     $profileLabel = match($photoStatus) {
         'pending_admin_approval' => 'Pending Approval',
-        'approved' => 'Approved',
-        'rejected' => 'Rejected',
-        'flagged' => 'Flagged',
-        default => 'Pending Photo Upload',
+        'approved'               => 'Approved',
+        'rejected'               => 'Rejected',
+        'flagged'                => 'Flagged',
+        default                  => 'Pending Photo Upload',
     };
     $profileMessage = match($photoStatus) {
         'approved' => null,
         'rejected' => $student->photo_rejection_reason
             ? 'Your profile photo was rejected. Reason: ' . $student->photo_rejection_reason
             : 'Your profile photo was rejected. Upload a new passport photo from your profile page.',
-        'flagged' => 'Your profile is flagged for manual review before you can generate an exam pass.',
-        default => 'your profile is awaiting admin approval before you can generate an exam pass.',
+        'flagged'  => 'Your profile is flagged for manual review before you can generate an exam pass.',
+        default    => 'Your profile is awaiting admin approval before you can generate an exam pass.',
     };
 @endphp
 
 <div class="cx-page-head">
-    <div class="cx-eyebrow">Payment and Course Access</div>
+    <div class="cx-eyebrow">Exam Access</div>
     <h1>Generate QR Pass</h1>
-    <p>{{ $payment ? 'Payment verified for this session. Select a course to generate or view its QR pass.' : 'Enter your Remita RRR once for this session, then select a course to generate its QR pass.' }}</p>
+    <p>{{ $payment
+        ? 'Payment verified. Select any course below to generate or view its QR pass — no additional reference needed.'
+        : ($anyPaymentRequired
+            ? 'Enter your Remita RRR for payment-required exams. Payment-free exams can generate a QR pass without an RRR.'
+            : 'Payment is not required for the assigned exams. Select a course to generate its QR pass.') }}</p>
 </div>
 
-<div class="course-pass-flow">
-    <section class="course-pass-strip" aria-label="Course QR pass summary">
-        <div><span>Registration</span><b>Complete</b></div>
-        <div><span>Profile</span><b>{{ $profileLabel }}</b></div>
-        <div><span>Session Payment</span><b>{{ $payment ? 'Verified' : 'Pending' }}</b></div>
-        <div><span>Assigned Courses</span><b>{{ $coursePasses->count() }}</b></div>
-        <div><span>Course QR Passes</span><b>{{ $unusedCount + $usedCount }} generated</b></div>
-    </section>
+<div class="gp-flow">
 
+    {{-- Status strip --}}
+    <div class="gp-strip" role="status" aria-label="Access summary">
+        <div class="gp-strip-cell">
+            <span class="gp-strip-label">Registration</span>
+            <span class="gp-strip-value">Complete</span>
+        </div>
+        <div class="gp-strip-cell">
+            <span class="gp-strip-label">Profile</span>
+            <span class="gp-strip-value">{{ $profileLabel }}</span>
+        </div>
+        <div class="gp-strip-cell">
+            <span class="gp-strip-label">Payment</span>
+            <span class="gp-strip-value">{{ $anyPaymentRequired ? ($payment ? 'Verified' : 'Pending') : 'Not required' }}</span>
+        </div>
+        <div class="gp-strip-cell">
+            <span class="gp-strip-label">Courses</span>
+            <span class="gp-strip-value">{{ $coursePasses->count() }} assigned</span>
+        </div>
+        <div class="gp-strip-cell">
+            <span class="gp-strip-label">Passes Ready</span>
+            <span class="gp-strip-value">{{ $unusedCount + $usedCount }} of {{ $coursePasses->count() }}</span>
+        </div>
+    </div>
+
+    {{-- Error / profile / success notice --}}
     @if(session('exam_pass_error'))
-        <div class="course-pass-notice error" role="alert"><strong>Course QR not generated</strong>{{ session('exam_pass_error') }}</div>
+        <div class="gp-notice error" role="alert">
+            <strong>Pass not generated</strong>
+            <p>{{ session('exam_pass_error') }}</p>
+        </div>
     @elseif(! $profileApproved)
-        <div class="course-pass-notice error" role="alert">
-            <strong>Profile approval required</strong>{{ $profileMessage }}
+        <div class="gp-notice error" role="alert">
+            <strong>Profile approval required</strong>
+            <p>{{ $profileMessage }} <a href="{{ route('student.profile') }}" style="color:var(--red);font-weight:700">Go to your profile</a> to review or resubmit your documents.</p>
         </div>
     @elseif(session('status'))
-        <div class="course-pass-notice success" role="status">
+        <div class="gp-notice success" role="status">
             <strong>{{ session('status') }}</strong>
-            Select a course below to generate or view its QR pass.
+            <p>Your course list is updated below.</p>
         </div>
     @endif
 
     @if($coursePasses->isEmpty())
-        <div class="cx-empty"><strong>No exam timetable assigned yet</strong><br>Your department and level do not have an available paper for this exam session.</div>
+        <div class="cx-empty">
+            <strong style="display:block;margin-bottom:4px;color:var(--ink-2)">No exam timetable assigned yet</strong>
+            Your department and level do not have an available paper for this exam session.
+        </div>
+
     @elseif(! $profileApproved)
-        <div class="cx-empty"><strong>QR generation locked</strong><br><a href="{{ route('student.profile') }}">Open your profile</a> to review or resubmit your passport photo.</div>
+        <div class="cx-empty">
+            <strong style="display:block;margin-bottom:4px;color:var(--ink-2)">QR generation locked</strong>
+            Your profile must be approved before you can generate a pass. <a href="{{ route('student.profile') }}" style="color:var(--navy);font-weight:700">Open your profile</a> to check status or resubmit photos.
+        </div>
+
     @elseif(! $payment)
-        <section class="course-pass-panel">
-            <div class="course-pass-head">
-                <h2>Verify session payment</h2>
-                <p>Select a course and verify the RRR once. The verified session payment then unlocks QR generation for every other assigned course.</p>
+        {{-- Payment still needed: show radio + RRR form --}}
+        <section class="gp-panel">
+            <div class="gp-panel-head">
+                <h2>Select a course and confirm payment</h2>
+                <p>Choose the course you want to generate a QR pass for. Your RRR is only required for payment-required courses, and it will be verified once for the whole session.</p>
             </div>
-            <form method="POST" action="{{ route('student.generate-exam-pass.store') }}" class="course-pass-form">
+            <form method="POST" action="{{ route('student.generate-exam-pass.store') }}" class="gp-form" id="gpForm">
                 @csrf
-                <div class="course-pass-field">
-                    <label>Select a course</label>
-                    <div class="course-choice-list">
+                <div>
+                    <span class="gp-field-label">Assigned Course</span>
+                    <div class="gp-choice-list">
                         @foreach($coursePasses->where('status', '!=', 'cancelled')->where('qr_status', 'Not Generated') as $exam)
-                            <label class="course-choice">
-                                <input type="radio" name="timetable_id" value="{{ $exam->id }}" @checked((string) old('timetable_id', $nextExam?->id) === (string) $exam->id) required>
-                                <span>
-                                    <b>{{ $exam->course_code }} · {{ $exam->course_title ?: 'Course title not assigned yet' }}</b>
-                                    <span>{{ \Illuminate\Support\Carbon::parse($exam->exam_date)->format('D, d M Y') }} · {{ substr($exam->start_time, 0, 5) }}{{ $exam->end_time ? ' - ' . substr($exam->end_time, 0, 5) : '' }} · {{ $exam->venue ?: 'Hall not assigned yet' }}</span>
-                                    <small>QR not generated</small>
-                                </span>
+                            <label class="gp-choice">
+                                <input type="radio" name="timetable_id" value="{{ $exam->id }}"
+                                    @checked((string) old('timetable_id', $nextExam?->id) === (string) $exam->id) required>
+                                <div>
+                                    <span class="gp-choice-code">{{ $exam->course_code }}</span>
+                                    <span class="gp-choice-title">{{ $exam->course_title ?: 'Course title not assigned yet' }}</span>
+                                    <span class="gp-choice-detail">{{ \Illuminate\Support\Carbon::parse($exam->exam_date)->format('D, d M Y') }} · {{ substr($exam->start_time, 0, 5) }}{{ $exam->end_time ? ' – ' . substr($exam->end_time, 0, 5) : '' }} · {{ $exam->venue ?: 'Hall not assigned yet' }}</span>
+                                    <span class="gp-choice-badge">{{ $exam->payment_label ?? 'Payment required' }} · QR not generated</span>
+                                </div>
                             </label>
                         @endforeach
                     </div>
-                    @error('timetable_id')<div class="cx-muted" style="margin-top:7px;color:var(--red)">{{ $message }}</div>@enderror
+                    @error('timetable_id')
+                        <p class="gp-field-error">{{ $message }}</p>
+                    @enderror
                 </div>
-                <div class="course-pass-field">
-                    <label for="rrr_number">Remita RRR / Payment Reference</label>
-                    <input id="rrr_number" name="rrr_number" type="text" autocomplete="off" placeholder="{{ \App\Support\DepartmentFees::isDemoMode() ? 'TEST-DEMO' : 'Enter your payment reference' }}" required>
-                    <p class="cx-muted">The reference is verified once for this exam session. It is not charged or recorded per course.</p>
-                    @if(! session('exam_pass_error')) @error('rrr_number')<div style="color:var(--red);font-size:13px">{{ $message }}</div>@enderror @endif
+
+                <div>
+                    <label for="rrr_number" class="gp-field-label">Remita RRR / Payment Reference</label>
+                    <input id="rrr_number" name="rrr_number" type="text" autocomplete="off"
+                        class="gp-input"
+                        placeholder="{{ \App\Support\DepartmentFees::isDemoMode() ? 'TEST-DEMO' : 'e.g. 280001234567' }}"
+                        value="{{ old('rrr_number') }}">
+                    <p class="gp-hint">Leave blank if the selected course is marked payment not required. Your RRR is verified once and covers all courses for this session.</p>
+                    @if(! session('exam_pass_error'))
+                        @error('rrr_number')<p class="gp-field-error">{{ $message }}</p>@enderror
+                    @endif
                 </div>
-                <div class="course-pass-actions">
+
+                <div class="gp-actions">
                     <a class="btn btn-ghost" href="{{ route('student.dashboard') }}">Back to Dashboard</a>
-                    <button class="btn btn-primary" type="submit">Generate Course QR Pass</button>
+                    <button class="btn btn-primary gp-submit-btn" type="submit" id="gpSubmitBtn">
+                        <span id="gpBtnLabel">Generate QR Pass</span>
+                        <span id="gpBtnLoading" class="dots" hidden aria-hidden="true"><span></span><span></span><span></span></span>
+                    </button>
                 </div>
             </form>
         </section>
-    @else
-        <div class="course-pass-notice success">
-            @if(($unusedCount + $usedCount) > 0)
-                <strong>Payment verified for this session</strong>
-                Select a course below to generate or view its QR pass. No additional RRR is required.
-            @else
-                <strong>Payment verified for this session</strong>
-                You do not need to enter your RRR again. Generate a QR pass for any assigned course below.
-            @endif
-        </div>
 
-        <section class="course-pass-panel">
-            <div class="course-pass-head">
-                <h2>Assigned Courses</h2>
-                <p>Select a course to generate or view its QR pass. Date, time, and venue come from the official timetable.</p>
+    @else
+        {{-- Payment already verified: show all courses with inline generate buttons --}}
+        @if(($unusedCount + $usedCount) === 0)
+            <div class="gp-notice success" role="status">
+                <strong>Payment verified for this session</strong>
+                <p>You do not need to enter your RRR again. Generate a QR pass for any assigned course below.</p>
             </div>
-            <div class="course-pass-body">
+        @else
+            <div class="gp-notice success" role="status">
+                <strong>Payment verified for this session</strong>
+                <p>{{ $unusedCount + $usedCount }} of {{ $coursePasses->count() }} course {{ ($unusedCount + $usedCount) === 1 ? 'pass' : 'passes' }} ready. No additional RRR is required.</p>
+            </div>
+        @endif
+
+        <section class="gp-panel">
+            <div class="gp-panel-head">
+                <h2>Assigned Courses</h2>
+                <p>Each course shows its QR pass status. Tap "Generate" to create a pass or "View pass" to see an existing one.</p>
+            </div>
+            <div class="gp-course-list">
                 @foreach($coursePasses as $exam)
                     @php
-                        $statusClass = match($exam->qr_status) { 'Generated / Unused' => 'emerald', 'Used' => 'amber', 'Unavailable' => 'red', default => '' };
+                        $qrChipClass = match($exam->qr_status) {
+                            'Generated / Unused' => 'emerald',
+                            'Used'               => 'amber',
+                            'Unavailable'        => 'red',
+                            default              => '',
+                        };
+                        $type = $exam->assessment_type ?? 'exam';
+                        $typeLabel = match($type) { 'test' => 'Test', 'makeup' => 'Make-up', default => 'Exam' };
+                        $typeChip  = match($type) { 'test' => 'amber', 'makeup' => 'red', default => 'navy' };
                     @endphp
-                    <article class="course-pass-row">
-                        <div class="course-pass-copy">
-                            <h3>{{ $exam->course_code }} · {{ $exam->course_title ?: 'Course title not assigned yet' }}</h3>
-                            <p>{{ \Illuminate\Support\Carbon::parse($exam->exam_date)->format('D, d M Y') }} · {{ substr($exam->start_time, 0, 5) }}{{ $exam->end_time ? ' - ' . substr($exam->end_time, 0, 5) : '' }} · {{ $exam->venue ?: 'Hall not assigned yet' }}</p>
+                    <article class="gp-course-card">
+                        <div class="gp-course-card-top">
+                            <div>
+                                <h3 class="gp-course-code">{{ $exam->course_code }}</h3>
+                                <span class="gp-course-title">{{ $exam->course_title ?: 'Course title not assigned yet' }}</span>
+                            </div>
+                            <div style="display:flex;gap:5px;flex-wrap:wrap;justify-content:flex-end">
+                                <span class="chip {{ $typeChip }}" style="font-size:10px;padding:3px 8px">{{ $typeLabel }}</span>
+                                @if($qrChipClass)
+                                    <span class="chip {{ $qrChipClass }}" style="font-size:10px;padding:3px 8px">{{ $exam->qr_status }}</span>
+                                @else
+                                    <span class="chip" style="background:rgba(110,120,130,.09);color:var(--ink-4);font-size:10px;padding:3px 8px">Not Generated</span>
+                                @endif
+                            </div>
                         </div>
-                        <div class="course-pass-actions">
-                            <span class="chip {{ $statusClass }}">{{ $exam->qr_status === 'Not Generated' ? 'QR not generated' : $exam->qr_status }}</span>
+                        <div class="gp-course-meta">
+                            <span class="gp-course-meta-item"><span style="opacity:.55;font-size:.88em;font-weight:800">Date</span>&nbsp;{{ \Illuminate\Support\Carbon::parse($exam->exam_date)->format('D, d M Y') }}</span>
+                            <span class="gp-meta-dot" aria-hidden="true"></span>
+                            <span class="gp-course-meta-item"><span style="opacity:.55;font-size:.88em;font-weight:800">Time</span>&nbsp;{{ substr($exam->start_time, 0, 5) }}{{ $exam->end_time ? ' – ' . substr($exam->end_time, 0, 5) : '' }}</span>
+                            <span class="gp-meta-dot" aria-hidden="true"></span>
+                            <span class="gp-course-meta-item"><span style="opacity:.55;font-size:.88em;font-weight:800">Venue</span>&nbsp;{{ $exam->venue ?: 'TBA' }}</span>
+                        </div>
+                        <div class="gp-course-actions">
                             @if($exam->qr_token && in_array($exam->qr_status, ['Generated / Unused', 'Used'], true))
-                                <a class="btn btn-primary" href="{{ route('student.exam-access-id.course', ['timetable' => $exam->id]) }}">View Course QR</a>
-                                <a class="btn btn-ghost" href="{{ route('student.exam-pass.course', ['timetable' => $exam->id]) }}">Print</a>
+                                <a class="btn btn-primary" style="min-height:40px;padding:0 16px;font-size:13px" href="{{ route('student.exam-access-id.course', ['timetable' => $exam->id]) }}">View Course QR</a>
+                                <a class="btn btn-ghost" style="min-height:40px;padding:0 14px;font-size:13px" href="{{ route('student.exam-pass.course', ['timetable' => $exam->id]) }}">Print</a>
                             @elseif($exam->qr_status === 'Not Generated')
                                 <form method="POST" action="{{ route('student.generate-exam-pass.store') }}">
                                     @csrf
                                     <input type="hidden" name="timetable_id" value="{{ $exam->id }}">
-                                    <button class="btn btn-primary" type="submit">Generate QR Pass</button>
+                                    <button class="btn btn-primary" style="min-height:40px;padding:0 16px;font-size:13px" type="submit">Generate</button>
                                 </form>
                             @endif
                         </div>
@@ -184,3 +335,21 @@
     @endif
 </div>
 @endsection
+
+@push('student-scripts')
+<script>
+    (function () {
+        var form = document.getElementById('gpForm');
+        var btn  = document.getElementById('gpSubmitBtn');
+        var lbl  = document.getElementById('gpBtnLabel');
+        var dots = document.getElementById('gpBtnLoading');
+        if (!form || !btn) return;
+        form.addEventListener('submit', function () {
+            btn.setAttribute('data-loading', '1');
+            btn.disabled = true;
+            if (lbl) lbl.textContent = 'Generating…';
+            if (dots) dots.hidden = false;
+        });
+    })();
+</script>
+@endpush

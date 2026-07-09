@@ -8,11 +8,11 @@
     <div class="cx-timeline">
         @foreach([
             'Arrive at the venue at least 30 minutes before the scheduled start time.',
-            'Carry your institutional ID and your CERNIX Exam Access ID.',
+            'Carry your institutional ID and your Exam Access QR Pass.',
             'Present the QR pass to the examiner for server-side verification.',
             'Use the venue shown in your timetable. Report errors before exam day.',
             'Do not share your QR pass. Repeated scans are logged for review.',
-            'Follow all AAUA examination rules and malpractice regulations.',
+            'Follow all institutional examination rules and malpractice regulations.',
         ] as $index => $instruction)
             <article class="cx-step">
                 <div class="cx-step-dot">{{ $index + 1 }}</div>

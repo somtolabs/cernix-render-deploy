@@ -73,7 +73,7 @@ class ExaminerPortalWebTest extends TestCase
             ->assertSee('ALREADY USED')
             ->assertSee('older_qr_format')
             ->assertSee('Error Verifying QR')
-            ->assertSee('Adekunle Ajasin University logo')
+            ->assertSee('AAUA logo')
             ->assertSee('verify-brand-logo')
             ->assertSee('background-size:min(520px,84%)', false)
             ->assertSee('Reader ready')
@@ -265,13 +265,37 @@ class ExaminerPortalWebTest extends TestCase
 
     private function examinerSession(): array
     {
-        $examiner = DB::table('examiners')->where('username', 'examiner1')->first();
+        $examiner    = DB::table('examiners')->where('username', 'examiner1')->first();
+        $examSession = DB::table('exam_sessions')->where('is_active', true)->first();
+        $timetableId = $examSession
+            ? (int) DB::table('timetables')
+                ->where('exam_session_id', $examSession->session_id)
+                ->where('course_code', 'CSC401')
+                ->value('id')
+            : 0;
 
-        return [
-            'examiner_id' => (int) $examiner->examiner_id,
+        $session = [
+            'examiner_id'       => (int) $examiner->examiner_id,
             'examiner_username' => $examiner->username,
-            'examiner_name' => $examiner->full_name,
-            'examiner_role' => $examiner->role,
+            'examiner_name'     => $examiner->full_name,
+            'examiner_role'     => $examiner->role,
         ];
+
+        if ($timetableId) {
+            $session['examiner_active_timetable_id'] = $timetableId;
+            $session['examiner_active_timetable']    = [
+                'id'              => $timetableId,
+                'course_code'     => 'CSC401',
+                'course_title'    => 'Artificial Intelligence',
+                'venue'           => 'Faculty Lab 1',
+                'dept_name'       => 'Computer Science',
+                'level'           => '400',
+                'start_time'      => '',
+                'end_time'        => '',
+                'assessment_type' => 'exam',
+            ];
+        }
+
+        return $session;
     }
 }

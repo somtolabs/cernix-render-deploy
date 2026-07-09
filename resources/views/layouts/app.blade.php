@@ -5,9 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     @php
         $rawTitle = trim($__env->yieldContent('title', 'Exam Verification System'));
-        $documentTitle = \Illuminate\Support\Str::startsWith($rawTitle, 'CERNIX')
+        $_sysName = $brandingSystemName ?? 'Exam System';
+        $documentTitle = \Illuminate\Support\Str::startsWith($rawTitle, $_sysName)
             ? $rawTitle
-            : 'CERNIX — ' . $rawTitle;
+            : $_sysName . ' — ' . $rawTitle;
     @endphp
     <title>{{ $documentTitle }}</title>
     @vite(['resources/css/app.css', 'resources/js/app.js'])
@@ -19,7 +20,7 @@
     <nav class="bg-[#0f2050] text-white shadow-lg">
         <div class="max-w-6xl mx-auto px-4 sm:px-6">
             <div class="flex items-center justify-between h-14">
-                <a href="/" class="text-lg font-bold tracking-widest uppercase">CERNIX</a>
+                <a href="/" class="text-lg font-bold tracking-widest uppercase">{{ $brandingSystemName ?? 'System' }}</a>
                 <div class="hidden sm:flex items-center gap-1 text-sm">
                     <a href="/student/register"
                        class="px-3 py-2 rounded hover:bg-white/10 transition {{ request()->is('student*') ? 'bg-white/20' : '' }}">

@@ -18,15 +18,15 @@ class StudentRegistryWorkflowTest extends TestCase
     public function test_admin_imports_valid_csv_and_duplicate_matric_updates_existing_record(): void
     {
         DB::table('official_students')->insert($this->officialStudent([
-            'matric_number' => 'CSC/2021/001',
+            'matric_number' => '220404008',
             'full_name' => 'Old Name',
             'level' => '300',
         ]));
 
         $csv = implode("\n", [
             'matric_number,full_name,department,faculty,level,programme,academic_session,status',
-            ' CSC/2021/001 , Adebayo Oluwaseun Emmanuel , Computer Science , Faculty of Computing , 400 , BSc Computer Science , 2025/2026 , active ',
-            'SWE/2021/002,Second Student,Software Engineering,Faculty of Computing,400,,,active',
+            ' 220404008 , Adebayo Oluwaseun Emmanuel , Computer Science , Faculty of Computing , 400 , BSc Computer Science , 2025/2026 , active ',
+            '220405002,Second Student,Software Engineering,Faculty of Computing,400,,,active',
         ]);
 
         $response = $this
@@ -37,7 +37,7 @@ class StudentRegistryWorkflowTest extends TestCase
 
         $response->assertRedirect(route('admin.student-registry'));
         $this->assertDatabaseHas('official_students', [
-            'matric_number' => 'CSC/2021/001',
+            'matric_number' => '220404008',
             'full_name' => 'Adebayo Oluwaseun Emmanuel',
             'level' => '400',
         ]);
@@ -58,32 +58,47 @@ class StudentRegistryWorkflowTest extends TestCase
         $response = $this
             ->withHeaders(['Accept' => 'application/json'])
             ->post(route('student.register'), [
-                'matric_no' => 'CSC/2021/999',
+                'matric_no' => '220404999',
                 'passport_photo' => UploadedFile::fake()->image('passport.jpg', 240, 320),
             ]);
 
         $response->assertStatus(422)
             ->assertJsonPath('message', 'your matric number was not found in the official student list. please contact the admin or exam officer.');
-        $this->assertDatabaseMissing('students', ['matric_no' => 'CSC/2021/999']);
+        $this->assertDatabaseMissing('students', ['matric_no' => '220404999']);
+    }
+
+    public function test_bad_matric_format_cannot_register(): void
+    {
+        $this->activeSession();
+
+        $response = $this
+            ->withHeaders(['Accept' => 'application/json'])
+            ->post(route('student.register'), [
+                'matric_no' => 'CSC/2021/999',
+                'passport_photo' => UploadedFile::fake()->image('passport.jpg', 240, 320),
+            ]);
+
+        $response->assertStatus(422)
+            ->assertJsonPath('message', 'Matric number must contain numbers only.');
     }
 
     public function test_known_matric_registers_with_uploaded_photo_pending_admin_approval(): void
     {
         $this->activeSession();
-        DB::table('official_students')->insert($this->officialStudent());
+        DB::table('official_students')->insert($this->officialStudent(['matric_number' => '220404008']));
 
         $response = $this
             ->withHeaders(['Accept' => 'application/json'])
             ->post(route('student.register'), [
-                'matric_no' => 'CSC/2021/001',
+                'matric_no' => ' 220 404 008 ',
                 'passport_photo' => UploadedFile::fake()->image('passport.jpg', 240, 320),
             ]);
 
         $response->assertOk()
-            ->assertJsonPath('data.matric_no', 'CSC/2021/001')
+            ->assertJsonPath('data.matric_no', '220404008')
             ->assertJsonPath('data.photo_status', 'pending_admin_approval');
         $this->assertDatabaseHas('students', [
-            'matric_no' => 'CSC/2021/001',
+            'matric_no' => '220404008',
             'full_name' => 'Adebayo Oluwaseun Emmanuel',
             'photo_status' => 'pending_admin_approval',
         ]);

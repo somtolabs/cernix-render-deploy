@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Support\DepartmentFees;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\Storage;
 use RuntimeException;
 
 class ExamPassService
@@ -22,9 +23,6 @@ class ExamPassService
         float $expectedAmount,
     ): array {
         $rrrNumber = strtoupper(trim((string) $rrrNumber));
-        if ($expectedAmount <= 0) {
-            throw new RuntimeException('School fee is not configured for this student department.');
-        }
 
         $student = DB::table('students')
             ->where('matric_no', $matricNo)
@@ -47,6 +45,14 @@ class ExamPassService
 
         if (! $exam) {
             throw new RuntimeException('Select a valid assigned course before generating its QR pass.');
+        }
+
+        if (! $this->examRequiresPayment($exam)) {
+            return $this->issueQrPass($matricNo, $sessionId, $timetableId);
+        }
+
+        if ($expectedAmount <= 0) {
+            throw new RuntimeException('School fee is not configured for this student department.');
         }
 
         $supportsSessionPayment = Schema::hasColumn('payment_records', 'session_id');
@@ -131,6 +137,13 @@ class ExamPassService
                     ->update(['session_id' => $sessionId]);
             }
 
+            return $this->issueQrPass($matricNo, $sessionId, $timetableId);
+        });
+    }
+
+    private function issueQrPass(string $matricNo, int $sessionId, int $timetableId): array
+    {
+        return DB::transaction(function () use ($matricNo, $sessionId, $timetableId) {
             $existingTokenQuery = DB::table('qr_tokens')
                 ->where('student_id', $matricNo)
                 ->where('session_id', $sessionId);
@@ -209,6 +222,10 @@ class ExamPassService
 
     private function assertStudentCanGenerateQr(object $student): void
     {
+        if (! Schema::hasTable('official_students')) {
+            throw new RuntimeException('Student registry is not ready. Please contact the admin or exam officer.');
+        }
+
         $officialStudent = DB::table('official_students')
             ->where('matric_number', $student->matric_no)
             ->first();
@@ -221,8 +238,26 @@ class ExamPassService
             throw new RuntimeException('This matric number is not active on the official student list. Please contact the admin or exam officer.');
         }
 
+        $profilePhotoPath = trim((string) ($student->profile_photo_path ?? ''));
+        $verificationPhotoPath = trim((string) ($student->photo_path ?? ''));
+        $anyPhotoPath = $profilePhotoPath !== '' ? $profilePhotoPath : $verificationPhotoPath;
+
+        if ($anyPhotoPath === '') {
+            throw new RuntimeException('You must upload a profile photo before generating an examination access pass.');
+        }
+
+        if (! $this->settingBoolean('require_photo_approval_before_qr', true)) {
+            if ($verificationPhotoPath !== '' && ! Storage::disk('public')->exists($verificationPhotoPath)) {
+                throw new RuntimeException('Your verification photo could not be located. Please contact an administrator to resolve this before generating a pass.');
+            }
+            return;
+        }
+
         $photoStatus = $student->photo_status ?? 'pending_photo_upload';
         if ($photoStatus === 'approved') {
+            if ($verificationPhotoPath === '' || ! Storage::disk('public')->exists($verificationPhotoPath)) {
+                throw new RuntimeException('Your verification photo could not be located. Please contact an administrator to resolve this before generating a pass.');
+            }
             return;
         }
 
@@ -254,5 +289,39 @@ class ExamPassService
         }
 
         throw new RuntimeException('your profile is awaiting admin approval before you can generate an exam pass.');
+    }
+
+    private function examRequiresPayment(object $exam): bool
+    {
+        // Tests and make-ups never require payment regardless of per-row overrides or global settings
+        $type = $exam->assessment_type ?? 'exam';
+        if ($type === 'test' || $type === 'makeup') {
+            return false;
+        }
+
+        // Per-row override takes precedence for exams when the feature is enabled
+        if (
+            $this->settingBoolean('allow_payment_not_required_exams', true)
+            && Schema::hasColumn('timetables', 'payment_required')
+            && $exam->payment_required !== null
+        ) {
+            return (bool) $exam->payment_required;
+        }
+
+        return $this->settingBoolean('default_exam_payment_required', true);
+    }
+
+    private function settingBoolean(string $key, bool $default): bool
+    {
+        if (! Schema::hasTable('cernix_settings')) {
+            return $default;
+        }
+
+        $value = DB::table('cernix_settings')->where('key', $key)->value('value');
+        if ($value === null) {
+            return $default;
+        }
+
+        return in_array(strtolower((string) $value), ['1', 'true', 'yes', 'on'], true);
     }
 }

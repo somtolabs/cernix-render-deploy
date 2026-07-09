@@ -3,52 +3,52 @@
 @section('examiner-content')
 <style>
     .scanner-layout { display:grid; gap:14px; }
-    .connection-strip { display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; margin-bottom:12px; padding:9px 4px 12px; border-bottom:1px solid #dde4db; }
+    .connection-strip { display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; margin-bottom:12px; padding:9px 4px 12px; border-bottom:1px solid var(--line); }
     .connection-left { display:flex; align-items:center; gap:9px; min-width:0; }
-    .connection-dot { width:8px; height:8px; border-radius:999px; background:#94a3b8; }
+    .connection-dot { width:8px; height:8px; border-radius:999px; background:var(--line-2); }
     .connection-strip.online .connection-dot { background:var(--emerald); }
     .connection-strip.slow .connection-dot, .connection-strip.pending .connection-dot { background:var(--amber); }
     .connection-strip.offline .connection-dot, .connection-strip.server-down .connection-dot { background:var(--red); }
-    .connection-label { display:block; font-weight:900; color:#17201b; font-size:13px; }
-    .connection-sub { display:block; margin-top:1px; font-size:12px; color:#667066; line-height:1.35; }
-    .scanner-panel { overflow:hidden; background:#fff; border:1px solid #dde4db; border-radius:12px; max-width:100%; }
-    .scanner-stage { position:relative; min-height:clamp(390px, 62dvh, 580px); background:#e9eee8; overflow:hidden; display:grid; place-items:center; width:100%; }
+    .connection-label { display:block; font-weight:900; color:var(--ink); font-size:13px; }
+    .connection-sub { display:block; margin-top:1px; font-size:12px; color:var(--ink-3); line-height:1.35; }
+    .scanner-panel { overflow:hidden; background:#fff; border:1px solid var(--line); border-radius:12px; max-width:100%; }
+    .scanner-stage { position:relative; min-height:clamp(390px, 62dvh, 580px); background:rgba(235,241,255,.18); overflow:hidden; display:grid; place-items:center; width:100%; }
     .scanner-stage video, .scanner-stage canvas { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; object-position:center; }
-    .scanner-idle { position:relative; z-index:3; color:#566157; text-align:center; padding:10px 12px; max-width:300px; border-radius:10px; background:rgba(255,255,255,.86); font-size:13px; line-height:1.5; }
+    .scanner-idle { position:relative; z-index:3; color:var(--ink-3); text-align:center; padding:10px 12px; max-width:300px; border-radius:10px; background:rgba(255,255,255,.86); font-size:13px; line-height:1.5; }
     .scan-frame { position:relative; z-index:2; width:min(390px, 78%); aspect-ratio:1; border:2px solid rgba(23,32,27,.72); border-radius:16px; box-shadow:0 0 0 999px rgba(23,32,27,.12); pointer-events:none; overflow:hidden; }
     .scan-frame::after { content:""; position:absolute; left:10%; right:10%; top:12%; height:2px; border-radius:999px; background:rgba(85,117,101,.72); opacity:0; }
     .scanner-stage[data-state="active"] .scan-frame::after,
     .scanner-stage[data-state="scanning"] .scan-frame::after { opacity:1; animation:scanLine 2.2s ease-in-out infinite; }
     .scanner-stage[data-state="starting"] .scan-frame { border-color:rgba(138,117,85,.68); }
     .scanner-stage[data-state="verifying"] .scan-frame { border-color:var(--emerald); }
-    .scanner-live { position:absolute; z-index:4; top:14px; left:14px; display:none; align-items:center; gap:7px; padding:6px 9px; border-radius:999px; background:rgba(255,255,255,.9); color:#17201b; border:1px solid rgba(23,32,27,.12); font-size:11px; font-weight:900; }
+    .scanner-live { position:absolute; z-index:4; top:14px; left:14px; display:none; align-items:center; gap:7px; padding:6px 9px; border-radius:999px; background:rgba(255,255,255,.9); color:var(--ink); border:1px solid rgba(23,32,27,.12); font-size:11px; font-weight:900; }
     .scanner-live::before { content:""; width:7px; height:7px; border-radius:999px; background:var(--emerald); animation:livePulse 1.5s ease-in-out infinite; }
     .scanner-stage[data-state="active"] .scanner-live,
     .scanner-stage[data-state="scanning"] .scanner-live,
     .scanner-stage[data-state="verifying"] .scanner-live { display:flex; }
     .scan-frame.detected { border-color:var(--emerald); box-shadow:0 0 0 999px rgba(85,117,101,.1), 0 0 0 5px rgba(85,117,101,.1); }
-    .scanner-controls { display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; padding:12px; border-top:1px solid #e7ebe3; background:#fbfcf8; }
-    .scanner-state { color:#667066; font-size:13px; line-height:1.45; max-width:520px; }
+    .scanner-controls { display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; padding:12px; border-top:1px solid var(--line); background:var(--bg); }
+    .scanner-state { color:var(--ink-3); font-size:13px; line-height:1.45; max-width:520px; }
     .latest-result { display:grid; gap:9px; }
     .latest-result strong { font-size:17px; }
-    .recent-scan-list { display:grid; gap:8px; margin-top:14px; padding-top:12px; border-top:1px solid #e7ebe3; }
-    .recent-scan-item { display:grid; gap:5px; padding:10px 4px 12px; border-bottom:1px solid #e7ebe3; min-width:0; }
+    .recent-scan-list { display:grid; gap:8px; margin-top:14px; padding-top:12px; border-top:1px solid var(--line); }
+    .recent-scan-item { display:grid; gap:5px; padding:10px 4px 12px; border-bottom:1px solid var(--line); min-width:0; }
     .recent-scan-top { display:flex; justify-content:space-between; align-items:flex-start; gap:8px; flex-wrap:wrap; }
-    .recent-scan-top strong { color:#17201b; font-size:13px; overflow-wrap:break-word; word-break:normal; }
-    .recent-scan-meta { color:#667066; font-size:12px; overflow-wrap:break-word; word-break:normal; }
+    .recent-scan-top strong { color:var(--ink); font-size:13px; overflow-wrap:break-word; word-break:normal; }
+    .recent-scan-meta { color:var(--ink-3); font-size:12px; overflow-wrap:break-word; word-break:normal; }
     .result-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px 12px; margin-top:8px; }
-    .result-grid span { color:#667066; font-size:10px; font-weight:900; text-transform:uppercase; letter-spacing:.08em; }
-    .result-grid b { display:block; color:#17201b; margin-top:2px; overflow-wrap:break-word; word-break:normal; }
-    .pending-panel { display:none; margin-top:11px; border:1px solid #d8cfbf; border-radius:12px; background:#f8f6f1; padding:11px; color:var(--ink-2); font-size:13px; }
+    .result-grid span { color:var(--ink-3); font-size:10px; font-weight:900; text-transform:uppercase; letter-spacing:.08em; }
+    .result-grid b { display:block; color:var(--ink); margin-top:2px; overflow-wrap:break-word; word-break:normal; }
+    .pending-panel { display:none; margin-top:11px; border:1px solid var(--line-2); border-radius:12px; background:var(--bg-2); padding:11px; color:var(--ink-2); font-size:13px; }
     .pending-panel.show { display:grid; gap:8px; }
     .pending-panel b { color:var(--amber); }
     .scanner-control-hidden { display:none !important; }
     .scanner-checks { display:none; margin:0 0 10px; }
-    .scanner-checks summary { color:#667066; cursor:pointer; font-size:12px; font-weight:800; }
+    .scanner-checks summary { color:var(--ink-3); cursor:pointer; font-size:12px; font-weight:800; }
     .scanner-diagnostics { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:7px; margin-top:8px; }
-    .scanner-diagnostic { min-width:0; padding:8px 4px; border-bottom:1px solid #e3e8e0; }
-    .scanner-diagnostic span { display:block; color:#667066; font-size:9px; font-weight:900; letter-spacing:.08em; text-transform:uppercase; }
-    .scanner-diagnostic b { display:block; margin-top:2px; color:#17201b; font-size:11px; overflow-wrap:break-word; word-break:normal; }
+    .scanner-diagnostic { min-width:0; padding:8px 4px; border-bottom:1px solid var(--line); }
+    .scanner-diagnostic span { display:block; color:var(--ink-3); font-size:9px; font-weight:900; letter-spacing:.08em; text-transform:uppercase; }
+    .scanner-diagnostic b { display:block; margin-top:2px; color:var(--ink); font-size:11px; overflow-wrap:break-word; word-break:normal; }
     .scanner-diagnostic.ok b { color:var(--emerald); }
     .scanner-diagnostic.warn b { color:var(--amber); }
     .scanner-diagnostic.error b { color:var(--red); }
@@ -92,16 +92,54 @@
     @keyframes scanLine { 0%,100% { top:12%; } 50% { top:86%; } }
     @keyframes livePulse { 0%,100% { opacity:.45; } 50% { opacity:1; } }
     @media (min-width:980px) { .scanner-layout { grid-template-columns:minmax(0,1fr) 320px; align-items:start; } .scanner-stage { min-height:560px; } .scanner-diagnostics { grid-template-columns:repeat(4,minmax(0,1fr)); } }
+    /* Session banners */
+    .sess-banner { border-radius:12px; padding:14px 16px; margin-bottom:14px; display:flex; align-items:center; justify-content:space-between; gap:14px; flex-wrap:wrap; }
+    .sess-banner.active { background:rgba(85,117,101,.08); border:1px solid rgba(85,117,101,.24); }
+    .sess-banner.idle { background:rgba(95,112,130,.04); border:1px solid var(--line); }
+    .sess-banner-label { font-size:10px; font-weight:900; text-transform:uppercase; letter-spacing:.09em; color:var(--emerald); margin-bottom:4px; }
+    .sess-banner.idle .sess-banner-label { color:var(--ink-3); }
+    .sess-banner-course { font-size:15px; font-weight:900; color:var(--ink); line-height:1.2; }
+    .sess-banner-meta { font-size:12px; color:var(--ink-3); margin-top:3px; line-height:1.4; }
+    .sess-banner-idle-title { font-size:14px; font-weight:800; color:var(--ink-2); margin-bottom:4px; }
+    .sess-banner-idle-text { font-size:13px; color:var(--ink-3); line-height:1.5; }
     @media (max-width:640px) { .scanner-stage { min-height:420px; } .scan-frame { width:min(320px,78%); } .scanner-controls { align-items:stretch; } .scanner-controls > div { width:100%; } .scanner-controls .ex-action { flex:1 1 auto; } .verify-overlay { padding:8px 8px max(18px, env(safe-area-inset-bottom)); } .verify-document { min-height:0; border-radius:20px; margin:0 auto; } .verify-document::before { background-size:min(390px,92%); background-position:center 38%; opacity:.06; } .verify-top { padding:50px 14px 10px; } .verify-brand-head { gap:10px; } .verify-brand-copy strong { font-size:17px; } .verify-body { padding:12px 14px; } .verify-details { grid-template-columns:repeat(2,minmax(0,1fr)); } .verify-actions { padding:10px 14px calc(14px + env(safe-area-inset-bottom)); grid-template-columns:1fr; border-radius:0 0 20px 20px; } }
     @media (max-width:390px) { .verify-details { grid-template-columns:1fr; } .verify-brand-head { align-items:flex-start; } .verify-brand-logo { width:62px; height:62px; } }
 </style>
 
 <div class="ex-page-head">
     <div>
+        <div class="cx-eyebrow">QR Verification</div>
         <h1 class="ex-title">Scanner</h1>
-        <p class="ex-subtitle">Scan a student exam pass and confirm the server result.</p>
+        <p class="ex-subtitle">Start a session from Today's Assessments before scanning. Every scan is validated against your active assessment.</p>
     </div>
 </div>
+
+@if($activeTimetable)
+<div id="activeSessBanner" class="sess-banner active">
+    <div>
+        <div class="sess-banner-label">Session Active &mdash; <span id="sessionElapsed">computing elapsed time&hellip;</span></div>
+        <div class="sess-banner-course">{{ $activeTimetable['course_code'] }} &mdash; {{ $activeTimetable['course_title'] }}</div>
+        <div class="sess-banner-meta">
+            {{ $activeTimetable['dept_name'] ?? '' }}
+            @if(!empty($activeTimetable['level'])) &middot; Level {{ $activeTimetable['level'] }}@endif
+            @if(!empty($activeTimetable['venue'])) &middot; {{ $activeTimetable['venue'] }}@endif
+            @if(!empty($activeTimetable['start_time'])) &middot; {{ \Carbon\Carbon::parse($activeTimetable['start_time'])->format('g:i A') }}@endif
+        </div>
+    </div>
+    <div style="display:flex;gap:8px;flex-shrink:0;flex-wrap:wrap">
+        <a class="ex-action secondary" href="{{ route('examiner.today-exams') }}">Attendance</a>
+        <button type="button" id="stopSessBtn" class="ex-action secondary" style="border-color:var(--red);color:var(--red)">End Session</button>
+    </div>
+</div>
+@else
+<div id="noSessBanner" class="sess-banner idle">
+    <div>
+        <div class="sess-banner-idle-title">No active session</div>
+        <div class="sess-banner-idle-text">Select and start a session from Today's Assessments before scanning student QR passes.</div>
+    </div>
+    <a class="ex-action" href="{{ route('examiner.today-exams') }}" style="flex-shrink:0">Today's Assessments</a>
+</div>
+@endif
 
 <div class="scanner-layout">
     <section>
@@ -133,11 +171,21 @@
                 <div class="scanner-idle" id="scannerIdle">Camera is idle. Start the scanner and point it at an exam pass.</div>
             </div>
             <div class="scanner-controls">
-                <div class="scanner-state" id="scannerState">Camera permission is required. Hold the exam pass inside the frame.</div>
+                <div class="scanner-state" id="scannerState">
+                    @if($activeTimetable)
+                        Session active: {{ $activeTimetable['course_code'] }}. Hold the exam pass inside the frame.
+                    @else
+                        No active session. Select and start a session from Today's Assessments before scanning.
+                    @endif
+                </div>
                 <div style="display:flex;gap:8px;flex-wrap:wrap">
-                    <button class="ex-action" type="button" id="startScanner">Start Scanner</button>
-                    <button class="ex-action secondary scanner-control-hidden" type="button" id="stopScanner">Stop Scanner</button>
-                    <button class="ex-action secondary scanner-control-hidden" type="button" id="retryScanner">Restart Camera</button>
+                    @if($activeTimetable)
+                        <button class="ex-action" type="button" id="startScanner">Start Scanner</button>
+                        <button class="ex-action secondary scanner-control-hidden" type="button" id="stopScanner">Stop Scanner</button>
+                        <button class="ex-action secondary scanner-control-hidden" type="button" id="retryScanner">Restart Camera</button>
+                    @else
+                        <a class="ex-action" href="{{ route('examiner.today-exams') }}">Select Session</a>
+                    @endif
                 </div>
             </div>
         </div>
@@ -146,7 +194,7 @@
     <aside class="ex-panel ex-section-pad">
         <div style="display:flex;justify-content:space-between;gap:10px;align-items:center;margin-bottom:10px"><h2 style="margin:0;font-size:18px">Latest Result</h2><a class="ex-action secondary" href="{{ route('examiner.scan-history') }}">History</a></div>
         <div id="latestResult" class="latest-result">
-            <p class="ex-empty">No scan yet. Start the camera and point it at a CERNIX exam pass.</p>
+            <p class="ex-empty">No scan yet. Start the camera and point it at an exam pass QR code.</p>
         </div>
         <div class="pending-panel" id="pendingPanel">
             <b>Pending verification</b>
@@ -184,19 +232,11 @@
         <button class="verify-close-mini" type="button" id="verifyCloseTop">Continue</button>
         <div class="verify-top">
             <div class="verify-brand-head">
-                <img class="verify-brand-logo" src="{{ $brandingLogoUrl }}" alt="Adekunle Ajasin University logo">
+                <img class="verify-brand-logo" src="{{ $brandingLogoUrl }}" alt="{{ $brandingInstitutionName }} logo">
                 <div class="verify-brand-copy">
-                    <strong>Exam Access Verification</strong>
-                    <span>Adekunle Ajasin University</span>
+                    <strong>{{ $brandingSystemName }} Exam Access Verification</strong>
+                    <span>{{ $brandingInstitutionName }}</span>
                 </div>
-            </div>
-            <div>
-                <div class="verify-label">Verification Result</div>
-                <div class="verify-decision-line">
-                    <h2 class="verify-status" id="verifyStatus">ALREADY USED</h2>
-                    <span class="ex-badge DUPLICATE" id="verifyBadge">ALREADY USED</span>
-                </div>
-                <p class="verify-message" id="verifyMessage">This exam pass has already been scanned.</p>
             </div>
         </div>
         <div class="verify-body">
@@ -219,8 +259,18 @@
                     <div class="verify-detail"><span>Exam Time</span><b id="verifyExamTime">Timetable not assigned yet</b></div>
                     <div class="verify-detail"><span>Session</span><b id="verifySession">Not available</b></div>
                     <div class="verify-detail"><span>Timetable</span><b id="verifyTimetable">Not assigned yet</b></div>
+                    <div class="verify-detail"><span>Type</span><b id="verifyAssessmentType">Exam</b></div>
                 </div>
             </section>
+            <div style="text-align:center;padding:14px 0;border-bottom:1px solid rgba(0,0,0,.055)">
+                <div class="verify-label">Verification Result</div>
+                <div class="verify-decision-line">
+                    <h2 class="verify-status" id="verifyStatus">ALREADY USED</h2>
+                    <span class="ex-badge DUPLICATE" id="verifyBadge">ALREADY USED</span>
+                </div>
+                <p class="verify-message" id="verifyMessage">This exam pass has already been scanned.</p>
+                <p id="verifyActionHint" style="display:none;margin:8px auto 0;font-size:13px;font-weight:700;max-width:460px;line-height:1.45;padding:8px 12px;border-radius:8px;background:rgba(0,0,0,.04)"></p>
+            </div>
             <section class="verify-section">
                 <h4>Student and clearance</h4>
                 <div class="verify-details">
@@ -249,6 +299,55 @@
         </div>
     </article>
 </div>
+
+{{-- Today's Assessments --}}
+@if(($todaysExams ?? collect())->isNotEmpty())
+<section style="margin-top:20px">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px">
+        <h2 style="margin:0;font-size:15px;font-weight:900;color:var(--ink)">Today's Assessments</h2>
+        <a class="ex-action secondary" href="{{ route('examiner.today-exams') }}">View all</a>
+    </div>
+    <div style="display:grid;gap:9px">
+        @foreach($todaysExams as $exam)
+            @php
+                $isActive = ($activeTimetableId ?? null) == $exam->id;
+                $typeLabel = match($exam->assessment_type ?? 'exam') {
+                    'test'   => 'Test',
+                    'makeup' => 'Make-up',
+                    default  => 'Exam',
+                };
+                $typeColour = match($exam->assessment_type ?? 'exam') {
+                    'test'   => 'color:var(--emerald);background:rgba(5,150,105,.1)',
+                    'makeup' => 'color:var(--amber);background:rgba(180,83,9,.1)',
+                    default  => 'color:var(--navy);background:rgba(15,32,80,.08)',
+                };
+                $timeStr = substr($exam->start_time ?? '', 0, 5) . ($exam->end_time ? ' – ' . substr($exam->end_time, 0, 5) : '');
+            @endphp
+            <div style="display:flex;align-items:center;gap:12px;padding:12px 14px;border:1px solid var(--line);border-radius:12px;background:{{ $isActive ? 'rgba(85,117,101,.06)' : '#fff' }};{{ $isActive ? 'border-color:rgba(85,117,101,.3)' : '' }}">
+                <div style="flex:1;min-width:0">
+                    <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:3px">
+                        <strong style="font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:900;color:var(--navy)">{{ $exam->course_code }}</strong>
+                        <span style="padding:2px 7px;border-radius:6px;font-size:9px;font-weight:900;letter-spacing:.06em;text-transform:uppercase;{{ $typeColour }}">{{ $typeLabel }}</span>
+                        @if($isActive)<span style="padding:2px 7px;border-radius:6px;font-size:9px;font-weight:900;color:var(--emerald);background:rgba(5,150,105,.1)">ACTIVE</span>@endif
+                    </div>
+                    <div style="font-size:11px;color:var(--ink-3)">{{ $timeStr }} &middot; {{ $exam->venue }}</div>
+                </div>
+                @if(!$isActive)
+                    <a class="ex-action" href="{{ route('examiner.today-exams') }}" style="flex-shrink:0;font-size:12px;min-height:34px;padding:0 12px">Manage</a>
+                @else
+                    @if(!$request ?? true)
+                        <span style="flex-shrink:0;font-size:11px;font-weight:800;color:var(--emerald)">Scanning</span>
+                    @endif
+                @endif
+            </div>
+        @endforeach
+    </div>
+</section>
+@else
+<section style="margin-top:20px;padding:14px;border:1px solid var(--line);border-radius:12px;background:var(--bg-2)">
+    <p style="margin:0;font-size:13px;color:var(--ink-3)">No assessments scheduled for today. <a href="{{ route('examiner.today-exams') }}" style="color:var(--navy);font-weight:700">Check schedule</a></p>
+</section>
+@endif
 @endsection
 
 @push('scripts')
@@ -314,15 +413,19 @@
     function statusTheme(status) {
         status = normalizeStatus(status);
         if (status === 'APPROVED' || status === 'CONFIRMED') return 'approved';
+        if (status === 'SUBMITTED') return 'approved';
+        if (status === 'ALREADY_SUBMITTED') return 'duplicate';
         if (status === 'DUPLICATE' || status === 'USED') return 'duplicate';
         return 'rejected';
     }
     function statusMessage(status) {
-        const theme = statusTheme(status);
-        if (theme === 'approved') return 'Student verified successfully.';
-        if (theme === 'duplicate') return 'This exam pass has already been scanned.';
-        if (normalizeStatus(status) === 'ERROR') return 'The QR could not be verified right now. Please try again.';
-        return 'This QR could not be verified.';
+        const s = normalizeStatus(status);
+        if (s === 'APPROVED' || s === 'CONFIRMED') return 'Student identity verified. Cleared for entry.';
+        if (s === 'SUBMITTED') return 'Assessment submission recorded. Student may leave the hall.';
+        if (s === 'ALREADY_SUBMITTED') return 'This student has already submitted their assessment.';
+        if (s === 'DUPLICATE' || s === 'USED') return 'This exam pass has already been used. Possible duplicate entry — verify with admin.';
+        if (s === 'ERROR') return 'The QR could not be verified right now. Please try again or contact admin.';
+        return 'This QR could not be verified. Check the pass details below.';
     }
     function photoUrl(path) {
         if (!path || /^https?:\/\//i.test(path) || path.includes('..')) return '';
@@ -719,12 +822,33 @@
         document.getElementById('verifyVenue').textContent = access.venue || 'Hall not assigned yet';
         document.getElementById('verifySeat').textContent = access.seat_number || 'Not assigned yet';
         document.getElementById('verifyTimetable').textContent = access.timetable_status || 'Not assigned yet';
+        document.getElementById('verifyAssessmentType').textContent = assessmentTypeLabel(access.assessment_type);
         document.getElementById('verifyDecision').textContent = label;
         document.getElementById('verifyTime').textContent = new Date(result.timestamp || Date.now()).toLocaleString();
         document.getElementById('verifyExaminer').textContent = result.examiner || @json($examiner['full_name'] ?? 'Examiner');
         document.getElementById('verifyCount').textContent = result.scan_count || 0;
         document.getElementById('verifyTrace').textContent = result.trace_id ? `#${result.trace_id}` : 'Not available';
         document.getElementById('verifyReviewLink').href = result.detail_url || `{{ route('examiner.scan-history') }}${result.trace_id ? '?highlight=' + encodeURIComponent(result.trace_id) : ''}`;
+        const actionHint = document.getElementById('verifyActionHint');
+        if (actionHint) {
+            if (status === 'APPROVED') {
+                actionHint.textContent = 'Allow student entry. Scan next student when ready.';
+                actionHint.style.color = 'var(--result-accent)';
+            } else if (status === 'SUBMITTED') {
+                actionHint.textContent = 'Submission recorded. Student may exit the hall.';
+                actionHint.style.color = 'var(--result-accent)';
+            } else if (status === 'ALREADY_SUBMITTED') {
+                actionHint.textContent = 'Already submitted. No further action needed.';
+                actionHint.style.color = '#8a7555';
+            } else if (status === 'DUPLICATE') {
+                actionHint.textContent = 'Do not allow entry. Contact admin if this is unexpected.';
+                actionHint.style.color = '#8a7555';
+            } else {
+                actionHint.textContent = friendlyAction(result.reason || '');
+                actionHint.style.color = '#8a5b5b';
+            }
+            actionHint.style.display = 'block';
+        }
         overlay.hidden = false;
         overlay.scrollTop = 0;
     }
@@ -739,14 +863,46 @@
     function decisionLabel(status) {
         const normalized = normalizeStatus(status);
         if (normalized === 'APPROVED') return 'Verified';
+        if (normalized === 'SUBMITTED') return 'Submission Confirmed';
+        if (normalized === 'ALREADY_SUBMITTED') return 'Already Submitted';
         if (normalized === 'DUPLICATE' || normalized === 'USED') return 'Already Used';
         if (normalized === 'INVALID') return 'Invalid QR';
         if (normalized === 'ERROR') return 'Error Verifying QR';
         return 'Rejected';
     }
+    function assessmentTypeLabel(type) {
+        if (!type) return 'Exam';
+        const map = { exam: 'Exam', test: 'Test', makeup: 'Make-up Test' };
+        return map[String(type).toLowerCase()] || String(type);
+    }
+    function friendlyAction(reason) {
+        const actions = {
+            invalid_format: 'Ask student to show their QR from the student portal.',
+            token_not_found: 'Ask student to show their original QR from the student portal.',
+            tampered_token: 'Do not allow entry. Report to admin.',
+            token_record_mismatch: 'Do not allow entry. Report to admin immediately.',
+            invalid_session: 'Ask student to generate a new QR pass for this session.',
+            identity_mismatch: 'Do not allow entry. Verify student identity manually.',
+            course_mismatch: 'Student is scanning the wrong course QR. Ask them to select the correct course.',
+            payment_not_verified: 'Student must pay school fees first. Direct them to the bursar.',
+            course_not_assigned: 'Contact admin — student may not be assigned to this exam.',
+            older_qr_format: 'Ask student to generate a new course QR pass from their portal.',
+            token_revoked: 'This pass has been revoked. Contact admin before allowing entry.',
+            invalid_status: 'Contact admin — this pass has an invalid state.',
+            wrong_session: 'Direct student to their correct exam hall. Do not allow entry here.',
+            wrong_examiner: 'You are not assigned to this assessment. Contact the admin.',
+            no_active_session: 'Go to Today\'s Assessments and start a session before scanning.',
+            outside_time_window: 'Scanning is only permitted within 60 minutes of the scheduled exam window.',
+            verification_failed: 'Try scanning again. If the issue persists, contact admin.',
+            submission_confirmed: 'Submission recorded. Student may leave the hall.',
+            already_submitted: 'Student already submitted. No action needed.',
+            not_checked_in_for_submission: 'Student has not checked in. Do not allow exit without admin confirmation.'
+        };
+        return actions[reason] || 'Do not allow entry without admin confirmation.';
+    }
     function friendlyReason(reason) {
         const messages = {
-            invalid_format: 'This is not a valid CERNIX exam pass.',
+            invalid_format: 'This is not a valid exam pass.',
             invalid_session: 'This exam pass is not valid for the active exam session.',
             tampered_token: 'This exam pass could not be verified.',
             identity_mismatch: 'This QR does not match the student or course.',
@@ -757,6 +913,8 @@
             token_not_found: 'This exam pass could not be found.',
             token_revoked: 'This exam pass is unavailable.',
             invalid_status: 'This exam pass is unavailable.',
+            no_active_session: 'No active exam session. Start a session from Today\'s Assessments.',
+            outside_time_window: 'This scan was attempted outside the scheduled exam hours.',
             verification_failed: 'The QR could not be verified right now. Please try again.'
         };
         return messages[reason] || String(reason || 'Verification failed. Access denied.');
@@ -790,5 +948,64 @@
     setScannerControls('idle');
     scannerStage.dataset.state = 'idle';
     updateConnectionStatus();
+
+    // Session stop button — two-step inline confirm (no browser confirm())
+    const stopSessBtn = document.getElementById('stopSessBtn');
+    if (stopSessBtn) {
+        stopSessBtn.addEventListener('click', function() {
+            if (stopSessBtn.dataset.confirming) return;
+            stopSessBtn.dataset.confirming = '1';
+            var origText = stopSessBtn.textContent;
+            stopSessBtn.textContent = 'End session?';
+            stopSessBtn.style.opacity = '.7';
+
+            var yesBtn = document.createElement('button');
+            yesBtn.type = 'button';
+            yesBtn.textContent = 'Yes, End';
+            yesBtn.className = stopSessBtn.className;
+            yesBtn.style.cssText = 'background:var(--red);border-color:var(--red);color:#fff;margin-left:6px';
+
+            var cancelBtn = document.createElement('button');
+            cancelBtn.type = 'button';
+            cancelBtn.textContent = 'Cancel';
+            cancelBtn.className = stopSessBtn.className;
+            cancelBtn.style.cssText = 'margin-left:4px;opacity:.7';
+
+            stopSessBtn.after(cancelBtn);
+            stopSessBtn.after(yesBtn);
+
+            cancelBtn.addEventListener('click', function() {
+                stopSessBtn.textContent = origText;
+                stopSessBtn.style.opacity = '';
+                delete stopSessBtn.dataset.confirming;
+                yesBtn.remove(); cancelBtn.remove();
+            });
+
+            yesBtn.addEventListener('click', async function() {
+                yesBtn.disabled = true; cancelBtn.remove();
+                stopSessBtn.textContent = 'Ending...';
+                stopSessBtn.style.opacity = '';
+                try {
+                    await fetch('{{ route('examiner.scan-session.stop') }}', {
+                        method: 'POST',
+                        headers: { 'X-CSRF-TOKEN': '{{ csrf_token() }}', 'Accept': 'application/json', 'Content-Type': 'application/json' },
+                    });
+                } catch (_) {}
+                location.reload();
+            });
+        });
+    }
+
+    // Elapsed time display for active session
+    const elapsedEl = document.getElementById('sessionElapsed');
+    if (elapsedEl) {
+        const sessionStart = new Date();
+        function updateElapsed() {
+            const mins = Math.floor((Date.now() - sessionStart.getTime()) / 60000);
+            elapsedEl.textContent = mins < 1 ? 'just started' : mins + ' min' + (mins !== 1 ? 's' : '') + ' elapsed';
+        }
+        updateElapsed();
+        setInterval(updateElapsed, 30000);
+    }
 </script>
 @endpush

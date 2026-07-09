@@ -84,27 +84,29 @@ class ExaminerWebController extends Controller
         }
 
         if ($mode === 'examiner' && ! Roles::isExaminer($examiner->role)) {
-            $message = 'This account is not permitted to access the Examiner portal.';
+            $message = 'This account cannot access the Examiner portal. Admin and Super Admin accounts must sign in at the Admin portal (/admin/login).';
 
             if ($expectsJson) {
-                return response()->json(['status' => 'error', 'message' => $message], 403);
+                return response()->json(['status' => 'error', 'message' => $message, 'redirect_hint' => '/admin/login'], 403);
             }
 
             return back()
                 ->withInput($request->only('username'))
-                ->with('error', $message);
+                ->with('error', $message)
+                ->with('redirect_hint', '/admin/login');
         }
 
         if ($mode === 'admin' && ! Roles::isAdminLike($examiner->role)) {
-            $message = 'This account is not permitted to access the Admin portal.';
+            $message = 'This account cannot access the Admin portal. Examiner accounts must sign in at the Examiner portal (/examiner/login).';
 
             if ($expectsJson) {
-                return response()->json(['status' => 'error', 'message' => $message], 403);
+                return response()->json(['status' => 'error', 'message' => $message, 'redirect_hint' => '/examiner/login'], 403);
             }
 
             return back()
                 ->withInput($request->only('username'))
-                ->with('error', $message);
+                ->with('error', $message)
+                ->with('redirect_hint', '/examiner/login');
         }
 
         $request->session()->regenerate();
@@ -168,10 +170,13 @@ class ExaminerWebController extends Controller
         }
 
         return view('examiner.dashboard', [
-            'examiner' => $examiner,
-            'metrics' => $this->metricsData((int) $examiner['id']),
-            'recentRows' => $this->scanRows((int) $examiner['id'], 3),
+            'examiner'               => $examiner,
+            'metrics'                => $this->metricsData((int) $examiner['id']),
+            'recentRows'             => $this->scanRows((int) $examiner['id'], 3),
             'notificationUnreadCount' => $this->examinerUnreadNotes((int) $examiner['id']),
+            'activeTimetable'        => $request->session()->get('examiner_active_timetable'),
+            'activeTimetableId'      => $request->session()->get('examiner_active_timetable_id'),
+            'todaysExams'            => $this->todaysExams((int) $examiner['id']),
         ]);
     }
 
@@ -184,9 +189,82 @@ class ExaminerWebController extends Controller
                 : redirect('/examiner/login');
         }
 
+        $activeTimetableId = $request->session()->get('examiner_active_timetable_id');
+        $attendanceMetrics = [];
+        if ($activeTimetableId && Schema::hasTable('attendance_records')) {
+            $attRows = DB::table('attendance_records')
+                ->where('timetable_id', $activeTimetableId)
+                ->select('status', DB::raw('COUNT(*) as cnt'),
+                    DB::raw('MIN(checked_in_at) as first_in'),
+                    DB::raw('MAX(checked_in_at) as last_in'))
+                ->groupBy('status')
+                ->get();
+            $checkedIn  = (int) ($attRows->firstWhere('status', 'checked_in')?->cnt  ?? 0);
+            $submitted  = (int) ($attRows->firstWhere('status', 'submitted')?->cnt   ?? 0);
+            $flagged    = (int) ($attRows->firstWhere('status', 'flagged')?->cnt     ?? 0);
+            $totalPresent = $checkedIn + $submitted + $flagged;
+            $activeTt   = DB::table('timetables')->where('id', $activeTimetableId)->first();
+            $expected   = Schema::hasTable('timetable_students')
+                ? (int) DB::table('timetable_students')->where('timetable_id', $activeTimetableId)->count()
+                : 0;
+            $recentScans = DB::table('attendance_records')
+                ->join('students', 'attendance_records.matric_no', '=', 'students.matric_no')
+                ->where('attendance_records.timetable_id', $activeTimetableId)
+                ->orderByDesc('attendance_records.checked_in_at')
+                ->limit(5)
+                ->select('students.full_name', 'attendance_records.matric_no',
+                    'attendance_records.status', 'attendance_records.checked_in_at', 'attendance_records.submitted_at')
+                ->get();
+
+            // Late arrivals and avg check-in time (relative to exam start)
+            $lateArrivals = 0;
+            $avgCheckinMins = null;
+            if ($activeTt && !empty($activeTt->start_time) && $totalPresent > 0) {
+                $examStart   = Carbon::parse(today()->toDateString() . ' ' . $activeTt->start_time);
+                $graceCutoff = $examStart->copy()->addMinutes(15);
+                $checkinTimes = DB::table('attendance_records')
+                    ->where('timetable_id', $activeTimetableId)
+                    ->whereNotNull('checked_in_at')
+                    ->pluck('checked_in_at');
+                $lateCount  = 0;
+                $totalMins  = 0;
+                $validCount = 0;
+                foreach ($checkinTimes as $t) {
+                    $checkedAt = Carbon::parse($t);
+                    if ($checkedAt->gt($graceCutoff)) {
+                        $lateCount++;
+                    }
+                    $diff = $examStart->diffInMinutes($checkedAt, false);
+                    if ($diff >= 0) {
+                        $totalMins += $diff;
+                        $validCount++;
+                    }
+                }
+                $lateArrivals   = $lateCount;
+                $avgCheckinMins = $validCount > 0 ? (int) round($totalMins / $validCount) : null;
+            }
+
+            $attendanceMetrics = [
+                'total_present'    => $totalPresent,
+                'checked_in'       => $checkedIn,
+                'submitted'        => $submitted,
+                'flagged'          => $flagged,
+                'expected'         => $expected,
+                'absent'           => $expected > 0 ? max(0, $expected - $totalPresent) : null,
+                'checkin_rate'     => $expected > 0 ? round(($totalPresent / $expected) * 100) : null,
+                'submit_rate'      => $totalPresent > 0 ? round(($submitted / $totalPresent) * 100) : 0,
+                'late_arrivals'    => $lateArrivals,
+                'avg_checkin_mins' => $avgCheckinMins,
+                'course_code'      => $activeTt?->course_code ?? null,
+                'course_title'     => $activeTt?->course_title ?? null,
+                'recent_scans'     => $recentScans->toArray(),
+            ];
+        }
+
         $payload = [
             'metrics' => $this->metricsData((int) $examiner['id']),
             'chart' => $this->chartData((int) $examiner['id']),
+            'attendance' => $attendanceMetrics,
             'system' => [
                 'total_scans_today' => DB::table('verification_logs')->whereDate('timestamp', today())->count(),
                 'active_session' => DB::table('exam_sessions')->where('is_active', true)->first(),
@@ -274,9 +352,59 @@ class ExaminerWebController extends Controller
             return redirect('/examiner/login');
         }
 
+        $todaysExams      = $this->todaysExams((int) $examiner['id']);
+        $attendanceSummary   = collect();
+        $checkedInStudents   = collect();
+        $expectedCounts      = collect();
+
+        if ($todaysExams->isNotEmpty() && Schema::hasTable('attendance_records')) {
+            $timetableIds = $todaysExams->pluck('id')->all();
+
+            $attendanceSummary = DB::table('attendance_records')
+                ->whereIn('timetable_id', $timetableIds)
+                ->select('timetable_id', 'status', DB::raw('COUNT(*) as cnt'))
+                ->groupBy('timetable_id', 'status')
+                ->get()
+                ->groupBy('timetable_id');
+
+            $checkedInStudents = DB::table('attendance_records')
+                ->join('students', 'attendance_records.matric_no', '=', 'students.matric_no')
+                ->leftJoin('departments', 'students.department_id', '=', 'departments.dept_id')
+                ->whereIn('attendance_records.timetable_id', $timetableIds)
+                ->select(
+                    'attendance_records.matric_no',
+                    'attendance_records.timetable_id',
+                    'attendance_records.session_id',
+                    'attendance_records.status',
+                    'attendance_records.checked_in_at',
+                    'attendance_records.submitted_at',
+                    'students.full_name',
+                    'students.photo_path',
+                    'students.level',
+                    'departments.name as dept_name',
+                )
+                ->orderBy('attendance_records.timetable_id')
+                ->orderBy('attendance_records.checked_in_at')
+                ->get()
+                ->groupBy('timetable_id');
+
+            if (Schema::hasTable('timetable_students')) {
+                $expectedCounts = DB::table('timetable_students')
+                    ->whereIn('timetable_id', $timetableIds)
+                    ->select('timetable_id', DB::raw('COUNT(*) as expected'))
+                    ->groupBy('timetable_id')
+                    ->pluck('expected', 'timetable_id');
+            }
+        }
+
         return view('examiner.today-exams', [
-            'examiner' => $examiner,
-            'todaysExams' => $this->todaysExams(),
+            'examiner'              => $examiner,
+            'todaysExams'           => $todaysExams,
+            'attendanceSummary'     => $attendanceSummary,
+            'checkedInStudents'     => $checkedInStudents,
+            'expectedCounts'        => $expectedCounts,
+            'enableSubmissionScan'  => $this->settingBoolean('enable_submission_scan', true),
+            'activeTimetableId'     => $request->session()->get('examiner_active_timetable_id'),
             'notificationUnreadCount' => $this->examinerUnreadNotes((int) $examiner['id']),
         ]);
     }
@@ -369,6 +497,19 @@ class ExaminerWebController extends Controller
         $deviceFp = substr(md5($request->userAgent() ?? 'unknown'), 0, 16);
         $ip = $request->ip() ?? '0.0.0.0';
 
+        // Reject immediately before consuming the QR token if no session is active.
+        $activeTimetableId = $request->session()->get('examiner_active_timetable_id');
+        if (! $activeTimetableId) {
+            return response()->json([
+                'status'         => 'REJECTED',
+                'display_status' => 'No Active Session',
+                'reason'         => 'no_active_session',
+                'message'        => 'You must start an exam session before scanning. Go to Today\'s Assessments to select and start your session.',
+                'student'        => null,
+                'timestamp'      => now()->toIso8601String(),
+            ]);
+        }
+
         try {
             $result = $this->verificationService->verifyQr(
                 $data['qr_data'],
@@ -427,6 +568,86 @@ class ExaminerWebController extends Controller
             }
         }
 
+        // Contextual session check: enforce that the scanned QR matches the active assessment.
+        if ($activeTimetableId && $result['status'] === 'APPROVED' && $tokenId !== null) {
+            $qrTimetableId = DB::table('qr_tokens')->where('token_id', $tokenId)->value('timetable_id');
+            if ($qrTimetableId && (int) $qrTimetableId !== (int) $activeTimetableId) {
+                // Revert the token to UNUSED so the correct examiner can still scan it.
+                DB::table('qr_tokens')->where('token_id', $tokenId)->where('status', 'USED')->update(['status' => 'UNUSED', 'used_at' => null]);
+
+                $activeTt   = $request->session()->get('examiner_active_timetable', []);
+                $qrExam     = DB::table('timetables')->where('id', (int) $qrTimetableId)->first();
+                $result['status']         = 'REJECTED';
+                $result['reason']         = 'wrong_session';
+                $result['display_status'] = 'Wrong Exam Session';
+                $result['message']        = sprintf(
+                    'This QR is for %s (%s). Your active session is %s (%s). Direct the student to their correct hall.',
+                    $qrExam?->course_code ?? 'a different course',
+                    $qrExam?->venue ?? 'unknown venue',
+                    $activeTt['course_code'] ?? 'the active exam',
+                    $activeTt['venue'] ?? 'this hall'
+                );
+                $result['prior_scan'] = [
+                    'examiner'    => $request->session()->get('examiner_name', 'This examiner'),
+                    'venue'       => $activeTt['venue'] ?? null,
+                    'course_code' => $activeTt['course_code'] ?? null,
+                    'reason'      => 'Wrong venue / Wrong examiner',
+                ];
+            } elseif (! $qrTimetableId) {
+                // Revert token — QR has no timetable binding.
+                DB::table('qr_tokens')->where('token_id', $tokenId)->where('status', 'USED')->update(['status' => 'UNUSED', 'used_at' => null]);
+                $result['status']         = 'REJECTED';
+                $result['reason']         = 'wrong_session';
+                $result['display_status'] = 'Session Not Matched';
+                $result['message']        = 'This QR pass could not be matched to your active session. Ask the student to regenerate their exam pass.';
+            }
+        }
+
+        // Examiner assignment check: if the active session has an assigned examiner, verify it is this examiner.
+        if ($activeTimetableId && $result['status'] === 'APPROVED') {
+            $hasExaminerId = DB::getSchemaBuilder()->hasColumn('timetables', 'examiner_id');
+            if ($hasExaminerId) {
+                $assignedExaminerId = DB::table('timetables')->where('id', $activeTimetableId)->value('examiner_id');
+                if ($assignedExaminerId !== null && (int) $assignedExaminerId !== $examinerId) {
+                    // Revert token — this examiner is not assigned.
+                    DB::table('qr_tokens')->where('token_id', $tokenId)->where('status', 'USED')->update(['status' => 'UNUSED', 'used_at' => null]);
+                    $assignedExaminerName = DB::table('examiners')->where('examiner_id', $assignedExaminerId)->value('full_name');
+                    $activeTt = $request->session()->get('examiner_active_timetable', []);
+                    $result['status']         = 'REJECTED';
+                    $result['reason']         = 'wrong_examiner';
+                    $result['display_status'] = 'Not Your Assignment';
+                    $result['message']        = sprintf(
+                        'This assessment (%s) is assigned to %s. You are not authorised to scan for it. Contact admin if this is incorrect.',
+                        $activeTt['course_code'] ?? 'this assessment',
+                        $assignedExaminerName ?? 'another examiner'
+                    );
+                }
+            }
+        }
+
+        // Time window enforcement: reject approved scans outside the exam hours.
+        if ($activeTimetableId && $result['status'] === 'APPROVED' && $tokenId !== null) {
+            $activeTt  = $request->session()->get('examiner_active_timetable', []);
+            $startTime = $activeTt['start_time'] ?? null;
+            $endTime   = $activeTt['end_time'] ?? null;
+            if ($startTime && $endTime) {
+                $now      = now();
+                $earliest = \Carbon\Carbon::parse($startTime)->subMinutes(60);
+                $latest   = \Carbon\Carbon::parse($endTime)->addMinutes(60);
+                if ($now->lt($earliest) || $now->gt($latest)) {
+                    DB::table('qr_tokens')->where('token_id', $tokenId)->where('status', 'USED')->update(['status' => 'UNUSED', 'used_at' => null]);
+                    $result['status']         = 'REJECTED';
+                    $result['reason']         = 'outside_time_window';
+                    $result['display_status'] = 'Outside Exam Hours';
+                    $result['message']        = sprintf(
+                        'This exam runs from %s to %s. Scanning is only permitted within 60 minutes of the exam window.',
+                        \Carbon\Carbon::parse($startTime)->format('g:i A'),
+                        \Carbon\Carbon::parse($endTime)->format('g:i A')
+                    );
+                }
+            }
+        }
+
         try {
             if (DB::getSchemaBuilder()->hasColumn('examiners', 'last_active_at')) {
                 DB::table('examiners')->where('examiner_id', $examinerId)->update(['last_active_at' => now()]);
@@ -451,9 +672,346 @@ class ExaminerWebController extends Controller
             );
         }
 
+        if (
+            $result['status'] === 'APPROVED'
+            && $tokenId !== null
+            && Schema::hasTable('attendance_records')
+            && $this->settingBoolean('attendance_tracking_enabled', true)
+        ) {
+            try {
+                $qrToken = DB::table('qr_tokens')->where('token_id', $tokenId)->first();
+                if (
+                    $qrToken
+                    && ! empty($qrToken->timetable_id)
+                    && ! empty($qrToken->session_id)
+                    && ! empty($qrToken->student_id)
+                ) {
+                    $alreadyCheckedIn = DB::table('attendance_records')
+                        ->where('matric_no', $qrToken->student_id)
+                        ->where('timetable_id', $qrToken->timetable_id)
+                        ->where('session_id', $qrToken->session_id)
+                        ->exists();
+
+                    if (! $alreadyCheckedIn) {
+                        DB::table('attendance_records')->insert([
+                            'matric_no'         => $qrToken->student_id,
+                            'timetable_id'      => $qrToken->timetable_id,
+                            'session_id'        => $qrToken->session_id,
+                            'token_id'          => $tokenId,
+                            'status'            => 'checked_in',
+                            'checked_in_at'     => now(),
+                            'entry_examiner_id' => $examinerId,
+                            'created_at'        => now(),
+                            'updated_at'        => now(),
+                        ]);
+                    }
+                }
+            } catch (Throwable) {
+                // Attendance upsert must never block a verified APPROVED decision.
+            }
+        }
+
+        // Submission scan: if DUPLICATE and enable_submission_scan is on, treat as exit scan
+        if (
+            $result['status'] === 'DUPLICATE'
+            && $tokenId !== null
+            && $activeTimetableId
+            && Schema::hasTable('attendance_records')
+            && $this->settingBoolean('enable_submission_scan', false)
+        ) {
+            try {
+                $qrToken = DB::table('qr_tokens')->where('token_id', $tokenId)->first();
+                if (
+                    $qrToken
+                    && ! empty($qrToken->timetable_id)
+                    && (int) $qrToken->timetable_id === (int) $activeTimetableId
+                    && ! empty($qrToken->student_id)
+                ) {
+                    $attRecord = DB::table('attendance_records')
+                        ->where('matric_no', $qrToken->student_id)
+                        ->where('timetable_id', $qrToken->timetable_id)
+                        ->where('session_id', $qrToken->session_id)
+                        ->first();
+
+                    if ($attRecord) {
+                        if ($attRecord->status === 'submitted') {
+                            $submittedAt = $attRecord->submitted_at
+                                ? \Carbon\Carbon::parse($attRecord->submitted_at)->format('H:i')
+                                : 'earlier';
+                            $result['status']         = 'ALREADY_SUBMITTED';
+                            $result['display_status'] = 'Already Submitted';
+                            $result['message']        = "This student has already submitted their assessment at {$submittedAt}.";
+                            $result['reason']         = 'already_submitted';
+                        } elseif (in_array($attRecord->status, ['checked_in', 'flagged', 'writing'], true)) {
+                            DB::table('attendance_records')
+                                ->where('matric_no', $qrToken->student_id)
+                                ->where('timetable_id', $qrToken->timetable_id)
+                                ->where('session_id', $qrToken->session_id)
+                                ->update([
+                                    'status'           => 'submitted',
+                                    'submitted_at'     => now(),
+                                    'exit_examiner_id' => $examinerId,
+                                    'updated_at'       => now(),
+                                ]);
+
+                            $result['status']         = 'SUBMITTED';
+                            $result['display_status'] = 'Submission Confirmed';
+                            $result['message']        = 'Assessment submission recorded. Student may leave the hall.';
+                            $result['reason']         = 'submission_confirmed';
+                            $result['scan_mode']      = 'submission';
+                        }
+                    } else {
+                        // Not checked in — cannot submit
+                        $result['status']         = 'REJECTED';
+                        $result['display_status'] = 'Not Checked In';
+                        $result['message']        = 'This student did not check in for this session. They cannot submit.';
+                        $result['reason']         = 'not_checked_in_for_submission';
+                    }
+                }
+            } catch (Throwable) {
+                // Submission recording must never block the scan result.
+            }
+        }
+
         unset($result['token_id']);
 
         return response()->json($result);
+    }
+
+    public function startScanSession(Request $request): JsonResponse
+    {
+        if (! $request->session()->has('examiner_id') || ! Roles::isExaminer($request->session()->get('examiner_role'))) {
+            return response()->json(['success' => false, 'message' => 'Not authenticated.'], 401);
+        }
+
+        $data = $request->validate(['timetable_id' => 'required|integer|min:1']);
+
+        $exam = DB::table('timetables')
+            ->leftJoin('departments', 'timetables.department_id', '=', 'departments.dept_id')
+            ->where('timetables.id', (int) $data['timetable_id'])
+            ->whereDate('exam_date', today())
+            ->select('timetables.*', 'departments.dept_name')
+            ->first();
+
+        if (! $exam) {
+            return response()->json(['success' => false, 'message' => 'Exam not found or not scheduled for today.'], 422);
+        }
+
+        $examinerId = (int) $request->session()->get('examiner_id');
+        $hasExaminerId = DB::getSchemaBuilder()->hasColumn('timetables', 'examiner_id');
+        if ($hasExaminerId && $exam->examiner_id !== null && (int) $exam->examiner_id !== $examinerId) {
+            return response()->json(['success' => false, 'message' => 'You are not assigned to invigilate this assessment.'], 403);
+        }
+
+        $request->session()->put('examiner_active_timetable_id', (int) $exam->id);
+        $request->session()->put('examiner_active_timetable', [
+            'id'              => (int) $exam->id,
+            'course_code'     => $exam->course_code,
+            'course_title'    => $exam->course_title ?? '',
+            'venue'           => $exam->venue ?? '',
+            'dept_name'       => $exam->dept_name ?? '',
+            'level'           => $exam->level ?? '',
+            'start_time'      => $exam->start_time ?? '',
+            'end_time'        => $exam->end_time ?? '',
+            'assessment_type' => $exam->assessment_type ?? 'exam',
+        ]);
+
+        // Record live session in DB for admin visibility.
+        if (Schema::hasTable('examiner_sessions')) {
+            DB::table('examiner_sessions')->insert([
+                'examiner_id' => $examinerId,
+                'timetable_id' => (int) $exam->id,
+                'started_at'  => now(),
+                'created_at'  => now(),
+                'updated_at'  => now(),
+            ]);
+        }
+
+        return response()->json([
+            'success' => true,
+            'exam' => [
+                'id'           => (int) $exam->id,
+                'course_code'  => $exam->course_code,
+                'course_title' => $exam->course_title ?? '',
+                'venue'        => $exam->venue ?? '',
+                'dept_name'    => $exam->dept_name ?? '',
+                'level'        => $exam->level ?? '',
+                'start_time'   => $exam->start_time ?? '',
+            ],
+        ]);
+    }
+
+    public function stopScanSession(Request $request): JsonResponse
+    {
+        if (! $request->session()->has('examiner_id') || ! Roles::isExaminer($request->session()->get('examiner_role'))) {
+            return response()->json(['success' => false, 'message' => 'Not authenticated.'], 401);
+        }
+
+        $examinerId    = (int) $request->session()->get('examiner_id');
+        $timetableId   = (int) $request->session()->get('examiner_active_timetable_id', 0);
+        $activeTt      = $request->session()->get('examiner_active_timetable', []);
+
+        if ($timetableId && Schema::hasTable('examiner_sessions')) {
+            // Build audit summary from current attendance state.
+            $audit = $this->buildSessionAudit($examinerId, $timetableId, $activeTt);
+
+            DB::table('examiner_sessions')
+                ->where('examiner_id', $examinerId)
+                ->where('timetable_id', $timetableId)
+                ->whereNull('ended_at')
+                ->update([
+                    'ended_at'      => now(),
+                    'audit_summary' => json_encode($audit),
+                    'updated_at'    => now(),
+                ]);
+        }
+
+        $request->session()->forget(['examiner_active_timetable_id', 'examiner_active_timetable']);
+
+        return response()->json(['success' => true]);
+    }
+
+    private function buildSessionAudit(int $examinerId, int $timetableId, array $activeTt): array
+    {
+        $timetable = DB::table('timetables')
+            ->leftJoin('departments', 'timetables.department_id', '=', 'departments.dept_id')
+            ->where('timetables.id', $timetableId)
+            ->select('timetables.*', 'departments.dept_name')
+            ->first();
+
+        $examinerName = DB::table('examiners')->where('examiner_id', $examinerId)->value('full_name');
+
+        $expected = Schema::hasTable('timetable_students')
+            ? DB::table('timetable_students')->where('timetable_id', $timetableId)->count()
+            : 0;
+
+        $sessionId = $timetable?->exam_session_id ?? 0;
+        $attended = 0;
+        $checkedIn = 0;
+        $submitted = 0;
+        $flagged = 0;
+        $attendanceList = collect();
+
+        if (Schema::hasTable('attendance_records') && $sessionId) {
+            $rows = DB::table('attendance_records')
+                ->join('students', 'attendance_records.matric_no', '=', 'students.matric_no')
+                ->leftJoin('departments', 'students.department_id', '=', 'departments.dept_id')
+                ->where('attendance_records.timetable_id', $timetableId)
+                ->where('attendance_records.session_id', $sessionId)
+                ->select(
+                    'attendance_records.matric_no',
+                    'attendance_records.status',
+                    'attendance_records.checked_in_at',
+                    'attendance_records.submitted_at',
+                    'students.full_name',
+                    'students.level',
+                    'departments.dept_name as department',
+                )
+                ->orderBy('attendance_records.checked_in_at')
+                ->get();
+
+            $checkedIn = $rows->where('status', 'checked_in')->count();
+            $submitted = $rows->where('status', 'submitted')->count();
+            $flagged   = $rows->where('status', 'flagged')->count();
+            $attended  = $rows->count();
+            $attendanceList = $rows;
+        }
+
+        $wrongScans = DB::table('verification_logs')
+            ->where('examiner_id', $examinerId)
+            ->where('rejection_reason', 'wrong_session')
+            ->whereDate('timestamp', today())
+            ->count();
+
+        $duplicateScans = DB::table('verification_logs')
+            ->where('examiner_id', $examinerId)
+            ->where('decision', 'DUPLICATE')
+            ->whereDate('timestamp', today())
+            ->count();
+
+        $absent = $expected > 0 ? max(0, $expected - $attended) : null;
+
+        return [
+            'examiner_id'      => $examinerId,
+            'examiner_name'    => $examinerName,
+            'timetable_id'     => $timetableId,
+            'course_code'      => $timetable?->course_code ?? ($activeTt['course_code'] ?? null),
+            'course_title'     => $timetable?->course_title ?? ($activeTt['course_title'] ?? null),
+            'assessment_type'  => $timetable?->assessment_type ?? ($activeTt['assessment_type'] ?? 'exam'),
+            'exam_date'        => $timetable?->exam_date,
+            'start_time'       => $timetable?->start_time ?? ($activeTt['start_time'] ?? null),
+            'end_time'         => $timetable?->end_time ?? ($activeTt['end_time'] ?? null),
+            'venue'            => $timetable?->venue ?? ($activeTt['venue'] ?? null),
+            'department'       => $timetable?->dept_name ?? ($activeTt['dept_name'] ?? null),
+            'level'            => $timetable?->level ?? ($activeTt['level'] ?? null),
+            'session_id'       => $sessionId,
+            'expected'         => $expected,
+            'attended'         => $attended,
+            'checked_in'       => $checkedIn,
+            'submitted'        => $submitted,
+            'flagged'          => $flagged,
+            'absent'           => $absent,
+            'wrong_scans'      => $wrongScans,
+            'duplicate_scans'  => $duplicateScans,
+            'attendance'       => $attendanceList->toArray(),
+        ];
+    }
+
+    public function submitAttendance(Request $request): JsonResponse
+    {
+        if (! $request->session()->has('examiner_id') || ! Roles::isExaminer($request->session()->get('examiner_role'))) {
+            return response()->json(['success' => false, 'message' => 'Not authenticated.'], 401);
+        }
+
+        $data = $request->validate([
+            'matric_no'    => 'required|string',
+            'timetable_id' => 'required|integer|min:1',
+            'session_id'   => 'required|integer|min:1',
+        ]);
+
+        $examinerId = (int) $request->session()->get('examiner_id');
+
+        if (! Schema::hasTable('attendance_records')) {
+            return response()->json(['success' => false, 'message' => 'Attendance tracking is not available.'], 422);
+        }
+
+        $record = DB::table('attendance_records')
+            ->where('matric_no', $data['matric_no'])
+            ->where('timetable_id', (int) $data['timetable_id'])
+            ->where('session_id', (int) $data['session_id'])
+            ->first();
+
+        if (! $record) {
+            return response()->json(['success' => false, 'message' => 'No check-in record found for this student.'], 404);
+        }
+
+        if ($record->status === 'submitted') {
+            return response()->json(['success' => true, 'message' => 'Already marked as submitted.', 'already_submitted' => true]);
+        }
+
+        DB::table('attendance_records')
+            ->where('matric_no', $data['matric_no'])
+            ->where('timetable_id', (int) $data['timetable_id'])
+            ->where('session_id', (int) $data['session_id'])
+            ->update([
+                'status'           => 'submitted',
+                'submitted_at'     => now(),
+                'exit_examiner_id' => $examinerId,
+                'updated_at'       => now(),
+            ]);
+
+        $this->auditService->logAction(
+            (string) $examinerId,
+            'examiner',
+            'attendance.submitted',
+            [
+                'matric_no'    => $data['matric_no'],
+                'timetable_id' => (int) $data['timetable_id'],
+                'session_id'   => (int) $data['session_id'],
+            ]
+        );
+
+        return response()->json(['success' => true, 'message' => 'Student marked as submitted.']);
     }
 
     private function safeVerificationLog(array $qrData, ?array $result, string $reason): void
@@ -622,8 +1180,8 @@ class ExaminerWebController extends Controller
             ->map(fn ($row) => [
                 'log_id' => $row->log_id,
                 'time' => Carbon::parse($row->timestamp)->format('d M Y, H:i'),
-                'student' => $row->full_name ?? 'Student unavailable',
-                'matric_no' => $row->matric_no ?? 'Unavailable',
+                'student' => $row->full_name ?? $this->fallbackStudentLabel($row),
+                'matric_no' => $row->matric_no ?? ($row->qr_tokens_student_id ?? 'No matric on record'),
                 'decision' => $row->decision,
                 'token_ref' => substr($row->token_id, 0, 8).'...'.substr($row->token_id, -4),
                 'detail_url' => route('examiner.scans.show', $row->log_id),
@@ -644,14 +1202,34 @@ class ExaminerWebController extends Controller
             ->map(fn ($row) => [
                 'action' => 'scan.'.strtolower($row->decision),
                 'time' => Carbon::parse($row->timestamp)->format('d M Y, H:i'),
-                'student' => $row->full_name ?? 'Student unavailable',
-                'matric_no' => $row->matric_no ?? 'Unavailable',
+                'student' => $row->full_name ?? $this->fallbackStudentLabel($row),
+                'matric_no' => $row->matric_no ?? 'No matric on record',
                 'token_ref' => substr($row->token_id, 0, 8).'...'.substr($row->token_id, -4),
                 'ip_address' => $row->ip_address,
                 'device_fp' => $row->device_fp,
                 'detail_url' => route('examiner.scans.show', $row->log_id),
             ])
             ->all();
+    }
+
+    private function fallbackStudentLabel(object $row): string
+    {
+        $reason = $row->rejection_reason ?? null;
+        if (! $reason) {
+            return $row->decision === 'DUPLICATE' ? 'Duplicate scan' : 'Unregistered pass';
+        }
+        return match ($reason) {
+            'invalid_format'       => 'Invalid QR code',
+            'token_not_found'      => 'Pass not in system',
+            'token_record_mismatch', 'tampered_token' => 'Tampered QR pass',
+            'invalid_session'      => 'Wrong exam session',
+            'payment_not_verified' => 'Fee payment not verified',
+            'course_not_assigned'  => 'Course not assigned',
+            'token_revoked'        => 'Revoked pass',
+            'wrong_session'        => 'Wrong exam session',
+            'wrong_examiner'       => 'Wrong examiner assignment',
+            default                => 'Rejected: '.str_replace('_', ' ', $reason),
+        };
     }
 
     private function studentRecordRows(int $examinerId, int $limit): array
@@ -834,21 +1412,42 @@ class ExaminerWebController extends Controller
             'venue' => $exam?->venue,
             'seat_number' => null,
             'timetable_status' => $exam?->status,
+            'assessment_type' => $exam?->assessment_type ?? 'exam',
         ];
     }
 
-    private function todaysExams()
+    private function todaysExams(?int $examinerId = null)
     {
         if (! DB::getSchemaBuilder()->hasTable('timetables')) {
             return collect();
         }
 
-        return DB::table('timetables')
+        $hasExaminerId = DB::getSchemaBuilder()->hasColumn('timetables', 'examiner_id');
+
+        $query = DB::table('timetables')
             ->leftJoin('departments', 'timetables.department_id', '=', 'departments.dept_id')
             ->whereDate('exam_date', today())
             ->select('timetables.*', 'departments.dept_name')
-            ->orderBy('start_time')
-            ->get();
+            ->orderBy('start_time');
+
+        if ($examinerId && $hasExaminerId) {
+            $query->where('timetables.examiner_id', $examinerId);
+        }
+
+        return $query->get();
+    }
+
+    private function settingBoolean(string $key, bool $default): bool
+    {
+        if (! Schema::hasTable('cernix_settings')) {
+            return $default;
+        }
+
+        $value = DB::table('cernix_settings')->where('key', $key)->value('value');
+
+        return $value === null
+            ? $default
+            : in_array(strtolower((string) $value), ['1', 'true', 'yes', 'on'], true);
     }
 
     private function sessionPayment(string $matricNo, int $sessionId): ?object

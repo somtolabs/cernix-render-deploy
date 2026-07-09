@@ -18,6 +18,8 @@ class CernixSettingsSeeder extends Seeder
         $defaults = [
             'school_fee_mapping' => json_encode(DepartmentFees::FEES),
             'demo_mode_enabled' => 'false',
+            'institution_name' => 'AAUA',
+            'system_name' => 'CERNIX',
         ];
 
         foreach ($defaults as $key => $value) {

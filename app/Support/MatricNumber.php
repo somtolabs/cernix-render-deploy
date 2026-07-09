@@ -77,6 +77,44 @@ final class MatricNumber
         return preg_match('/^\d{3}$/', trim((string) $studentNumber)) === 1;
     }
 
+    /**
+     * Normalize the live matric format used during student registration.
+     */
+    public static function normalizeLiveFormat(?string $matricNumber): string
+    {
+        return preg_replace('/\s+/', '', trim((string) $matricNumber)) ?? '';
+    }
+
+    /**
+     * Parse a 9-digit matric number into its live registry components.
+     *
+     * @return array{matric_number: string, session_code: string, faculty_code: string, department_code: string, student_number: string}
+     */
+    public static function parseLiveFormat(?string $matricNumber): array
+    {
+        $normalized = self::normalizeLiveFormat($matricNumber);
+
+        if ($normalized === '') {
+            throw new InvalidArgumentException('Enter your matric number.');
+        }
+
+        if (preg_match('/^\d+$/', $normalized) !== 1) {
+            throw new InvalidArgumentException('Matric number must contain numbers only.');
+        }
+
+        if (strlen($normalized) !== 9) {
+            throw new InvalidArgumentException('Matric number must be exactly 9 digits, for example 220404008.');
+        }
+
+        return [
+            'matric_number' => $normalized,
+            'session_code' => substr($normalized, 0, 2),
+            'faculty_code' => substr($normalized, 2, 2),
+            'department_code' => substr($normalized, 4, 2),
+            'student_number' => substr($normalized, 6, 3),
+        ];
+    }
+
     public static function demoPhotoPath(string $studentNumber): string
     {
         return 'demo-passports/student-' . trim($studentNumber) . '.jpg';

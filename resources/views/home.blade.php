@@ -73,15 +73,15 @@
     <section class="home-main">
         <div class="hero">
             <div class="brand">
-                <img src="/aaua-logo.png" alt="AAUA">
+                <x-brand-mark :size="46" tone="light" :alt="$brandingInstitutionName" />
                 <div>
-                    <strong>CERNIX</strong>
-                    <span>Adekunle Ajasin University Exam Verification</span>
+                    <strong>{{ $brandingSystemName }}</strong>
+                    <span>{{ $brandingInstitutionName }} Exam Verification</span>
                 </div>
             </div>
             <div class="tag"><span class="pulse-dot"></span> Secure Exam Access</div>
             <h1><span class="accent">Cryptographic</span> Exam Access.</h1>
-            <p>Secure exam access for Adekunle Ajasin University, linking student identity, payment status, timetable context, and a server-verifiable QR exam pass.</p>
+            <p>Secure exam access for {{ $brandingInstitutionName }}, linking student identity, payment status, timetable context, and a server-verifiable QR exam pass.</p>
 
             <div class="stat-strip" aria-label="Security summary">
                 <div><b>ID</b><span>Identity</span></div>
@@ -123,7 +123,7 @@
     </div>
 
     <footer class="footer-meta">
-        <span>CERNIX v1.0 · Secured exam access system</span>
+        <span>{{ $brandingSystemName }} · Secured exam access system</span>
         <span>Secure server verification · One-time QR check</span>
     </footer>
 </main>

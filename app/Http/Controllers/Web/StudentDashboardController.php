@@ -13,6 +13,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use RuntimeException;
 use Throwable;
@@ -36,32 +37,91 @@ class StudentDashboardController extends Controller
             return $payload;
         }
 
+        // Cosmetic profile photo — no approval needed, never used for verification
         $request->validate([
-            'passport_photo' => ['required', 'image', 'mimes:jpg,jpeg', 'max:2048'],
+            'profile_photo' => ['required', 'image', 'mimes:jpg,jpeg,png,webp,heic,heif', 'max:4096'],
         ]);
 
-        $photoPath = $this->storePassportPhoto($request, $payload['student']->matric_no);
+        $profilePhotoPath = $this->storeProfilePhoto($request, $payload['student']->matric_no);
+
+        $updates = ['updated_at' => now()];
+        if (Schema::hasColumn('students', 'profile_photo_path')) {
+            $updates['profile_photo_path'] = $profilePhotoPath;
+        }
 
         DB::table('students')
             ->where('matric_no', $payload['student']->matric_no)
             ->where('session_id', $payload['student']->session_id)
-            ->update([
-                'photo_path' => $photoPath,
-                'photo_status' => 'pending_admin_approval',
-                'photo_rejection_reason' => null,
-                'photo_reviewed_by' => null,
-                'photo_reviewed_at' => null,
-                'updated_at' => now(),
-            ]);
+            ->update($updates);
 
         app(AuditService::class)->logAction(
             $payload['student']->matric_no,
             'student',
-            'student.photo_uploaded',
+            'student.profile_photo_updated',
+            ['session_id' => $payload['student']->session_id]
+        );
+
+        return back()->with('status', 'Profile photo updated successfully.');
+    }
+
+    public function resubmitVerification(Request $request): RedirectResponse
+    {
+        $payload = $this->dashboardPayload($request);
+        if ($payload instanceof RedirectResponse) {
+            return $payload;
+        }
+
+        if (! $this->settingBoolean('photo_resubmit_allowed', true)) {
+            return back()->withErrors(['resubmit' => 'Photo resubmission is not currently permitted. Contact the exam office.']);
+        }
+
+        $request->validate([
+            'selfie'  => ['required', 'image', 'mimes:jpg,jpeg,png,webp,heic,heif', 'max:4096'],
+            'id_card' => ['required', 'image', 'mimes:jpg,jpeg,png,webp,heic,heif', 'max:5120'],
+        ]);
+
+        $photoPath  = $this->storePassportPhoto($request, $payload['student']->matric_no);
+        $idCardPath = $this->storeIdCardPhoto($request, $payload['student']->matric_no);
+
+        DB::transaction(function () use ($payload, $photoPath, $idCardPath) {
+            $updates = $this->studentColumnUpdates([
+                'photo_path'             => $photoPath,
+                'id_card_path'           => $idCardPath,
+                'photo_status'           => 'pending_admin_approval',
+                'photo_rejection_reason' => null,
+                'photo_flag_reason'      => null,
+                'photo_approved_by'      => null,
+                'photo_approved_at'      => null,
+                'photo_reviewed_by'      => null,
+                'photo_reviewed_at'      => null,
+                'updated_at'             => now(),
+            ]);
+
+            if (Schema::hasColumn('students', 'photo_resubmitted_at')) {
+                $updates['photo_resubmitted_at'] = now();
+            }
+
+            DB::table('students')
+                ->where('matric_no', $payload['student']->matric_no)
+                ->where('session_id', $payload['student']->session_id)
+                ->update($updates);
+
+            if (Schema::hasColumn('students', 'photo_submission_count')) {
+                DB::table('students')
+                    ->where('matric_no', $payload['student']->matric_no)
+                    ->where('session_id', $payload['student']->session_id)
+                    ->increment('photo_submission_count');
+            }
+        });
+
+        app(AuditService::class)->logAction(
+            $payload['student']->matric_no,
+            'student',
+            'student.verification_resubmitted',
             ['session_id' => $payload['student']->session_id, 'photo_status' => 'pending_admin_approval']
         );
 
-        return back()->with('status', 'Photo uploaded. Your profile is waiting for admin approval.');
+        return back()->with('status', 'Verification documents submitted. Admin will review shortly.');
     }
 
     public function examAccessId(Request $request, ?int $timetable = null)
@@ -75,7 +135,23 @@ class StudentDashboardController extends Controller
 
     public function timetable(Request $request)
     {
-        return $this->portalView($request, 'student.timetable', 'timetable');
+        $allowedTypes = ['exam', 'test', 'makeup'];
+        $typeFilter   = in_array($request->input('type'), $allowedTypes, true) ? $request->input('type') : '';
+        $activeKey    = match ($typeFilter) {
+            'test'   => 'tests',
+            'makeup' => 'makeup',
+            default  => 'exams',
+        };
+
+        $payload = $this->dashboardPayload($request);
+        if ($payload instanceof RedirectResponse) {
+            return $payload;
+        }
+
+        return view('student.timetable', array_merge($payload, [
+            'activePortal'        => $activeKey,
+            'timetableTypeFilter' => $typeFilter,
+        ]));
     }
 
     public function payment(Request $request)
@@ -95,18 +171,26 @@ class StudentDashboardController extends Controller
             return $payload;
         }
 
+        $data = $request->validate([
+            'timetable_id' => ['required', 'integer'],
+            'rrr_number' => ['nullable', 'string', 'max:50'],
+        ]);
+
+        $selectedExam = $payload['coursePasses']->firstWhere('id', (int) $data['timetable_id']);
+        $paymentRequired = $selectedExam ? $this->examRequiresPayment($selectedExam) : true;
         $hasVerifiedPayment = $this->paymentQuery(
             $payload['student']->matric_no,
             (int) $payload['student']->session_id
         )->exists();
 
-        $data = $request->validate([
-            'rrr_number' => [$hasVerifiedPayment ? 'nullable' : 'required', 'string', 'max:50'],
-            'timetable_id' => ['required', 'integer'],
-        ]);
+        if ($paymentRequired && ! $hasVerifiedPayment && trim((string) ($data['rrr_number'] ?? '')) === '') {
+            return back()
+                ->withErrors(['rrr_number' => 'Enter the RRR used for this exam session.'])
+                ->withInput($request->except('rrr_number'));
+        }
 
         $expectedAmount = DepartmentFees::amountForDepartment($payload['student']->dept_name ?? null);
-        if ($expectedAmount <= 0) {
+        if ($paymentRequired && $expectedAmount <= 0) {
             return back()
                 ->withErrors(['rrr_number' => 'A course QR pass could not be generated because your school fee is not configured.'])
                 ->withInput($request->except('rrr_number'));
@@ -133,7 +217,9 @@ class StudentDashboardController extends Controller
             );
 
             return redirect()->route('student.generate-exam-pass')
-                ->with('status', 'Payment verified for this session. Your course QR pass is ready.');
+                ->with('status', $paymentRequired
+                    ? 'Payment verified for this session. Your course QR pass is ready.'
+                    : 'Payment not required for this exam. Your course QR pass is ready.');
         } catch (Throwable $exception) {
             if (! $exception instanceof RuntimeException || $this->isTechnicalExamPassFailure($exception)) {
                 report($exception);
@@ -366,6 +452,7 @@ class StudentDashboardController extends Controller
 
         $timetableEntries = collect();
         if (DB::getSchemaBuilder()->hasTable('timetables')) {
+            $hasRosterTable = Schema::hasTable('timetable_students');
             $timetableEntries = DB::table('timetables')
                 ->where('exam_session_id', $sessionId)
                 ->where('department_id', $student->department_id)
@@ -373,11 +460,25 @@ class StudentDashboardController extends Controller
                 ->orderBy('exam_date')
                 ->orderBy('start_time')
                 ->get()
+                ->filter(function ($exam) use ($student, $hasRosterTable) {
+                    $type = $exam->assessment_type ?? 'exam';
+                    if ($type === 'exam' || !$hasRosterTable) return true;
+                    // For tests/makeups: show if no roster exists OR student is enrolled
+                    $rosterExists = DB::table('timetable_students')
+                        ->where('timetable_id', $exam->id)
+                        ->exists();
+                    if (!$rosterExists) return true;
+                    return DB::table('timetable_students')
+                        ->where('timetable_id', $exam->id)
+                        ->where('matric_no', $student->matric_no)
+                        ->exists();
+                })
                 ->map(function ($exam) {
                     $exam->display_status = $this->examStatus($exam);
 
                     return $exam;
-                });
+                })
+                ->values();
         }
 
         $nextExam = $timetableEntries
@@ -401,6 +502,8 @@ class StudentDashboardController extends Controller
                 'REVOKED' => 'Unavailable',
                 default => 'Not Generated',
             };
+            $exam->payment_required_effective = $this->examRequiresPayment($exam);
+            $exam->payment_label = $exam->payment_required_effective ? 'Payment required' : 'Payment not required';
 
             return $exam;
         });
@@ -416,7 +519,7 @@ class StudentDashboardController extends Controller
                 default => 'Not Generated',
             },
             'timetable' => $timetableEntries->count() ? 'Assigned' : 'Not Assigned',
-            'next_exam' => $nextExam->display_status ?? 'None',
+            'next_exam' => $nextExam?->display_status ?? 'None',
         ];
 
         $scanHistory = collect();
@@ -431,6 +534,8 @@ class StudentDashboardController extends Controller
                 ->limit(10)
                 ->get();
         }
+
+        $allNotes = $this->studentNotes($student->matric_no);
 
         return [
             'student' => $student,
@@ -449,7 +554,8 @@ class StudentDashboardController extends Controller
             'passExam' => $passExam,
             'statusSummary' => $statusSummary,
             'scanHistory' => $scanHistory,
-            'notificationUnreadCount' => $this->studentUnreadNotes($student->matric_no),
+            'notificationPreview' => $allNotes->take(3),
+            'notificationUnreadCount' => $allNotes->filter(fn ($n) => ! $n->student_read_at)->count(),
             'generatedAt' => now(),
             'photoUrl' => $this->photoUrl($student->photo_path ?? null),
         ];
@@ -467,6 +573,39 @@ class StudentDashboardController extends Controller
         }
 
         return $query;
+    }
+
+    private function examRequiresPayment(object $exam): bool
+    {
+        // Tests and make-ups never require payment regardless of per-row overrides or global settings
+        $type = $exam->assessment_type ?? 'exam';
+        if ($type === 'test' || $type === 'makeup') {
+            return false;
+        }
+
+        // Per-row override takes precedence for exams when the feature is enabled
+        if (
+            $this->settingBoolean('allow_payment_not_required_exams', true)
+            && Schema::hasColumn('timetables', 'payment_required')
+            && $exam->payment_required !== null
+        ) {
+            return (bool) $exam->payment_required;
+        }
+
+        return $this->settingBoolean('default_exam_payment_required', true);
+    }
+
+    private function settingBoolean(string $key, bool $default): bool
+    {
+        if (! Schema::hasTable('cernix_settings')) {
+            return $default;
+        }
+
+        $value = DB::table('cernix_settings')->where('key', $key)->value('value');
+
+        return $value === null
+            ? $default
+            : in_array(strtolower((string) $value), ['1', 'true', 'yes', 'on'], true);
     }
 
     private function studentNotes(string $matricNo)
@@ -520,13 +659,6 @@ class StudentDashboardController extends Controller
             ->orderByDesc('created_at')
             ->get()
             ->map(fn ($note) => $this->decorateStudentNote($note));
-    }
-
-    private function studentUnreadNotes(string $matricNo): int
-    {
-        return $this->studentNotes($matricNo)
-            ->filter(fn ($note) => ! $note->student_read_at)
-            ->count();
     }
 
     private function decorateStudentNote(object $note): object
@@ -665,9 +797,31 @@ class StudentDashboardController extends Controller
         return url('/photo-thumb/' . $encoded);
     }
 
+    private function storeProfilePhoto(Request $request, string $matricNo): string
+    {
+        $file      = $request->file('profile_photo');
+        $directory = public_path('photos/profiles');
+
+        if (! is_dir($directory)) {
+            mkdir($directory, 0755, true);
+        }
+
+        $filename = 'profile-'
+            . Str::slug(str_replace('/', '-', $matricNo))
+            . '-'
+            . now()->format('YmdHis')
+            . '-'
+            . Str::random(6)
+            . '.jpg';
+
+        file_put_contents($directory . DIRECTORY_SEPARATOR . $filename, file_get_contents($file->getRealPath()));
+
+        return 'photos/profiles/' . $filename;
+    }
+
     private function storePassportPhoto(Request $request, string $matricNo): string
     {
-        $file = $request->file('passport_photo');
+        $file = $request->file('selfie') ?? $request->file('passport_photo');
         $directory = public_path('photos/student-submissions');
 
         if (! is_dir($directory)) {
@@ -684,5 +838,31 @@ class StudentDashboardController extends Controller
         file_put_contents($directory . DIRECTORY_SEPARATOR . $filename, file_get_contents($file->getRealPath()));
 
         return 'photos/student-submissions/' . $filename;
+    }
+
+    private function storeIdCardPhoto(Request $request, string $matricNo): string
+    {
+        $file      = $request->file('id_card');
+        $extension = strtolower($file->getClientOriginalExtension() ?: 'jpg');
+        $filename  = 'idcard-'
+            . Str::slug(str_replace('/', '-', $matricNo))
+            . '-'
+            . now()->format('YmdHis')
+            . '-'
+            . Str::random(8)
+            . '.' . $extension;
+
+        Storage::disk('local')->put('id-cards/' . $filename, file_get_contents($file->getRealPath()));
+
+        return 'id-cards/' . $filename;
+    }
+
+    private function studentColumnUpdates(array $updates): array
+    {
+        $columns = Schema::getColumnListing('students');
+
+        return collect($updates)
+            ->filter(fn ($value, $column) => in_array($column, $columns, true))
+            ->all();
     }
 }

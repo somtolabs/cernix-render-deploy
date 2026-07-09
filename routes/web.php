@@ -12,11 +12,16 @@ Route::get('/health', [HealthController::class, 'check']);
 
 // Student portal
 Route::get('/student/register',  [StudentWebController::class, 'index'])->name('student.register');
+Route::post('/student/lookup',   [StudentWebController::class, 'lookup'])->name('student.lookup');
+Route::get('/student/onboard',   [StudentWebController::class, 'onboard'])->name('student.onboard');
+Route::post('/student/onboard',  [StudentWebController::class, 'completeOnboarding'])->name('student.onboard.store');
 Route::post('/student/register', [StudentWebController::class, 'register']);
-Route::get('/student/login', fn () => redirect()->route('student.register'))->name('student.login');
+Route::get('/student/login',     [StudentWebController::class, 'loginPage'])->name('student.login');
+Route::post('/student/login',    [StudentWebController::class, 'doLogin'])->name('student.login.store');
 Route::get('/student/dashboard', [StudentDashboardController::class, 'index'])->name('student.dashboard');
 Route::get('/student/profile', [StudentDashboardController::class, 'profile'])->name('student.profile');
 Route::post('/student/profile/photo', [StudentDashboardController::class, 'uploadPhoto'])->name('student.profile.photo.store');
+Route::post('/student/profile/verification', [StudentDashboardController::class, 'resubmitVerification'])->name('student.profile.verification.store');
 Route::get('/student/exam-access-id', [StudentDashboardController::class, 'examAccessId'])->name('student.exam-access-id');
 Route::get('/student/exam-access-id/{timetable}', [StudentDashboardController::class, 'examAccessId'])
     ->whereNumber('timetable')
@@ -52,6 +57,9 @@ Route::get('/examiner/today-exams', [ExaminerWebController::class, 'todayExamsPa
 Route::get('/examiner/notifications', [ExaminerWebController::class, 'notificationsPage'])->name('examiner.notifications');
 Route::post('/examiner/notifications/{note}/acknowledge', [ExaminerWebController::class, 'acknowledgeNotification'])->name('examiner.notifications.acknowledge');
 Route::get('/examiner/scans/{log}', [ExaminerWebController::class, 'showScan'])->name('examiner.scans.show');
+Route::post('/examiner/submit-attendance', [ExaminerWebController::class, 'submitAttendance'])->name('examiner.submit-attendance');
+Route::post('/examiner/scan-session/start', [ExaminerWebController::class, 'startScanSession'])->name('examiner.scan-session.start');
+Route::post('/examiner/scan-session/stop',  [ExaminerWebController::class, 'stopScanSession'])->name('examiner.scan-session.stop');
 
 // Admin portal
 Route::get('/admin/login', [ExaminerWebController::class, 'adminLogin'])->name('admin.login');
@@ -64,6 +72,7 @@ Route::get('/admin/dashboard', [AdminWebController::class, 'index'])->name('admi
 Route::get('/admin/intelligence', [AdminWebController::class, 'intelligence'])->name('admin.intelligence');
 Route::get('/admin/student-registry', [AdminWebController::class, 'studentRegistry'])->name('admin.student-registry');
 Route::post('/admin/student-registry/import', [AdminWebController::class, 'studentRegistryImport'])->name('admin.student-registry.import');
+Route::get('/admin/student-registry/{import}/rejected-rows', [AdminWebController::class, 'studentRegistryRejectedRows'])->name('admin.student-registry.rejected-rows');
 Route::get('/admin/photo-approvals', [AdminWebController::class, 'photoApprovals'])->name('admin.photo-approvals');
 Route::post('/admin/photo-approvals/approve', [AdminWebController::class, 'photoApprove'])->name('admin.photo-approvals.approve');
 Route::post('/admin/photo-approvals/reject', [AdminWebController::class, 'photoReject'])->name('admin.photo-approvals.reject');
@@ -71,6 +80,7 @@ Route::post('/admin/photo-approvals/flag', [AdminWebController::class, 'photoFla
 Route::get('/admin/students', [AdminWebController::class, 'students'])->name('admin.students');
 Route::get('/admin/student-trace', [AdminWebController::class, 'studentTrace'])->name('admin.student-trace');
 Route::get('/admin/students/{student}', [AdminWebController::class, 'studentShow'])->where('student', '.*')->name('admin.students.show');
+Route::patch('/admin/students/{student}/account-status', [AdminWebController::class, 'studentAccountStatus'])->where('student', '.*')->name('admin.students.account-status');
 Route::get('/admin/examiners', [AdminWebController::class, 'examiners'])->name('admin.examiners');
 Route::post('/admin/examiners', [AdminWebController::class, 'examinerStore'])->name('admin.examiners.store');
 Route::patch('/admin/examiners/{examiner}/toggle', [AdminWebController::class, 'examinerToggle'])->name('admin.examiners.toggle');
@@ -82,23 +92,47 @@ Route::get('/admin/timetable', [AdminWebController::class, 'timetable'])->name('
 Route::post('/admin/timetable', [AdminWebController::class, 'timetableStore'])->name('admin.timetable.store');
 Route::put('/admin/timetable/{entry}', [AdminWebController::class, 'timetableUpdate'])->name('admin.timetable.update');
 Route::delete('/admin/timetable/{entry}', [AdminWebController::class, 'timetableDestroy'])->name('admin.timetable.destroy');
+Route::post('/admin/timetable/import', [AdminWebController::class, 'timetableImport'])->name('admin.timetable.import');
+Route::post('/admin/timetable/{entry}/roster', [AdminWebController::class, 'timetableRosterAdd'])->name('admin.timetable.roster.add');
+Route::delete('/admin/timetable/{entry}/roster/{matric}', [AdminWebController::class, 'timetableRosterRemove'])->where('matric', '.*')->name('admin.timetable.roster.remove');
+Route::post('/admin/timetable/{entry}/roster/import', [AdminWebController::class, 'timetableRosterImport'])->name('admin.timetable.roster.import');
 Route::get('/admin/scan-logs', [AdminWebController::class, 'scanLogs'])->name('admin.scan-logs');
 Route::get('/admin/scan-logs/{log}', [AdminWebController::class, 'scanLogShow'])->name('admin.scan-logs.show');
 Route::get('/admin/qr-tokens', [AdminWebController::class, 'qrTokens'])->name('admin.qr-tokens');
 Route::patch('/admin/qr-tokens/{token}/revoke', [AdminWebController::class, 'qrTokenRevoke'])->name('admin.qr-tokens.revoke');
+Route::get('/admin/exam-sessions', [AdminWebController::class, 'examSessions'])->name('admin.exam-sessions');
+Route::get('/admin/attendance',   [AdminWebController::class, 'attendance'])->name('admin.attendance');
 Route::get('/admin/activity', [AdminWebController::class, 'activity'])->name('admin.activity');
 Route::get('/admin/settings', [AdminWebController::class, 'settings'])->name('admin.settings');
 Route::patch('/admin/settings/fees', [AdminWebController::class, 'settingsFeesUpdate'])->name('admin.settings.fees.update');
+Route::patch('/admin/settings/live-phase', [AdminWebController::class, 'settingsLivePhaseUpdate'])->name('admin.settings.live-phase.update');
 Route::patch('/admin/settings/demo-mode', [AdminWebController::class, 'settingsDemoUpdate'])->name('admin.settings.demo.update');
 Route::post('/admin/settings/branding', [AdminWebController::class, 'settingsBrandingUpdate'])->name('admin.settings.branding.update');
 Route::patch('/admin/sessions/{session}/activate', [AdminWebController::class, 'sessionActivate'])->name('admin.sessions.activate');
 Route::patch('/admin/sessions/{session}/close', [AdminWebController::class, 'sessionClose'])->name('admin.sessions.close');
+Route::patch('/admin/sessions/{session}/update', [AdminWebController::class, 'sessionUpdate'])->name('admin.sessions.update');
+Route::post('/admin/settings/clear-demo', [AdminWebController::class, 'clearDemoData'])->name('admin.settings.clear-demo');
+Route::post('/admin/settings/clear-live', [AdminWebController::class, 'clearLiveData'])->name('admin.settings.clear-live');
+Route::post('/admin/settings/clear-assessments', [AdminWebController::class, 'clearAssessments'])->name('admin.settings.clear-assessments');
+Route::post('/admin/settings/clear-attendance', [AdminWebController::class, 'clearAttendanceRecords'])->name('admin.settings.clear-attendance');
+Route::post('/admin/settings/clear-qr-tokens', [AdminWebController::class, 'clearQrTokens'])->name('admin.settings.clear-qr-tokens');
+Route::post('/admin/settings/clear-payments', [AdminWebController::class, 'clearPaymentRecords'])->name('admin.settings.clear-payments');
+Route::post('/admin/settings/clear-verification-logs', [AdminWebController::class, 'clearVerificationLogs'])->name('admin.settings.clear-verification-logs');
+Route::post('/admin/settings/clear-audit-logs', [AdminWebController::class, 'clearAuditLogs'])->name('admin.settings.clear-audit-logs');
+Route::post('/admin/settings/reset-branding', [AdminWebController::class, 'resetBranding'])->name('admin.settings.reset-branding');
+Route::post('/admin/settings/clear-students', [AdminWebController::class, 'clearStudentRecords'])->name('admin.settings.clear-students');
+Route::post('/admin/settings/clear-examiners', [AdminWebController::class, 'clearExaminerAccounts'])->name('admin.settings.clear-examiners');
+Route::get('/admin/id-card/{matric}', [AdminWebController::class, 'serveIdCard'])->where('matric', '.*')->name('admin.id-card');
+Route::get('/admin/verification-selfie/{matric}', [AdminWebController::class, 'serveVerificationSelfie'])->where('matric', '.*')->name('admin.verification-selfie');
+Route::get('/admin/session-audits', [AdminWebController::class, 'sessionAudits'])->name('admin.session-audits');
+Route::get('/admin/session-audits/{id}', [AdminWebController::class, 'sessionAuditShow'])->name('admin.session-audits.show');
+Route::get('/admin/live-sessions', [AdminWebController::class, 'liveSessions'])->name('admin.live-sessions');
 
 // Passport photo thumbnails — resize + disk cache (GD)
 Route::get('/photo-thumb/{path}', function (string $path) {
     $path = ltrim(str_replace('\\', '/', $path), '/');
 
-    if (str_contains($path, '..') || preg_match('/^https?:/i', $path) || ! preg_match('/^[\w\-\/]+\.jpe?g$/i', $path)) {
+    if (str_contains($path, '..') || preg_match('/^https?:/i', $path) || ! preg_match('/^[\w\-\/]+\.(jpe?g|png|webp|gif)$/i', $path)) {
         abort(404);
     }
 
@@ -131,9 +165,10 @@ Route::get('/photo-thumb/{path}', function (string $path) {
     }
 
     // Crop to a consistent passport-style 3:4 frame.
-    $src = @imagecreatefromjpeg($srcPath);
+    $raw = @file_get_contents($srcPath);
+    $src = $raw ? @imagecreatefromstring($raw) : false;
     if (! $src) {
-        abort(500);
+        abort(404);
     }
     [$ow, $oh] = [imagesx($src), imagesy($src)];
     [$tw, $th] = [240, 320];

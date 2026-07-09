@@ -326,26 +326,26 @@ class QrTokenService
     private function injectLogoWatermark(string $svg, int $size): string
     {
         $logoPath = Branding::logoAbsolutePath();
-        if (! file_exists($logoPath)) {
+        if ($logoPath === '' || ! file_exists($logoPath)) {
             return $svg;
         }
 
         $logoData = base64_encode((string) file_get_contents($logoPath));
 
-        $logoSize = (int) ($size * 0.16);   // 16 % of QR edge
+        $logoSize = (int) ($size * 0.18);   // 18 % of QR edge (still within 30% ECC budget)
         $logoX    = (int) (($size - $logoSize) / 2);
         $logoY    = (int) (($size - $logoSize) / 2);
-        $pad      = 5;
+        $pad      = 6;
         $bgSize   = $logoSize + $pad * 2;
         $bgX      = $logoX - $pad;
         $bgY      = $logoY - $pad;
 
         $watermark =
             "<rect x=\"{$bgX}\" y=\"{$bgY}\" width=\"{$bgSize}\" height=\"{$bgSize}\" " .
-                "fill=\"white\" rx=\"4\" ry=\"4\"/>" .
+                "fill=\"white\" stroke=\"#e6e2d8\" stroke-width=\"1\" rx=\"5\" ry=\"5\"/>" .
             "<image href=\"data:image/png;base64,{$logoData}\" " .
                 "x=\"{$logoX}\" y=\"{$logoY}\" width=\"{$logoSize}\" height=\"{$logoSize}\" " .
-                "opacity=\"0.78\" preserveAspectRatio=\"xMidYMid meet\"/>";
+                "opacity=\"1\" preserveAspectRatio=\"xMidYMid meet\"/>";
 
         return str_replace('</svg>', $watermark . '</svg>', $svg);
     }

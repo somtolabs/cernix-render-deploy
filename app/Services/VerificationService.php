@@ -189,8 +189,12 @@ class VerificationService
             );
         }
 
+        $examType = strtolower((string) ($exam->assessment_type ?? 'exam'));
+        $examRequiresPayment = ! in_array($examType, ['test', 'makeup'], true);
+
         if (
-            (string) $token->status === 'UNUSED'
+            $examRequiresPayment
+            && (string) $token->status === 'UNUSED'
             && ! $this->hasVerifiedPayment((string) $student->matric_no, $qrSessionId)
         ) {
             return $this->rejected(
@@ -266,7 +270,8 @@ class VerificationService
                         'REJECTED',
                         $deviceFp,
                         $ip,
-                        $now
+                        $now,
+                        'token_revoked'
                     ),
                 ];
             }
@@ -282,7 +287,8 @@ class VerificationService
                         'REJECTED',
                         $deviceFp,
                         $ip,
-                        $now
+                        $now,
+                        'invalid_status'
                     ),
                 ];
             }
@@ -373,7 +379,8 @@ class VerificationService
                 'REJECTED',
                 $deviceFp,
                 $ip,
-                $now
+                $now,
+                $reason
             );
         }
 
@@ -433,21 +440,30 @@ class VerificationService
     private function presentation(string $status, string $reason): array
     {
         if ($status === 'APPROVED') {
-            return ['Verified', 'QR pass verified successfully.'];
+            return ['Verified', 'QR pass verified. Student cleared for entry.'];
         }
 
         if ($status === 'DUPLICATE') {
-            return ['Already Used', 'QR Already Scanned.'];
+            return ['Already Used', 'This QR pass has already been scanned. Check for duplicate entry.'];
         }
 
         return match ($reason) {
-            'invalid_session' => ['Expired QR', 'This QR is not valid for the active exam session.'],
-            'identity_mismatch', 'course_mismatch' => ['Wrong Student/Course', 'This QR does not match the student or course.'],
-            'payment_not_verified' => ['Payment Not Verified', 'A verified session payment could not be confirmed.'],
-            'course_not_assigned' => ['Course Not Assigned', 'This course is not assigned to the student.'],
-            'older_qr_format' => ['Older QR Format', 'This QR was generated using an older format. Please generate a new course QR pass.'],
-            'verification_failed' => ['Error Verifying QR', 'The QR could not be verified right now. Please try again.'],
-            default => ['Invalid QR', 'This QR could not be verified.'],
+            'invalid_format'        => ['Invalid QR', 'This is not a valid exam pass for this system.'],
+            'token_not_found'       => ['Pass Not Found', 'This exam pass could not be found in the system.'],
+            'token_record_mismatch' => ['Tampered QR', 'The QR pass data does not match system records.'],
+            'tampered_token'        => ['Tampered QR', 'This exam pass could not be authenticated.'],
+            'invalid_session'       => ['Wrong Session', 'This QR is not valid for the active exam session.'],
+            'identity_mismatch'     => ['Wrong Student/Course', 'The QR does not match the student identity on record.'],
+            'course_mismatch'       => ['Wrong Course', 'This QR was issued for a different course.'],
+            'payment_not_verified'  => ['Payment Not Verified', 'No verified session payment found. Student must pay school fees before entry.'],
+            'course_not_assigned'   => ['Course Not Assigned', 'This course is not assigned to the student\'s department or level.'],
+            'older_qr_format'       => ['Older QR Format', 'This QR was generated in an older format. Student must generate a new course QR pass.'],
+            'wrong_session'         => ['Wrong Exam Session', 'This QR was scanned outside the active exam session.'],
+            'wrong_examiner'        => ['Not Your Assignment', 'This assessment is assigned to a different examiner.'],
+            'token_revoked'         => ['QR Revoked', 'This exam pass has been revoked and is no longer valid.'],
+            'invalid_status'        => ['Invalid Pass', 'This exam pass has an unrecognised status and cannot be accepted.'],
+            'verification_failed'   => ['Verification Error', 'The QR could not be verified right now. Please try again.'],
+            default                 => ['Verification Failed', 'This QR could not be verified. Check the exam pass and try again.'],
         };
     }
 
@@ -512,7 +528,8 @@ class VerificationService
         string $decision,
         string $deviceFp,
         string $ip,
-        mixed $now
+        mixed $now,
+        string $reason = '',
     ): int {
         return (int) DB::table('verification_logs')->insertGetId([
             'token_id' => $tokenId,
@@ -521,6 +538,7 @@ class VerificationService
             'timestamp' => $now,
             'device_fp' => $deviceFp,
             'ip_address' => $ip,
+            'rejection_reason' => $decision === 'REJECTED' && $reason !== '' ? $reason : null,
         ]);
     }
 }

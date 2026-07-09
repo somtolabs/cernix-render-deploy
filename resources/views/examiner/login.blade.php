@@ -33,10 +33,10 @@
 
     <div class="login-body">
         <div style="margin-bottom:20px;padding:10px 14px;background:rgba(15,32,80,.03);border:1px solid var(--line);border-radius:12px;display:flex;align-items:center;gap:12px">
-                <img src="{{ $brandingLogoUrl }}" alt="CERNIX branding" style="height:36px;width:auto;flex-shrink:0;display:block;">
+                <x-brand-mark :size="36" tone="light" />
             <div>
-                <div style="font-size:12px;font-weight:700;color:var(--navy);line-height:1.2">Adekunle Ajasin University</div>
-                <div style="font-size:10px;color:var(--ink-4);margin-top:2px">Faculty of Computing · CERNIX Exam System</div>
+                <div style="font-size:12px;font-weight:700;color:var(--navy);line-height:1.2">{{ $brandingInstitutionName }}</div>
+                <div style="font-size:10px;color:var(--ink-4);margin-top:2px">{{ $brandingSystemName }} Exam System</div>
             </div>
         </div>
         <div style="margin-bottom:24px">
@@ -52,7 +52,12 @@
         </div>
 
         @if(session('error'))
-            <div class="error-box" style="margin-bottom:16px;">{{ session('error') }}</div>
+            <div class="error-box" style="margin-bottom:16px;">
+                {{ session('error') }}
+                @if(session('redirect_hint'))
+                    <a href="{{ session('redirect_hint') }}" style="display:block;margin-top:8px;font-weight:700;color:var(--red);text-decoration:underline">Go to the correct portal</a>
+                @endif
+            </div>
         @endif
         @if($errors->any())
             <div class="error-box" style="margin-bottom:16px;">{{ $errors->first() }}</div>

@@ -41,6 +41,26 @@ class ExamPassServiceTest extends TestCase
         ]);
     }
 
+    public function test_payment_not_required_exam_generates_pass_without_payment_record(): void
+    {
+        [$student, $session, $exam] = $this->records();
+        DB::table('timetables')->where('id', $exam)->update(['payment_required' => false]);
+
+        $result = (new ExamPassService(
+            $this->createMock(RemitaService::class),
+            new QrTokenService(new CryptoService())
+        ))->generate($student, $session, $exam, null, 0);
+
+        $this->assertDatabaseCount('payment_records', 0);
+        $this->assertDatabaseHas('qr_tokens', [
+            'token_id' => $result['token_id'],
+            'student_id' => $student,
+            'session_id' => $session,
+            'timetable_id' => $exam,
+            'status' => 'UNUSED',
+        ]);
+    }
+
     public function test_exam_must_belong_to_student_department_and_level(): void
     {
         [$student, $session] = $this->records();

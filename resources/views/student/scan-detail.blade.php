@@ -35,8 +35,8 @@
             <x-student-photo :student="$student" size="scan-result" />
             <div>
                 <h1>{{ $student->full_name }}</h1>
-                <p class="muted mono">{{ $student->matric_no }}</p>
-                <p class="muted">{{ $student->dept_name ?? 'Department unavailable' }} · {{ $student->level ?? 'Not available' }} Level</p>
+                <p class="muted mono"><span style="opacity:.6;font-size:.85em;letter-spacing:.03em">Matric</span> {{ $student->matric_no }}</p>
+                <p class="muted"><span style="opacity:.6;font-size:.85em">Dept</span> {{ $student->dept_name ?? 'Unavailable' }} &middot; <span style="opacity:.6;font-size:.85em">Level</span> {{ $student->level ?? 'N/A' }}</p>
             </div>
         </div>
         <span class="chip {{ $decisionClass }}">{{ $scan->decision === 'DUPLICATE' ? 'REPEATED' : $scan->decision }}</span>

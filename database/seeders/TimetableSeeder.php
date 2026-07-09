@@ -2,6 +2,7 @@
 
 namespace Database\Seeders;
 
+use App\Support\SystemMode;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -10,6 +11,10 @@ class TimetableSeeder extends Seeder
 {
     public function run(): void
     {
+        if (! SystemMode::isDemo() && ! app()->environment('testing')) {
+            return;
+        }
+
         $session = DB::table('exam_sessions')->where('is_active', true)->first();
         if (! $session || ! DB::getSchemaBuilder()->hasTable('timetables')) {
             return;

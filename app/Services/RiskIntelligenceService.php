@@ -59,6 +59,10 @@ class RiskIntelligenceService
             'total_scans' => (int) ($model['summary']['total_scans'] ?? 0),
             'duplicate_count' => (int) ($model['summary']['duplicate_count'] ?? 0),
             'high_risk_count' => (int) (($model['risk_overview']['critical_risk_students_count'] ?? 0) + ($model['risk_overview']['high_risk_students_count'] ?? 0)),
+            'checked_in_not_submitted' => (int) ($model['operational']['checked_in_not_submitted'] ?? 0),
+            'pending_photo_approvals' => (int) ($model['operational']['pending_photo_approvals'] ?? 0),
+            'inactive_examiners' => (int) ($model['operational']['inactive_examiners'] ?? 0),
+            'unregistered_official_students' => (int) ($model['operational']['unregistered_official_students'] ?? 0),
         ];
     }
 
@@ -213,8 +217,9 @@ class RiskIntelligenceService
         [$devices, $ips] = $this->fallbackDeviceIpRisk();
         $departmentTrends = $this->fallbackTrends('department');
         $levelTrends = $this->fallbackTrends('level');
-        $observations = $this->fallbackObservations($summary, $students, $examiners, $devices, $ips);
-        $recommendations = $this->fallbackRecommendations($summary, $students, $examiners, $devices, $ips);
+        $operational = $this->liveOperationalAlerts();
+        $observations = $this->fallbackObservations($summary, $students, $examiners, $devices, $ips, $operational);
+        $recommendations = $this->fallbackRecommendations($summary, $students, $examiners, $devices, $ips, $operational);
 
         return [
             'source' => 'live',
@@ -226,6 +231,7 @@ class RiskIntelligenceService
             'last_updated_label' => 'Generated live for this request',
             'freshness_label' => 'Source: Current system records',
             'summary' => $summary,
+            'operational' => $operational,
             'risk_overview' => [
                 'critical_risk_students_count' => collect($students)->where('risk_level', 'critical')->count(),
                 'high_risk_students_count' => collect($students)->where('risk_level', 'high')->count(),
@@ -251,6 +257,62 @@ class RiskIntelligenceService
             'suspicious_devices' => $devices,
             'suspicious_ips' => $ips,
             'recommendations' => $recommendations,
+        ];
+    }
+
+    private function liveOperationalAlerts(): array
+    {
+        $checkedInNotSubmitted = 0;
+        if ($this->hasTable('attendance_records')) {
+            $checkedInNotSubmitted = DB::table('attendance_records')
+                ->where('status', 'checked_in')
+                ->count();
+        }
+
+        $pendingPhotoApprovals = 0;
+        if ($this->hasTable('students')) {
+            $pendingPhotoApprovals = DB::table('students')
+                ->where('photo_status', 'pending_admin_approval')
+                ->count();
+        }
+
+        $inactiveExaminers = 0;
+        if ($this->hasTable('examiners') && Schema::hasColumn('examiners', 'is_active')) {
+            $inactiveExaminers = DB::table('examiners')
+                ->where('is_active', false)
+                ->count();
+        }
+
+        $unregisteredOfficialStudents = 0;
+        if ($this->hasTable('official_students') && $this->hasTable('students')) {
+            $registeredMatrics = DB::table('students')->pluck('matric_no');
+            $unregisteredOfficialStudents = DB::table('official_students')
+                ->whereNotIn('matric_number', $registeredMatrics)
+                ->where('status', 'active')
+                ->count();
+        }
+
+        $rejectionBreakdown = [];
+        if ($this->hasTable('verification_logs') && Schema::hasColumn('verification_logs', 'rejection_reason')) {
+            $rejectionBreakdown = DB::table('verification_logs')
+                ->where('decision', 'REJECTED')
+                ->whereNotNull('rejection_reason')
+                ->where('rejection_reason', '!=', '')
+                ->select('rejection_reason', DB::raw('COUNT(*) as cnt'))
+                ->groupBy('rejection_reason')
+                ->orderByDesc('cnt')
+                ->limit(10)
+                ->get()
+                ->map(fn ($r) => ['reason' => $r->rejection_reason, 'count' => (int) $r->cnt])
+                ->all();
+        }
+
+        return [
+            'checked_in_not_submitted' => $checkedInNotSubmitted,
+            'pending_photo_approvals' => $pendingPhotoApprovals,
+            'inactive_examiners' => $inactiveExaminers,
+            'unregistered_official_students' => $unregisteredOfficialStudents,
+            'rejection_breakdown' => $rejectionBreakdown,
         ];
     }
 
@@ -602,7 +664,7 @@ class RiskIntelligenceService
             })->filter(fn ($row) => ! empty($row['reasons']))->sortByDesc('total_scans')->take(15)->values()->all();
     }
 
-    private function fallbackObservations(array $summary, array $students, array $examiners, array $devices, array $ips): array
+    private function fallbackObservations(array $summary, array $students, array $examiners, array $devices, array $ips, array $operational = []): array
     {
         $items = ['Current scan activity is being shown from live system records.'];
 
@@ -611,10 +673,18 @@ class RiskIntelligenceService
         }
         if ($summary['duplicate_count'] > 0) {
             $items[] = $summary['duplicate_count'] . ' repeated scan attempt(s) detected.';
-            $items[] = 'Repeated verification activity is visible in the live scan logs.';
         }
         if ($summary['rejected_count'] > 0) {
             $items[] = $summary['rejected_count'] . ' rejected scan attempt(s) detected.';
+        }
+        if (($operational['checked_in_not_submitted'] ?? 0) > 0) {
+            $items[] = ($operational['checked_in_not_submitted']) . ' student(s) checked in but have not yet submitted.';
+        }
+        if (($operational['pending_photo_approvals'] ?? 0) > 0) {
+            $items[] = ($operational['pending_photo_approvals']) . ' student photo(s) awaiting admin approval.';
+        }
+        if (($operational['unregistered_official_students'] ?? 0) > 0) {
+            $items[] = ($operational['unregistered_official_students']) . ' registered official student(s) have not completed onboarding.';
         }
         $items[] = count($students) > 0 ? count($students) . ' student risk record(s) require review.' : 'No high-risk student activity detected from current records.';
         if (count($examiners) > 0) {
@@ -627,13 +697,18 @@ class RiskIntelligenceService
         return $items;
     }
 
-    private function fallbackRecommendations(array $summary, array $students, array $examiners, array $devices, array $ips): array
+    private function fallbackRecommendations(array $summary, array $students, array $examiners, array $devices, array $ips, array $operational = []): array
     {
         $items = [
             'Use enhanced risk analysis during active exam periods for deeper scanner and student pattern review.',
-            'Keep demo mode disabled for real production usage.',
         ];
 
+        if (($operational['checked_in_not_submitted'] ?? 0) > 0) {
+            $items[] = 'Follow up with students who checked in but did not submit before the session closes.';
+        }
+        if (($operational['pending_photo_approvals'] ?? 0) > 0) {
+            $items[] = 'Clear the photo approval queue so eligible students can generate their QR passes.';
+        }
         if ($summary['duplicate_count'] > 0) {
             $items[] = 'Review repeated scan attempts before closing the exam session.';
         }

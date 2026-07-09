@@ -11,7 +11,8 @@
         ?? data_get($student, 'full_name')
         ?? data_get($student, 'student_name')
         ?? 'Student';
-    $path = $photoPath ?? data_get($student, 'photo_path');
+    // Use profile_photo_path (cosmetic) — never expose verification selfie (photo_path)
+    $path = $photoPath ?? data_get($student, 'profile_photo_path');
     $photoUrl = null;
 
     if ($path) {

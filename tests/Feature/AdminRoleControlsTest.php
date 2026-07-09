@@ -48,7 +48,7 @@ class AdminRoleControlsTest extends TestCase
             'username' => 'superadmin',
             'password' => 'superadmin123',
         ])->assertForbidden()
-            ->assertJsonPath('message', 'This account is not permitted to access the Examiner portal.');
+            ->assertJsonPath('message', 'This account cannot access the Examiner portal. Admin and Super Admin accounts must sign in at the Admin portal (/admin/login).');
     }
 
     public function test_admin_cannot_login_to_examiner_portal(): void
@@ -57,7 +57,7 @@ class AdminRoleControlsTest extends TestCase
             'username' => 'admin1',
             'password' => 'admin123',
         ])->assertForbidden()
-            ->assertJsonPath('message', 'This account is not permitted to access the Examiner portal.');
+            ->assertJsonPath('message', 'This account cannot access the Examiner portal. Admin and Super Admin accounts must sign in at the Admin portal (/admin/login).');
     }
 
     public function test_examiner_cannot_login_to_admin_portal(): void
@@ -66,7 +66,7 @@ class AdminRoleControlsTest extends TestCase
             'username' => 'examiner1',
             'password' => 'password123',
         ])->assertForbidden()
-            ->assertJsonPath('message', 'This account is not permitted to access the Admin portal.');
+            ->assertJsonPath('message', 'This account cannot access the Admin portal. Examiner accounts must sign in at the Examiner portal (/examiner/login).');
     }
 
     public function test_examiner_only_session_can_open_scanner_dashboard(): void
