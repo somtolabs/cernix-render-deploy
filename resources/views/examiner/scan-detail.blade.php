@@ -6,15 +6,30 @@
 @endphp
 
 <style>
-    .scan-case { display:grid; gap:24px; }
-    .scan-head { background:rgba(236,246,239,.62); border-left:3px solid var(--emerald); padding:16px; display:grid; gap:14px; }
+    .scan-case { display:grid; gap:16px; }
+    /* Apple-style card treatment */
+    .scan-head {
+        background:#fff;
+        border:1px solid var(--line);
+        border-radius:18px;
+        padding:20px 22px;
+        display:grid; gap:14px;
+        box-shadow: 0 1px 2px rgba(14,18,38,.04), 0 8px 22px -14px rgba(14,18,38,.10);
+    }
     .scan-person { display:flex; gap:14px; align-items:center; min-width:0; }
-    .scan-person h1 { margin:0; font-size:clamp(22px,5vw,34px); line-height:1.02; letter-spacing:-.045em; overflow-wrap:break-word; word-break:normal; }
+    .scan-person h1 { margin:0; font-size:clamp(20px,4.5vw,28px); line-height:1.1; letter-spacing:-.02em; font-weight:800; overflow-wrap:break-word; word-break:normal; }
     .scan-person p { margin:5px 0 0; }
     .scan-status { display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; }
-    .scan-panels { display:grid; gap:28px; }
-    .scan-panel { min-width:0; }
-    .scan-panel h2 { margin:0; padding:0 0 12px; border-bottom:1px solid var(--line); font-size:14px; }
+    .scan-panels { display:grid; gap:14px; }
+    .scan-panel {
+        min-width:0;
+        background:#fff;
+        border:1px solid var(--line);
+        border-radius:16px;
+        padding:18px 20px;
+        box-shadow: 0 1px 2px rgba(14,18,38,.03), 0 6px 16px -12px rgba(14,18,38,.10);
+    }
+    .scan-panel h2 { margin:0; padding:0 0 12px; border-bottom:1px solid var(--line); font-size:13px; font-weight:800; letter-spacing:-.01em; }
     .scan-panel-body { padding:4px 0; }
     .scan-row { display:grid; gap:4px; padding:10px 0; border-bottom:1px solid var(--line); }
     .scan-row:last-child { border-bottom:0; }

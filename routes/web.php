@@ -22,6 +22,7 @@ Route::get('/student/dashboard', [StudentDashboardController::class, 'index'])->
 Route::get('/student/profile', [StudentDashboardController::class, 'profile'])->name('student.profile');
 Route::post('/student/profile/photo', [StudentDashboardController::class, 'uploadPhoto'])->name('student.profile.photo.store');
 Route::post('/student/profile/verification', [StudentDashboardController::class, 'resubmitVerification'])->name('student.profile.verification.store');
+Route::post('/student/profile/photo-change-request', [StudentDashboardController::class, 'profilePhotoChangeRequestStore'])->name('student.profile.photo-change-request.store');
 Route::get('/student/exam-access-id', [StudentDashboardController::class, 'examAccessId'])->name('student.exam-access-id');
 Route::get('/student/exam-access-id/{timetable}', [StudentDashboardController::class, 'examAccessId'])
     ->whereNumber('timetable')
@@ -30,6 +31,9 @@ Route::get('/student/timetable', [StudentDashboardController::class, 'timetable'
 Route::get('/student/payment', [StudentDashboardController::class, 'payment'])->name('student.payment');
 Route::get('/student/generate-exam-pass', [StudentDashboardController::class, 'generateExamPass'])->name('student.generate-exam-pass');
 Route::post('/student/generate-exam-pass', [StudentDashboardController::class, 'storeExamPass'])->name('student.generate-exam-pass.store');
+Route::post('/student/passes/{timetable}/generate', [StudentDashboardController::class, 'quickGeneratePass'])
+    ->whereNumber('timetable')
+    ->name('student.pass.quick-generate');
 Route::get('/student/instructions', [StudentDashboardController::class, 'instructions'])->name('student.instructions');
 Route::get('/student/notifications', [StudentDashboardController::class, 'notifications'])->name('student.notifications');
 Route::post('/student/notifications/{note}/acknowledge', [StudentDashboardController::class, 'acknowledgeNotification'])->name('student.notifications.acknowledge');
@@ -54,6 +58,9 @@ Route::get('/examiner/student-records', [ExaminerWebController::class, 'studentR
 Route::get('/examiner/audit',      [ExaminerWebController::class, 'audit'])->name('examiner.audit');
 Route::get('/examiner/audit-trail', [ExaminerWebController::class, 'auditTrailPage'])->name('examiner.audit-trail');
 Route::get('/examiner/today-exams', [ExaminerWebController::class, 'todayExamsPage'])->name('examiner.today-exams');
+Route::get('/examiner/assessments/{timetableId}/export', [ExaminerWebController::class, 'exportAssessmentReport'])
+    ->whereNumber('timetableId')
+    ->name('examiner.assessments.export');
 Route::get('/examiner/notifications', [ExaminerWebController::class, 'notificationsPage'])->name('examiner.notifications');
 Route::post('/examiner/notifications/{note}/acknowledge', [ExaminerWebController::class, 'acknowledgeNotification'])->name('examiner.notifications.acknowledge');
 Route::get('/examiner/scans/{log}', [ExaminerWebController::class, 'showScan'])->name('examiner.scans.show');
@@ -77,6 +84,9 @@ Route::get('/admin/photo-approvals', [AdminWebController::class, 'photoApprovals
 Route::post('/admin/photo-approvals/approve', [AdminWebController::class, 'photoApprove'])->name('admin.photo-approvals.approve');
 Route::post('/admin/photo-approvals/reject', [AdminWebController::class, 'photoReject'])->name('admin.photo-approvals.reject');
 Route::post('/admin/photo-approvals/flag', [AdminWebController::class, 'photoFlag'])->name('admin.photo-approvals.flag');
+Route::get('/admin/profile-photo-change-requests', [AdminWebController::class, 'profilePhotoChangeRequests'])->name('admin.profile-photo-change-requests');
+Route::post('/admin/profile-photo-change-requests/approve', [AdminWebController::class, 'profilePhotoChangeRequestApprove'])->name('admin.profile-photo-change-requests.approve');
+Route::post('/admin/profile-photo-change-requests/reject', [AdminWebController::class, 'profilePhotoChangeRequestReject'])->name('admin.profile-photo-change-requests.reject');
 Route::get('/admin/students', [AdminWebController::class, 'students'])->name('admin.students');
 Route::get('/admin/student-trace', [AdminWebController::class, 'studentTrace'])->name('admin.student-trace');
 Route::get('/admin/students/{student}', [AdminWebController::class, 'studentShow'])->where('student', '.*')->name('admin.students.show');

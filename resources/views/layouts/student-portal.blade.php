@@ -7,10 +7,10 @@
     $examCount   = $timetableAll->filter(fn($e) => ($e->assessment_type ?? 'exam') === 'exam')->count();
     $testCount   = $timetableAll->filter(fn($e) => ($e->assessment_type ?? '') === 'test')->count();
     $makeupCount = $timetableAll->filter(fn($e) => ($e->assessment_type ?? '') === 'makeup')->count();
-    $photoStatus = $student->photo_status ?? 'pending_photo_upload';
+    // QR pass generation is now inline within My Exams / My Tests / Make-up Tests —
+    // no standalone sidebar entry.
     $nav = [
         ['key' => 'overview',      'label' => 'Dashboard',        'route' => 'student.dashboard'],
-        ['key' => 'generate-exam-pass', 'label' => 'My Exam Passes', 'route' => 'student.generate-exam-pass'],
         ['key' => 'exams',         'label' => 'My Exams',         'route' => 'student.timetable', 'badge' => $examCount   > 0 ? $examCount   : 0, 'type' => 'exam'],
         ['key' => 'tests',         'label' => 'My Tests',         'route' => 'student.timetable', 'badge' => $testCount   > 0 ? $testCount   : 0, 'type' => 'test'],
         ['key' => 'makeup',        'label' => 'Make-up Tests',    'route' => 'student.timetable', 'badge' => $makeupCount > 0 ? $makeupCount : 0, 'type' => 'makeup'],
@@ -43,21 +43,6 @@
     .sp-brand-text b { display: block; color: var(--navy); font-size: 13px; font-weight: 800; line-height: 1.2; }
     .sp-brand-text span { display: block; color: var(--ink-3); font-size: 11px; margin-top: 2px; }
 
-    /* Student identity block */
-    .sp-student-block { padding: 14px; background: rgba(51,71,95,.04); border: 1px solid var(--line); border-radius: 12px; margin-bottom: 14px; }
-    .sp-student-avatar-row { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
-    .sp-student-avatar { width: 44px; height: 44px; border-radius: 50%; flex: 0 0 auto; overflow: hidden; border: 1.5px solid var(--line-2); }
-    .sp-student-avatar img { width: 100%; height: 100%; object-fit: cover; object-position: center; }
-    .sp-student-avatar-fallback { width: 44px; height: 44px; border-radius: 50%; flex: 0 0 auto; display: grid; place-items: center; background: var(--navy); color: #fff; font-weight: 800; font-size: 16px; border: 1.5px solid var(--navy); }
-    .sp-student-name { font-size: 14px; font-weight: 800; color: var(--ink); line-height: 1.2; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .sp-student-matric { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 12px; color: var(--ink-3); margin-top: 2px; }
-    .sp-student-meta { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 10px; }
-    .sp-student-tag { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 700; background: rgba(95,112,130,.08); color: var(--ink-3); }
-    .sp-photo-status { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; }
-    .sp-photo-status.approved { background: rgba(85,117,101,.1); color: var(--emerald); }
-    .sp-photo-status.pending { background: rgba(138,117,85,.1); color: var(--amber); }
-    .sp-photo-status.needs-action { background: rgba(138,91,91,.08); color: var(--red); }
-    .sp-photo-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex: 0 0 auto; }
 
     /* Nav */
     .sp-nav { display: flex; flex-direction: column; gap: 1px; flex: 1; }
@@ -150,17 +135,6 @@
     }
 </style>
 
-@php
-    $initials = '';
-    if (!empty($student->full_name)) {
-        $parts = explode(' ', trim($student->full_name));
-        $initials = strtoupper(substr($parts[0] ?? '', 0, 1) . substr($parts[count($parts)-1] ?? '', 0, 1));
-    } elseif (!empty($student->matric_no)) {
-        $initials = strtoupper(substr($student->matric_no, 0, 2));
-    }
-    $sidebarPhotoUrl = $photoUrl ?? null;
-@endphp
-
 <div class="sp-shell" id="studentShell">
 
     {{-- Mobile header --}}
@@ -188,45 +162,6 @@
                     </div>
                 </div>
 
-                {{-- Student identity block --}}
-                <div class="sp-student-block">
-                    <div class="sp-student-avatar-row">
-                        @if($sidebarPhotoUrl)
-                            <div class="sp-student-avatar">
-                                <img src="{{ $sidebarPhotoUrl }}" alt="Photo">
-                            </div>
-                        @else
-                            <div class="sp-student-avatar-fallback">{{ $initials }}</div>
-                        @endif
-                        <div style="min-width:0">
-                            <div class="sp-student-name">{{ $student->full_name ?? 'Student' }}</div>
-                            <div class="sp-student-matric">{{ $student->matric_no ?? '' }}</div>
-                        </div>
-                    </div>
-                    @if(!empty($student->dept_name) || !empty($student->level))
-                        <div class="sp-student-meta">
-                            @if(!empty($student->dept_name))
-                                <span class="sp-student-tag">{{ $student->dept_name }}</span>
-                            @endif
-                            @if(!empty($student->level))
-                                <span class="sp-student-tag">{{ $student->level }} Level</span>
-                            @endif
-                        </div>
-                    @endif
-                    @if($photoStatus === 'approved')
-                        <div class="sp-photo-status approved">
-                            <span class="sp-photo-dot"></span> Identity Verified
-                        </div>
-                    @elseif($photoStatus === 'pending_admin_approval')
-                        <div class="sp-photo-status pending">
-                            <span class="sp-photo-dot"></span> Under Review
-                        </div>
-                    @else
-                        <div class="sp-photo-status needs-action">
-                            <span class="sp-photo-dot"></span> Verification Needed
-                        </div>
-                    @endif
-                </div>
 
                 {{-- Navigation --}}
                 @php

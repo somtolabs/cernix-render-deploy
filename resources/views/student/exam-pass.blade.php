@@ -39,8 +39,8 @@
 @else
     <div class="cx-empty no-print">
         <strong>No course QR pass is ready to print.</strong><br>
-        Select a course from Generate QR Pass first.
-        <div style="margin-top:12px"><a class="btn btn-primary" href="{{ route('student.generate-exam-pass') }}">Generate QR Pass</a></div>
+        Open My Exams / My Tests / Make-up Tests to generate a pass for a specific course.
+        <div style="margin-top:12px"><a class="btn btn-primary" href="{{ route('student.timetable') }}">Open My Exams</a></div>
     </div>
 @endif
 @endsection

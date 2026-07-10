@@ -91,7 +91,7 @@
 </div>
 
 <div class="sl-group">
-    <div class="sl-group-head"><h2>Scan Records</h2><span>{{ $logs->total() }} records</span></div>
+    <div class="sl-group-head"><h2>Scan Records</h2><span>{{ $logs->total() }} records &middot; Review Status shown for repeated scans</span></div>
 
     <form class="sl-filter" method="GET">
         <input type="text" name="q" value="{{ request('q') }}" placeholder="Search student, matric, or examiner">

@@ -6,306 +6,414 @@
 @php
     $photoStatus = $student->photo_status ?? 'pending_photo_upload';
     $photoStatusLabel = match($photoStatus) {
-        'pending_admin_approval' => 'Pending Approval',
-        'approved'               => 'Approved',
-        'rejected'               => 'Rejected',
-        'flagged'                => 'Under Review',
-        default                  => 'Awaiting Upload',
+        'pending_admin_approval' => 'Verification Pending',
+        'approved'               => 'Identity Verified',
+        'rejected'               => 'Verification Rejected',
+        'flagged'                => 'Verification Under Review',
+        default                  => 'Photo Required',
     };
-    $photoStatusClass = match($photoStatus) {
+    $photoStatusChip = match($photoStatus) {
         'approved' => 'emerald',
         'rejected' => 'red',
         'flagged'  => 'amber',
-        default    => 'amber',
+        'pending_admin_approval' => 'amber',
+        default    => 'neutral',
     };
-    $hasProfilePhoto  = !empty($student->profile_photo_path ?? null);
-    $hasSelfie        = !empty($student->photo_path ?? null);
-    $hasIdCard        = !empty($student->id_card_path ?? null);
-    $verificationDone = $photoStatus === 'approved';
-    $verificationFail = $photoStatus === 'rejected';
-    $canResubmit      = in_array($photoStatus, ['rejected', 'flagged', 'pending_photo_upload']);
+    $photoRejectionReason = trim((string) ($student->photo_rejection_reason ?? ''));
+    $hasProfilePhoto = !empty($student->profile_photo_path ?? null);
+    $hasSelfie       = !empty($student->photo_path ?? null);
+    $hasIdCard       = !empty($student->id_card_path ?? null);
+    $canResubmit     = in_array($photoStatus, ['rejected', 'flagged', 'pending_photo_upload']);
+
+    $profilePhotoLocked   = ! empty($student->profile_photo_locked_at ?? null);
+    $latestChangeRequest  = $profilePhotoChangeRequest ?? null;
+    $pendingChangeRequest = $latestChangeRequest && $latestChangeRequest->status === 'pending' ? $latestChangeRequest : null;
+
+    $profilePhotoChangeReasons = [
+        'Photo is blurry or low quality',
+        'Wrong photo was uploaded by mistake',
+        'My appearance has changed significantly',
+        'Photo does not clearly show my face',
+        'Technical error during upload',
+        'Other reason (explain below)',
+    ];
 
     $pParts = explode(' ', trim($student->full_name ?? ''));
     $pInitials = strtoupper(
         substr($pParts[0] ?? '', 0, 1) . substr($pParts[count($pParts) - 1] ?? '', 0, 1)
     ) ?: 'ST';
+
+    $tokensAll   = $tokens ?? collect();
+    $passesAll   = $coursePasses ?? collect();
+    $scans       = $scanHistory ?? collect();
+
+    $selfieUrl = $hasSelfie ? asset('storage/' . ltrim($student->photo_path, '/')) : null;
 @endphp
 
 <style>
-    /* ── Identity header ─────────────────────────────────── */
-    .sp-prof-header { display: flex; align-items: flex-start; gap: 20px; padding-bottom: 28px; border-bottom: 1px solid var(--line); margin-bottom: 28px; }
-    .sp-prof-photo-clip { flex: 0 0 auto; width: 80px; height: 80px; border-radius: 14px; overflow: hidden; border: 1px solid var(--line); background: var(--bg-2); }
-    .sp-prof-photo-clip .cernix-passport-photo { width: 80px !important; height: 80px !important; border-radius: 14px !important; font-size: 22px !important; box-shadow: none !important; }
-    .sp-prof-fallback { flex: 0 0 auto; width: 80px; height: 80px; border-radius: 14px; background: var(--navy); display: grid; place-items: center; color: #fff; font-size: 24px; font-weight: 900; letter-spacing: -.04em; border: 1px solid var(--line); }
-    .sp-prof-identity { flex: 1; min-width: 0; }
-    .sp-prof-eyebrow { margin: 0 0 5px; font-size: 10px; font-weight: 900; text-transform: uppercase; letter-spacing: .12em; color: var(--ink-4); }
-    .sp-prof-name { margin: 0 0 5px; font-size: clamp(22px, 5vw, 34px); font-weight: 900; letter-spacing: -.04em; line-height: 1.05; overflow-wrap: break-word; color: var(--ink); }
-    .sp-prof-matric { display: block; font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 12px; color: var(--ink-3); margin-bottom: 12px; }
-    .sp-prof-badges { display: flex; flex-wrap: wrap; gap: 6px; }
+    .sp2-notice { margin-bottom: 20px; }
 
-    /* ── Section wrapper ─────────────────────────────────── */
-    .sp-prof-sec { margin-bottom: 28px; }
-    .sp-prof-sec:last-child { margin-bottom: 0; }
-    .sp-prof-sec-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
-    .sp-prof-sec-head h2 { margin: 0 0 3px; font-size: 14px; font-weight: 900; color: var(--ink); letter-spacing: -.01em; }
-    .sp-prof-sec-head p { margin: 0; font-size: 12px; color: var(--ink-4); line-height: 1.4; }
-    .sp-prof-divider { border: none; border-top: 1px solid var(--line); margin: 0 0 28px; }
+    /* Identity card — subtle left accent stripe + tighter hierarchy */
+    .sp2-id-card { position: relative; background: #fff; border: 1px solid var(--line); border-radius: 16px; padding: 24px 24px 24px 28px; display: flex; gap: 20px; align-items: flex-start; margin-bottom: 20px; overflow: hidden; }
+    .sp2-id-card::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--navy); opacity: .8; }
+    .sp2-id-photo { width: 80px; height: 80px; border-radius: 50%; overflow: hidden; flex: 0 0 auto; border: 1px solid var(--line); background: var(--bg-2); }
+    .sp2-id-photo .cernix-passport-photo { width: 80px !important; height: 80px !important; border-radius: 50% !important; box-shadow: none !important; }
+    .sp2-id-fallback { width: 80px; height: 80px; border-radius: 50%; background: var(--navy); color: #fff; display: grid; place-items: center; font-size: 24px; font-weight: 700; letter-spacing: -.02em; flex: 0 0 auto; }
+    .sp2-id-body { min-width: 0; flex: 1; }
+    .sp2-id-name { margin: 0 0 6px; font-size: 1.3rem; font-weight: 800; color: var(--ink); line-height: 1.15; letter-spacing: -.015em; overflow-wrap: break-word; }
+    .sp2-id-matric { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 0.875rem; font-weight: 600; color: var(--navy); display: block; margin-bottom: 10px; }
+    .sp2-id-meta { font-size: 0.875rem; color: var(--ink-2); line-height: 1.55; margin: 0 0 12px; }
+    .sp2-id-badges { display: flex; flex-wrap: wrap; gap: 6px; }
 
-    /* ── Academic field grid ─────────────────────────────── */
-    .sp-prof-fields { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 1px; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; background: var(--line); }
-    .sp-prof-field { background: var(--bg-2); padding: 13px 16px; }
-    .sp-prof-field.wide { grid-column: 1 / -1; }
-    .sp-prof-field-lbl { display: block; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .09em; color: var(--ink-4); margin-bottom: 5px; }
-    .sp-prof-field-val { display: block; font-size: 14px; font-weight: 700; color: var(--ink); line-height: 1.3; overflow-wrap: break-word; }
-    .sp-prof-field-val.empty { color: var(--ink-4); font-weight: 600; font-style: italic; font-size: 13px; }
-    .sp-prof-field-val.mono { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 13px; }
+    /* Stat cards — each with a muted top accent stripe using existing tokens */
+    .sp2-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-bottom: 20px; }
+    .sp2-stat { position: relative; background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 20px 18px 16px; min-width: 0; overflow: hidden; }
+    .sp2-stat::before { content: ''; position: absolute; left: 0; right: 0; top: 0; height: 2px; background: var(--emerald); opacity: .55; }
+    .sp2-stat:nth-child(2)::before { background: var(--navy); }
+    .sp2-stat:nth-child(3)::before { background: var(--amber); }
+    .sp2-stat-num { font-size: 2rem; font-weight: 800; color: var(--navy); line-height: 1; margin: 0 0 8px; letter-spacing: -.02em; }
+    .sp2-stat-lbl { font-size: 0.75rem; color: var(--ink-3); font-weight: 800; text-transform: uppercase; letter-spacing: .06em; margin: 0; }
+    .sp2-stat-note { font-size: 0.7rem; color: var(--ink-4); margin: 4px 0 0; font-style: italic; }
 
-    /* ── Document status grid ────────────────────────────── */
-    .sp-doc-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 16px; }
-    .sp-doc-item { padding: 12px 14px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg-2); }
-    .sp-doc-item.has-file { border-color: rgba(5,150,105,.22); background: rgba(5,150,105,.04); }
-    .sp-doc-lbl { display: block; font-size: 9.5px; font-weight: 900; text-transform: uppercase; letter-spacing: .09em; color: var(--ink-4); margin-bottom: 5px; }
-    .sp-doc-status { display: block; font-size: 13px; font-weight: 800; }
-    .sp-doc-item.has-file  .sp-doc-status { color: var(--emerald); }
-    .sp-doc-item:not(.has-file) .sp-doc-status { color: var(--ink-3); }
+    /* Tabs */
+    .sp2-tabs { background: #fff; border: 1px solid var(--line); border-radius: 16px; overflow: hidden; }
+    .sp2-tabbar { display: flex; border-bottom: 1px solid var(--line); background: var(--bg-2); }
+    .sp2-tabbtn { flex: 1; min-height: 48px; padding: 0 16px; background: transparent; border: none; border-bottom: 2px solid transparent; font-size: 0.875rem; font-weight: 600; color: var(--ink-3); cursor: pointer; transition: color .15s ease, border-color .15s ease, background .15s ease; }
+    .sp2-tabbtn:hover { color: var(--ink); }
+    .sp2-tabbtn.is-active { color: var(--navy); border-bottom-color: var(--navy); background: #fff; }
+    .sp2-tabpanel { padding: 24px; display: none; }
+    .sp2-tabpanel.is-active { display: block; }
 
-    /* ── Verification status block ───────────────────────── */
-    .sp-verif-block { padding: 16px; border-radius: 12px; margin-bottom: 16px; }
-    .sp-verif-block.approved { background: rgba(5,150,105,.05);  border: 1px solid rgba(5,150,105,.2); }
-    .sp-verif-block.pending  { background: rgba(138,117,85,.05); border: 1px solid rgba(138,117,85,.2); }
-    .sp-verif-block.rejected { background: rgba(138,91,91,.05);  border: 1px solid rgba(138,91,91,.2); }
-    .sp-verif-block.neutral  { background: rgba(15,32,80,.03);   border: 1px solid var(--line); }
-    .sp-verif-title { display: block; font-size: 14px; font-weight: 900; margin-bottom: 5px; }
-    .sp-verif-block.approved .sp-verif-title { color: var(--emerald); }
-    .sp-verif-block.pending  .sp-verif-title { color: var(--amber); }
-    .sp-verif-block.rejected .sp-verif-title { color: var(--red); }
-    .sp-verif-block.neutral  .sp-verif-title { color: var(--ink); }
-    .sp-verif-desc { margin: 0; font-size: 13px; color: var(--ink-2); line-height: 1.55; }
+    /* Profile tab: read-only fields */
+    .sp2-field-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+    .sp2-field { padding: 14px 16px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg-2); min-width: 0; }
+    .sp2-field-lbl { display: block; font-size: 0.6875rem; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: var(--ink-4); margin-bottom: 6px; }
+    .sp2-field-val { display: block; font-size: 0.9375rem; font-weight: 600; color: var(--ink); overflow-wrap: break-word; }
+    .sp2-field-val.mono { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 0.875rem; }
+    .sp2-field-val.empty { color: var(--ink-4); font-style: italic; font-weight: 500; }
+    .sp2-readonly-note { margin: 0 0 18px; padding: 12px 14px; background: var(--bg-2); border: 1px solid var(--line); border-radius: 10px; font-size: 0.8125rem; color: var(--ink-3); line-height: 1.5; }
 
-    /* ── Resubmit form ───────────────────────────────────── */
-    .sp-resubmit-form { display: grid; gap: 12px; padding: 16px; border: 1px solid var(--line-2); border-radius: 12px; background: rgba(15,32,80,.025); margin-top: 16px; }
-    .sp-resubmit-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-    .sp-field-lbl { display: block; font-size: 11px; font-weight: 900; text-transform: uppercase; letter-spacing: .05em; color: var(--ink-2); margin-bottom: 4px; }
-    .sp-field-hint { margin: 0 0 6px; font-size: 11px; color: var(--ink-3); line-height: 1.45; }
+    /* Documents tab */
+    .sp2-doc-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin-bottom: 20px; }
+    .sp2-doc-slot { border: 1px solid var(--line); border-radius: 12px; padding: 16px; background: var(--bg-2); min-width: 0; }
+    .sp2-doc-head { font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: var(--ink-4); margin: 0 0 12px; }
+    .sp2-doc-thumb { width: 56px; height: 56px; border-radius: 10px; overflow: hidden; border: 1px solid var(--line); background: #fff; margin-bottom: 12px; }
+    .sp2-doc-thumb img { width: 100%; height: 100%; object-fit: cover; }
+    .sp2-doc-thumb .cernix-passport-photo { width: 56px !important; height: 56px !important; border-radius: 10px !important; box-shadow: none !important; }
+    .sp2-doc-thumb-empty { width: 56px; height: 56px; border-radius: 10px; border: 1.5px dashed var(--line-2); background: #fff; display: grid; place-items: center; margin-bottom: 12px; color: var(--ink-4); font-size: 0.6875rem; font-weight: 700; text-transform: uppercase; }
+    .sp2-doc-placeholder { padding: 14px; border: 1.5px dashed var(--line-2); border-radius: 10px; background: #fff; font-size: 0.8125rem; color: var(--ink-3); margin-bottom: 12px; text-align: center; }
+    .sp2-doc-meta { font-size: 0.8125rem; color: var(--ink-3); line-height: 1.5; margin: 0 0 12px; }
+    .sp2-doc-input { display: block; width: 100%; padding: 8px 10px; font-size: 0.8125rem; border: 1px solid var(--line); border-radius: 8px; background: #fff; color: var(--ink); }
+    .sp2-doc-submit-row { margin-top: 8px; display: flex; justify-content: flex-end; }
 
-    /* ── Profile photo box ───────────────────────────────── */
-    .sp-photo-box { padding: 16px; background: rgba(15,32,80,.02); border: 1px solid var(--line); border-radius: 12px; }
-    .sp-photo-current { display: flex; align-items: center; gap: 14px; margin-bottom: 14px; }
-    .sp-photo-thumb { width: 56px; height: 56px; border-radius: 10px; overflow: hidden; border: 1px solid var(--line); flex: 0 0 auto; }
-    .sp-photo-thumb .cernix-passport-photo { width: 56px !important; height: 56px !important; border-radius: 10px !important; box-shadow: none !important; }
-    .sp-photo-thumb-empty { width: 56px; height: 56px; border-radius: 10px; background: rgba(15,32,80,.05); border: 1.5px dashed var(--line-2); display: grid; place-items: center; flex: 0 0 auto; }
-    .sp-photo-tip { padding: 10px 12px; border-radius: 8px; background: rgba(15,32,80,.03); border: 1px solid var(--line); font-size: 12px; color: var(--ink-3); line-height: 1.6; margin-bottom: 14px; }
+    /* Activity tab */
+    .sp2-activity { display: flex; flex-direction: column; }
+    .sp2-activity-row { display: flex; gap: 12px; align-items: center; padding: 14px 0; border-bottom: 1px solid var(--line); }
+    .sp2-activity-row:last-child { border-bottom: none; }
+    .sp2-activity-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ink-4); flex: 0 0 auto; }
+    .sp2-activity-dot.emerald { background: var(--emerald); }
+    .sp2-activity-dot.red { background: var(--red); }
+    .sp2-activity-dot.amber { background: var(--amber); }
+    .sp2-activity-body { flex: 1; min-width: 0; }
+    .sp2-activity-desc { margin: 0; font-size: 0.875rem; color: var(--ink); font-weight: 600; overflow-wrap: break-word; }
+    .sp2-activity-sub { margin: 2px 0 0; font-size: 0.75rem; color: var(--ink-3); }
+    .sp2-activity-time { font-size: 0.8125rem; color: var(--ink-4); flex: 0 0 auto; text-align: right; }
+    .sp2-empty { padding: 32px 16px; text-align: center; color: var(--ink-3); font-size: 0.875rem; }
 
-    @media (min-width: 640px) {
-        .sp-prof-fields { grid-template-columns: repeat(3, minmax(0,1fr)); }
-    }
-    @media (max-width: 480px) {
-        .sp-prof-header { flex-direction: column; gap: 14px; }
-        .sp-resubmit-cols { grid-template-columns: 1fr; }
-        .sp-doc-grid { grid-template-columns: 1fr; }
+    /* Section head inside tabs */
+    .sp2-sec-head { margin: 0 0 16px; }
+    .sp2-sec-head h3 { margin: 0 0 4px; font-size: 0.9375rem; font-weight: 700; color: var(--ink); }
+    .sp2-sec-head p { margin: 0; font-size: 0.8125rem; color: var(--ink-3); line-height: 1.5; }
+
+    .sp2-err { color: var(--red); font-size: 0.75rem; margin: 4px 0 0; }
+
+    /* Mobile */
+    @media (max-width: 640px) {
+        .sp2-id-card { flex-direction: column; align-items: flex-start; padding: 20px; }
+        .sp2-stats { grid-template-columns: 1fr; }
+        .sp2-doc-grid { grid-template-columns: 1fr; }
+        .sp2-field-grid { grid-template-columns: 1fr; }
+        .sp2-tabbtn { padding: 0 10px; font-size: 0.8125rem; }
     }
 </style>
 
-{{-- ── Status messages ── --}}
+{{-- Status messages --}}
 @if(session('status'))
-    <div class="cx-notice success" style="margin-bottom:20px">{{ session('status') }}</div>
+    <div class="cx-notice success sp2-notice">{{ session('status') }}</div>
 @endif
 @if($errors->any())
-    <div class="cx-notice error" style="margin-bottom:20px">{{ $errors->first() }}</div>
+    <div class="cx-notice error sp2-notice">{{ $errors->first() }}</div>
 @endif
 
-{{-- ── Identity Header ── --}}
-<header class="sp-prof-header">
+{{-- Identity card --}}
+<section class="sp2-id-card">
     @if($hasProfilePhoto)
-        <div class="sp-prof-photo-clip">
+        <div class="sp2-id-photo">
             <x-student-photo :student="$student" size="profile" />
         </div>
     @else
-        <div class="sp-prof-fallback" aria-hidden="true">{{ $pInitials }}</div>
+        <div class="sp2-id-fallback" aria-hidden="true">{{ $pInitials }}</div>
     @endif
-    <div class="sp-prof-identity">
-        <p class="sp-prof-eyebrow">Student Record</p>
-        <h1 class="sp-prof-name">{{ $student->full_name }}</h1>
-        <span class="sp-prof-matric">{{ $student->matric_no }}</span>
-        <div class="sp-prof-badges">
-            <span class="chip {{ $photoStatusClass }}">Identity: {{ $photoStatusLabel }}</span>
-            @if($payment ?? false)
-                <span class="chip emerald">Payment Verified</span>
-            @else
-                <span class="chip amber">Payment Pending</span>
-            @endif
+    <div class="sp2-id-body">
+        <h1 class="sp2-id-name">{{ $student->full_name }}</h1>
+        <span class="sp2-id-matric">{{ $student->matric_no }}</span>
+        <p class="sp2-id-meta">
+            {{ $student->faculty ?? 'Faculty on record pending' }} &middot; {{ $student->dept_name ?? 'Department pending' }}<br>
+            {{ !empty($student->level) ? $student->level . ' Level' : 'Level not set' }} &middot; {{ trim(($session->semester ?? '') . ' ' . ($session->academic_year ?? '')) ?: 'No active session' }}
+        </p>
+        <div class="sp2-id-badges">
+            <span class="chip emerald">Active</span>
+            <span class="chip {{ $photoStatusChip }}">{{ $photoStatusLabel }}</span>
         </div>
-    </div>
-</header>
-
-{{-- ── Academic Information ── --}}
-<section class="sp-prof-sec">
-    <div class="sp-prof-sec-head">
-        <div>
-            <h2>Academic Information</h2>
-            <p>Sourced from the institutional registry — contact the registry office to request changes</p>
-        </div>
-    </div>
-    <div class="sp-prof-fields">
-        <div class="sp-prof-field wide">
-            <span class="sp-prof-field-lbl">Department</span>
-            <span class="sp-prof-field-val {{ empty($student->dept_name) ? 'empty' : '' }}">{{ $student->dept_name ?? 'Not on record' }}</span>
-        </div>
-        <div class="sp-prof-field">
-            <span class="sp-prof-field-lbl">Faculty</span>
-            <span class="sp-prof-field-val {{ empty($student->faculty) ? 'empty' : '' }}">{{ $student->faculty ?? 'Not on record' }}</span>
-        </div>
-        <div class="sp-prof-field">
-            <span class="sp-prof-field-lbl">Level</span>
-            <span class="sp-prof-field-val {{ empty($student->level) ? 'empty' : '' }}">{{ !empty($student->level) ? $student->level . ' Level' : 'Not on record' }}</span>
-        </div>
-        <div class="sp-prof-field">
-            <span class="sp-prof-field-lbl">Active Session</span>
-            <span class="sp-prof-field-val">{{ trim(($session->semester ?? '') . ' ' . ($session->academic_year ?? '')) ?: 'No active session' }}</span>
-        </div>
-        <div class="sp-prof-field">
-            <span class="sp-prof-field-lbl">Account Created</span>
-            <span class="sp-prof-field-val">{{ $student->created_at ? \Illuminate\Support\Carbon::parse($student->created_at)->format('d M Y') : 'Unknown' }}</span>
-        </div>
-        <div class="sp-prof-field">
-            <span class="sp-prof-field-lbl">Matric Number</span>
-            <span class="sp-prof-field-val mono">{{ $student->matric_no }}</span>
-        </div>
+        @if($photoStatus === 'rejected' && $photoRejectionReason !== '')
+            <p class="sp2-id-hint" style="margin:6px 0 0;font-size:12px;color:var(--ink-3);line-height:1.4">Reason: {{ $photoRejectionReason }}</p>
+        @elseif($photoStatus !== 'approved' && $photoStatus !== 'pending_admin_approval' && $photoStatus !== 'flagged')
+            <p class="sp2-id-hint" style="margin:6px 0 0;font-size:12px;color:var(--ink-3);line-height:1.4">Upload your verification photo in <a href="#documents" data-sp2-tab-link="documents" style="color:var(--navy);font-weight:700;text-decoration:none">Documents</a> to complete verification.</p>
+        @endif
     </div>
 </section>
 
-<hr class="sp-prof-divider">
+{{-- Stat cards --}}
+<section class="sp2-stats">
+    <div class="sp2-stat">
+        <p class="sp2-stat-num">{{ $passesAll->count() }}</p>
+        <p class="sp2-stat-lbl">Assessments Linked</p>
+    </div>
+    <div class="sp2-stat">
+        <p class="sp2-stat-num">{{ $tokensAll->count() }}</p>
+        <p class="sp2-stat-lbl">QR Passes Generated</p>
+    </div>
+    <div class="sp2-stat">
+        <p class="sp2-stat-num">{{ $scans->count() }}</p>
+        <p class="sp2-stat-lbl">Recent Scans</p>
+        <p class="sp2-stat-note">(last 10)</p>
+    </div>
+</section>
 
-{{-- ── Identity Verification ── --}}
-<section class="sp-prof-sec">
-    <div class="sp-prof-sec-head">
-        <div>
-            <h2>Identity Verification</h2>
-            <p>Confirms your identity before exam QR access is granted — reviewed by admin</p>
-        </div>
-        <span class="chip {{ $photoStatusClass }}" style="flex:0 0 auto;font-size:11px">{{ $photoStatusLabel }}</span>
+{{-- Tabs --}}
+<section class="sp2-tabs">
+    <div class="sp2-tabbar" role="tablist">
+        <button type="button" class="sp2-tabbtn is-active" data-sp2-tab="profile" role="tab">Profile</button>
+        <button type="button" class="sp2-tabbtn" data-sp2-tab="documents" role="tab">Documents</button>
+        <button type="button" class="sp2-tabbtn" data-sp2-tab="activity" role="tab">Activity</button>
     </div>
 
-    {{-- Per-document status --}}
-    <div class="sp-doc-grid">
-        <div class="sp-doc-item {{ $hasSelfie ? 'has-file' : '' }}">
-            <span class="sp-doc-lbl">Verification Selfie</span>
-            <span class="sp-doc-status">{{ $hasSelfie ? 'On file' : 'Not uploaded' }}</span>
+    {{-- Profile panel --}}
+    <div class="sp2-tabpanel is-active" data-sp2-panel="profile" role="tabpanel">
+        <div class="sp2-sec-head">
+            <h3>Academic Information</h3>
+            <p>Sourced from the institutional registry. Contact the registry office to request changes.</p>
         </div>
-        <div class="sp-doc-item {{ $hasIdCard ? 'has-file' : '' }}">
-            <span class="sp-doc-lbl">School ID Card</span>
-            <span class="sp-doc-status">{{ $hasIdCard ? 'On file' : 'Not uploaded' }}</span>
+        <p class="sp2-readonly-note">These fields are read-only. They are populated from the official student registry and cannot be edited from the portal.</p>
+        <div class="sp2-field-grid">
+            <div class="sp2-field">
+                <span class="sp2-field-lbl">Matric Number</span>
+                <span class="sp2-field-val mono">{{ $student->matric_no }}</span>
+            </div>
+            <div class="sp2-field">
+                <span class="sp2-field-lbl">Department</span>
+                <span class="sp2-field-val {{ empty($student->dept_name) ? 'empty' : '' }}">{{ $student->dept_name ?? 'Not on record' }}</span>
+            </div>
+            <div class="sp2-field">
+                <span class="sp2-field-lbl">Faculty</span>
+                <span class="sp2-field-val {{ empty($student->faculty) ? 'empty' : '' }}">{{ $student->faculty ?? 'Not on record' }}</span>
+            </div>
+            <div class="sp2-field">
+                <span class="sp2-field-lbl">Level</span>
+                <span class="sp2-field-val {{ empty($student->level) ? 'empty' : '' }}">{{ !empty($student->level) ? $student->level . ' Level' : 'Not on record' }}</span>
+            </div>
+            <div class="sp2-field">
+                <span class="sp2-field-lbl">Active Session</span>
+                <span class="sp2-field-val">{{ trim(($session->semester ?? '') . ' ' . ($session->academic_year ?? '')) ?: 'No active session' }}</span>
+            </div>
+            <div class="sp2-field">
+                <span class="sp2-field-lbl">Account Created</span>
+                <span class="sp2-field-val">{{ $student->created_at ? \Illuminate\Support\Carbon::parse($student->created_at)->format('d M Y') : 'Unknown' }}</span>
+            </div>
         </div>
     </div>
 
-    {{-- Overall status --}}
-    @if($verificationDone)
-        <div class="sp-verif-block approved">
-            <span class="sp-verif-title">Identity Verified</span>
-            <p class="sp-verif-desc">Your identity documents have been reviewed and approved. You may generate QR exam passes.</p>
+    {{-- Documents panel --}}
+    <div class="sp2-tabpanel" data-sp2-panel="documents" role="tabpanel">
+        <div class="sp2-sec-head">
+            <h3>Documents</h3>
+            <p>Manage your profile photo and identity verification files.</p>
         </div>
-    @elseif($photoStatus === 'pending_admin_approval')
-        <div class="sp-verif-block pending">
-            <span class="sp-verif-title">Documents Under Review</span>
-            <p class="sp-verif-desc">Your documents have been submitted and are awaiting admin review. This typically takes 1–2 working days. You will be notified once a decision is made.</p>
-        </div>
-    @elseif($verificationFail)
-        <div class="sp-verif-block rejected">
-            <span class="sp-verif-title">Verification Rejected</span>
-            <p class="sp-verif-desc">
-                @if(!empty($student->photo_rejection_reason))
-                    Reason: {{ $student->photo_rejection_reason }}
+
+        {{-- Profile photo slot --}}
+        <div class="sp2-doc-grid">
+            <div class="sp2-doc-slot">
+                <p class="sp2-doc-head">Profile Photo</p>
+                @if($hasProfilePhoto)
+                    <div class="sp2-doc-thumb"><x-student-photo :student="$student" size="compact" /></div>
                 @else
-                    Your documents were not accepted. Resubmit clear images of your face and your current school ID card.
+                    <div class="sp2-doc-thumb-empty">None</div>
                 @endif
-            </p>
-        </div>
-    @elseif($photoStatus === 'flagged')
-        <div class="sp-verif-block pending">
-            <span class="sp-verif-title">Documents Flagged for Manual Review</span>
-            <p class="sp-verif-desc">{{ !empty($student->photo_flag_reason) ? 'Note: ' . $student->photo_flag_reason : 'Your documents are being reviewed manually. No action is required from you at this time.' }}</p>
-        </div>
-    @else
-        <div class="sp-verif-block neutral">
-            <span class="sp-verif-title">Documents Not Yet Submitted</span>
-            <p class="sp-verif-desc">Submit a passport selfie and your school ID card to unlock exam QR passes. Both documents are required and must be clear, well-lit photographs.</p>
-        </div>
-    @endif
 
-    {{-- Resubmit form --}}
-    @if($canResubmit)
-        <form method="POST" action="{{ route('student.profile.verification.store') }}" enctype="multipart/form-data" class="sp-resubmit-form">
+                @if($profilePhotoLocked)
+                    <p class="sp2-doc-meta">
+                        <span class="chip navy">Locked</span>
+                        This photo appears on your profile and exam pass. It cannot be changed without admin approval.
+                    </p>
+
+                    @if($pendingChangeRequest)
+                        <div class="cx-notice" style="padding:10px 12px;border-left:3px solid var(--amber);background:rgba(138,117,85,.06);font-size:12px;color:var(--ink-2);line-height:1.5;border-radius:6px">
+                            <b>Change request pending review.</b><br>
+                            Submitted {{ \Illuminate\Support\Carbon::parse($pendingChangeRequest->submitted_at)->timezone(config('app.timezone'))->format('d M Y, H:i') }}. You will be notified once an admin responds.
+                        </div>
+                    @else
+                        @if($latestChangeRequest && $latestChangeRequest->status === 'rejected')
+                            <div class="cx-notice" style="padding:10px 12px;border-left:3px solid var(--red);background:rgba(138,91,91,.06);font-size:12px;color:var(--ink-2);line-height:1.5;border-radius:6px">
+                                <b>Last change request rejected.</b><br>
+                                @if(trim((string) ($latestChangeRequest->admin_response ?? '')) !== '')
+                                    Admin response: {{ $latestChangeRequest->admin_response }}
+                                @endif
+                            </div>
+                        @endif
+                        <div class="sp2-doc-submit-row">
+                            <button type="button" class="btn btn-primary" data-sp2-change-request-open>Request Photo Change</button>
+                        </div>
+                    @endif
+                @else
+                    {{-- Photo not locked (either brand-new account or admin just approved a change request) --}}
+                    <form method="POST" action="{{ route('student.profile.photo.store') }}" enctype="multipart/form-data" data-sp2-photo-form>
+                        @csrf
+                        <p class="sp2-doc-meta">
+                            @if($latestChangeRequest && $latestChangeRequest->status === 'approved')
+                                Your change request was approved. Upload one new photo — it will be locked immediately after upload.
+                            @else
+                                Upload a passport-style image. Once saved, the photo becomes permanent.
+                            @endif
+                        </p>
+                        <input class="sp2-doc-input" type="file" name="profile_photo" accept="image/jpeg,image/png,image/webp" required>
+                        @error('profile_photo')<p class="sp2-err">{{ $message }}</p>@enderror
+                        <div class="sp2-doc-submit-row">
+                            <button type="submit" class="btn btn-primary">{{ $hasProfilePhoto ? 'Replace &amp; Lock' : 'Upload &amp; Lock' }}</button>
+                        </div>
+                    </form>
+                @endif
+            </div>
+        </div>
+
+        {{-- Change request form (hidden until "Request Photo Change" is clicked) --}}
+        @if($profilePhotoLocked && ! $pendingChangeRequest)
+            <div class="sp2-change-request-panel" data-sp2-change-request-panel style="display:none;margin-top:16px;padding:20px;border:1px solid var(--line);border-radius:12px;background:var(--bg-2)">
+                <h4 style="margin:0 0 6px;font-size:15px;font-weight:700;color:var(--ink)">Request a Photo Change</h4>
+                <p style="margin:0 0 14px;font-size:13px;color:var(--ink-3);line-height:1.5">Select at least one reason. If you choose "Other reason", explain in the notes field. Your locked photo remains active until an admin approves this request.</p>
+
+                <form method="POST" action="{{ route('student.profile.photo-change-request.store') }}">
+                    @csrf
+                    <div style="display:grid;gap:8px;margin-bottom:14px">
+                        @foreach($profilePhotoChangeReasons as $reason)
+                            <label style="display:flex;align-items:flex-start;gap:8px;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:#fff;cursor:pointer;font-size:13px;color:var(--ink);line-height:1.4">
+                                <input type="checkbox" name="reasons[]" value="{{ $reason }}" style="margin-top:2px">
+                                <span>{{ $reason }}</span>
+                            </label>
+                        @endforeach
+                    </div>
+                    @error('reasons')<p class="sp2-err">{{ $message }}</p>@enderror
+                    @error('reasons.*')<p class="sp2-err">{{ $message }}</p>@enderror
+
+                    <label for="pc-additional-notes" style="display:block;font-size:12px;font-weight:700;color:var(--ink-2);margin-bottom:6px">Additional notes (required if "Other reason" is selected)</label>
+                    <textarea id="pc-additional-notes" name="additional_notes" rows="3" style="width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:8px;font-size:13px;font-family:inherit" placeholder="Provide any extra context for the admin reviewer"></textarea>
+                    @error('additional_notes')<p class="sp2-err">{{ $message }}</p>@enderror
+
+                    <div style="display:flex;gap:10px;margin-top:14px">
+                        <button type="submit" class="btn btn-primary">Submit Request</button>
+                        <button type="button" class="btn btn-ghost" data-sp2-change-request-cancel>Cancel</button>
+                    </div>
+                </form>
+            </div>
+        @endif
+
+        {{-- Verification resubmit (combined selfie + id_card) --}}
+        <form method="POST" action="{{ route('student.profile.verification.store') }}" enctype="multipart/form-data" data-sp2-verify-form>
             @csrf
-            <p style="margin:0;font-size:13px;font-weight:900;color:var(--ink)">Submit Verification Documents</p>
-            <p style="margin:0;font-size:12px;color:var(--ink-3)">Both documents are required. Submitting replaces any previously uploaded images and queues them for admin review.</p>
-            <div class="sp-resubmit-cols">
-                <div>
-                    <label class="sp-field-lbl">Verification Selfie</label>
-                    <p class="sp-field-hint">Clear face photo — well-lit, no glasses, no hat</p>
-                    <input class="input" type="file" name="selfie" accept="image/jpeg,image/png,image/webp" required style="padding:8px 10px;height:auto;width:100%">
-                    @error('selfie')<p style="color:var(--red);font-size:12px;margin:4px 0 0">{{ $message }}</p>@enderror
+            <div class="sp2-doc-grid">
+                {{-- Selfie slot --}}
+                <div class="sp2-doc-slot">
+                    <p class="sp2-doc-head">Verification Selfie</p>
+                    @if($hasSelfie && $selfieUrl)
+                        <div class="sp2-doc-thumb"><img src="{{ $selfieUrl }}" alt="Selfie on file"></div>
+                    @else
+                        <div class="sp2-doc-thumb-empty">None</div>
+                    @endif
+                    <p class="sp2-doc-meta">
+                        <span class="chip {{ $photoStatusChip }}">{{ $photoStatusLabel }}</span>
+                    </p>
+                    @if($canResubmit)
+                        <input class="sp2-doc-input" type="file" name="selfie" accept="image/jpeg,image/png,image/webp" required>
+                        @error('selfie')<p class="sp2-err">{{ $message }}</p>@enderror
+                    @else
+                        <p class="sp2-doc-meta">Selfie is locked while under review or already approved.</p>
+                    @endif
                 </div>
-                <div>
-                    <label class="sp-field-lbl">School ID Card</label>
-                    <p class="sp-field-hint">Front of your current institutional student ID</p>
-                    <input class="input" type="file" name="id_card" accept="image/jpeg,image/png,image/webp" required style="padding:8px 10px;height:auto;width:100%">
-                    @error('id_card')<p style="color:var(--red);font-size:12px;margin:4px 0 0">{{ $message }}</p>@enderror
+
+                {{-- ID card slot --}}
+                <div class="sp2-doc-slot">
+                    <p class="sp2-doc-head">School ID Card</p>
+                    <div class="sp2-doc-placeholder">{{ $hasIdCard ? 'File on record' : 'Not uploaded' }}</div>
+                    <p class="sp2-doc-meta">
+                        <span class="chip {{ $photoStatusChip }}">{{ $photoStatusLabel }}</span>
+                    </p>
+                    @if($canResubmit)
+                        <input class="sp2-doc-input" type="file" name="id_card" accept="image/jpeg,image/png,image/webp" required>
+                        @error('id_card')<p class="sp2-err">{{ $message }}</p>@enderror
+                    @else
+                        <p class="sp2-doc-meta">ID card is locked while under review or already approved.</p>
+                    @endif
+                </div>
+
+                {{-- Filler slot for grid alignment on desktop --}}
+                <div class="sp2-doc-slot" aria-hidden="true">
+                    <p class="sp2-doc-head">Guidance</p>
+                    <p class="sp2-doc-meta">Both the verification selfie and school ID card must be submitted together. Files should be clear, well-lit, and unedited.</p>
                 </div>
             </div>
-            <div>
-                <button class="btn btn-primary" type="submit">Submit for Review</button>
-            </div>
-        </form>
-    @endif
-</section>
 
-<hr class="sp-prof-divider">
-
-{{-- ── Profile Photo ── --}}
-<section class="sp-prof-sec">
-    <div class="sp-prof-sec-head">
-        <div>
-            <h2>Profile Photo</h2>
-            <p>Shown on your dashboard and in the sidebar — not used for identity verification</p>
-        </div>
-    </div>
-
-    <div class="sp-photo-box">
-        <div class="sp-photo-current">
-            @if($hasProfilePhoto)
-                <div class="sp-photo-thumb">
-                    <x-student-photo :student="$student" size="compact" />
-                </div>
-                <div>
-                    <p style="margin:0;font-size:13px;font-weight:800;color:var(--ink)">Profile photo set</p>
-                    <p style="margin:3px 0 0;font-size:12px;color:var(--ink-3)">Upload a new image below to replace it</p>
-                </div>
-            @else
-                <div class="sp-photo-thumb-empty" aria-hidden="true">
-                    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="var(--ink-4)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="10" cy="7" r="3"/><path d="M3 18c0-4.418 3.134-7 7-7s7 2.582 7 7"/></svg>
-                </div>
-                <div>
-                    <p style="margin:0;font-size:13px;color:var(--ink-3)">No profile photo set</p>
-                    <p style="margin:3px 0 0;font-size:12px;color:var(--ink-4)">Upload a photo to personalise your dashboard</p>
+            @if($canResubmit)
+                <div class="sp2-doc-submit-row">
+                    <button type="submit" class="btn btn-primary">Submit for Review</button>
                 </div>
             @endif
-        </div>
-
-        <div class="sp-photo-tip">
-            Upload a recent passport photograph that clearly shows your face. Avoid group photos, sunglasses, heavy filters, or images where your face is not fully visible. This photo is cosmetic only — it does not affect exam access.
-        </div>
-
-        <form method="POST" action="{{ route('student.profile.photo.store') }}" enctype="multipart/form-data" style="display:grid;gap:10px">
-            @csrf
-            <div>
-                <label class="sp-field-lbl">{{ $hasProfilePhoto ? 'Replace profile photo' : 'Upload profile photo' }}</label>
-                <input class="input" type="file" name="profile_photo" accept="image/jpeg,image/png,image/webp" required style="padding:10px 12px;height:auto;width:100%">
-                @error('profile_photo')<p style="color:var(--red);font-size:12px;margin:4px 0 0">{{ $message }}</p>@enderror
-            </div>
-            <div>
-                <button class="btn btn-primary" type="submit">{{ $hasProfilePhoto ? 'Replace Photo' : 'Upload Photo' }}</button>
-            </div>
         </form>
+    </div>
+
+    {{-- Activity panel --}}
+    <div class="sp2-tabpanel" data-sp2-panel="activity" role="tabpanel">
+        <div class="sp2-sec-head">
+            <h3>Recent Activity</h3>
+            <p>Verification scans performed against your QR passes. Shows the most recent 10 events.</p>
+        </div>
+        @if($scans->count() === 0)
+            <div class="sp2-empty">No activity recorded yet.</div>
+        @else
+            <div class="sp2-activity">
+                @foreach($scans as $scan)
+                    @php
+                        $decision = strtoupper($scan->decision ?? '');
+                        $dotClass = match(true) {
+                            in_array($decision, ['APPROVED', 'CHECKED_IN', 'SUBMITTED', 'COMPLETED']) => 'emerald',
+                            in_array($decision, ['REJECTED', 'DUPLICATE']) => 'red',
+                            $decision !== '' => 'amber',
+                            default => '',
+                        };
+                        $examinerName = $scan->examiner_name ?? ($scan->examiner_username ?? 'Unknown examiner');
+                        $when = !empty($scan->timestamp) ? \Illuminate\Support\Carbon::parse($scan->timestamp)->timezone(config('app.timezone'))->format('d M Y, H:i') : '—';
+                    @endphp
+                    <div class="sp2-activity-row">
+                        <span class="sp2-activity-dot {{ $dotClass }}" aria-hidden="true"></span>
+                        <div class="sp2-activity-body">
+                            <p class="sp2-activity-desc">Scanned by {{ $examinerName }} — {{ $decision ?: 'Recorded' }}</p>
+                            @if(!empty($scan->reason))
+                                <p class="sp2-activity-sub">{{ $scan->reason }}</p>
+                            @endif
+                        </div>
+                        <span class="sp2-activity-time">{{ $when }}</span>
+                    </div>
+                @endforeach
+            </div>
+        @endif
     </div>
 </section>
 
@@ -314,7 +422,21 @@
 @push('scripts')
 <script>
 (function() {
-    var photoForm = document.querySelector('form[action*="profile/photo"]');
+    // Tab switching
+    var buttons = document.querySelectorAll('[data-sp2-tab]');
+    var panels  = document.querySelectorAll('[data-sp2-panel]');
+    buttons.forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            var key = btn.getAttribute('data-sp2-tab');
+            buttons.forEach(function(b) { b.classList.toggle('is-active', b === btn); });
+            panels.forEach(function(p) {
+                p.classList.toggle('is-active', p.getAttribute('data-sp2-panel') === key);
+            });
+        });
+    });
+
+    // Disable submit on upload
+    var photoForm = document.querySelector('[data-sp2-photo-form]');
     if (photoForm) {
         photoForm.addEventListener('submit', function() {
             var btn = this.querySelector('[type=submit]');
@@ -323,11 +445,27 @@
             if (btn) { btn.disabled = true; btn.textContent = 'Uploading…'; }
         });
     }
-    var verifyForm = document.querySelector('form[action*="profile/verification"]');
+    var verifyForm = document.querySelector('[data-sp2-verify-form]');
     if (verifyForm) {
         verifyForm.addEventListener('submit', function() {
             var btn = this.querySelector('[type=submit]');
             if (btn) { btn.disabled = true; btn.textContent = 'Submitting…'; }
+        });
+    }
+
+    // Profile photo change request panel toggle
+    var changeOpenBtn   = document.querySelector('[data-sp2-change-request-open]');
+    var changeCancelBtn = document.querySelector('[data-sp2-change-request-cancel]');
+    var changePanel     = document.querySelector('[data-sp2-change-request-panel]');
+    if (changeOpenBtn && changePanel) {
+        changeOpenBtn.addEventListener('click', function() {
+            changePanel.style.display = '';
+            changePanel.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        });
+    }
+    if (changeCancelBtn && changePanel) {
+        changeCancelBtn.addEventListener('click', function() {
+            changePanel.style.display = 'none';
         });
     }
 })();

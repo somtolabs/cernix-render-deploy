@@ -158,6 +158,7 @@ class StudentWebController extends Controller
             'password'         => ['required', 'string', 'min:8', 'confirmed'],
             'id_card'          => [$idCardRule, 'file', 'mimes:jpg,jpeg,png,webp,heic,heif', 'max:5120'],
             'selfie'           => ['required', 'file', 'mimes:jpg,jpeg,png,heic,heif', 'max:4096'],
+            'profile_photo'    => ['required', 'file', 'mimes:jpg,jpeg,png,webp,heic,heif', 'max:4096'],
         ]);
 
         $session = DB::table('exam_sessions')->where('is_active', true)->first();
@@ -190,8 +191,9 @@ class StudentWebController extends Controller
                 }
 
                 // Account exists but has no password — complete the setup by updating the record
-                $selfiePath = $this->storePassportPhoto($request, $matric);
-                $idCardPath = $this->storeIdCard($request, $matric);
+                $selfiePath       = $this->storePassportPhoto($request, $matric);
+                $idCardPath       = $this->storeIdCard($request, $matric);
+                $profilePhotoPath = $this->storeProfilePhoto($request, $matric);
 
                 $updateData = ['updated_at' => now()];
                 if (Schema::hasColumn('students', 'password')) {
@@ -207,6 +209,12 @@ class StudentWebController extends Controller
                     $updateData['photo_path']   = $selfiePath;
                     $updateData['photo_status'] = 'pending_admin_approval';
                 }
+                if (Schema::hasColumn('students', 'profile_photo_path')) {
+                    $updateData['profile_photo_path'] = $profilePhotoPath;
+                }
+                if (Schema::hasColumn('students', 'profile_photo_locked_at')) {
+                    $updateData['profile_photo_locked_at'] = now();
+                }
 
                 DB::table('students')->where('matric_no', $matric)->update($updateData);
 
@@ -217,6 +225,11 @@ class StudentWebController extends Controller
                     'session_id' => $session->session_id,
                 ]);
 
+                app(AuditService::class)->logAction($matric, 'student', 'student.profile_photo_locked', [
+                    'session_id' => $session->session_id,
+                    'profile_photo_path' => $profilePhotoPath,
+                ]);
+
                 $redirectUrl = route('student.dashboard');
 
                 return $request->expectsJson()
@@ -224,8 +237,9 @@ class StudentWebController extends Controller
                     : redirect($redirectUrl);
             }
 
-            $selfiePath = $this->storePassportPhoto($request, $matric);
-            $idCardPath = $this->storeIdCard($request, $matric);
+            $selfiePath       = $this->storePassportPhoto($request, $matric);
+            $idCardPath       = $this->storeIdCard($request, $matric);
+            $profilePhotoPath = $this->storeProfilePhoto($request, $matric);
 
             $result = $this->registrationService->registerStudent([
                 'matric_no'      => $matric,
@@ -235,6 +249,19 @@ class StudentWebController extends Controller
                 'password'       => Hash::make($data['password']),
                 'account_status' => 'active',
             ]);
+
+            // Lock the profile photo immediately upon registration.
+            $lockUpdates = [];
+            if (Schema::hasColumn('students', 'profile_photo_path')) {
+                $lockUpdates['profile_photo_path'] = $profilePhotoPath;
+            }
+            if (Schema::hasColumn('students', 'profile_photo_locked_at')) {
+                $lockUpdates['profile_photo_locked_at'] = now();
+            }
+            if ($lockUpdates) {
+                $lockUpdates['updated_at'] = now();
+                DB::table('students')->where('matric_no', $matric)->update($lockUpdates);
+            }
 
             $request->session()->put('student_matric_no', $matric);
             $request->session()->put('student_session_id', (int) $session->session_id);
@@ -250,6 +277,11 @@ class StudentWebController extends Controller
                     'has_password' => true,
                 ]
             );
+
+            app(AuditService::class)->logAction($matric, 'student', 'student.profile_photo_locked', [
+                'session_id' => $session->session_id,
+                'profile_photo_path' => $profilePhotoPath,
+            ]);
 
             $redirectUrl = route('student.dashboard');
 
@@ -485,6 +517,28 @@ class StudentWebController extends Controller
         file_put_contents($directory . DIRECTORY_SEPARATOR . $filename, file_get_contents($file->getRealPath()));
 
         return 'photos/student-submissions/' . $filename;
+    }
+
+    private function storeProfilePhoto(Request $request, string $matricNo): string
+    {
+        $file      = $request->file('profile_photo');
+        $directory = public_path('photos/profiles');
+
+        if (! is_dir($directory)) {
+            mkdir($directory, 0755, true);
+        }
+
+        $filename = 'profile-'
+            . Str::slug(str_replace('/', '-', $matricNo))
+            . '-'
+            . now()->format('YmdHis')
+            . '-'
+            . Str::random(6)
+            . '.jpg';
+
+        file_put_contents($directory . DIRECTORY_SEPARATOR . $filename, file_get_contents($file->getRealPath()));
+
+        return 'photos/profiles/' . $filename;
     }
 
     private function storeIdCard(Request $request, string $matricNo): string

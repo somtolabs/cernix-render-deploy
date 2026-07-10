@@ -8,9 +8,13 @@
     $adminRoleLabel = \Illuminate\Support\Str::headline(strtolower((string) $adminRole));
     $warningCounts  = app(\App\Services\RiskIntelligenceService::class)->getWarningCounts();
     $pendingPhotos  = 0;
+    $pendingPhotoChangeRequests = 0;
     try {
         if (\Illuminate\Support\Facades\Schema::hasTable('students') && \Illuminate\Support\Facades\Schema::hasColumn('students', 'photo_status')) {
             $pendingPhotos = (int) \Illuminate\Support\Facades\DB::table('students')->where('photo_status', 'pending_admin_approval')->count();
+        }
+        if (\Illuminate\Support\Facades\Schema::hasTable('profile_photo_change_requests')) {
+            $pendingPhotoChangeRequests = (int) \Illuminate\Support\Facades\DB::table('profile_photo_change_requests')->where('status', 'pending')->count();
         }
     } catch (\Throwable) {}
     $isSuperAdminNav = \App\Support\Roles::isSuperAdmin($adminRole);
@@ -50,6 +54,7 @@
             ['section' => 'Registry'],
             ['label' => 'Student Registry',   'route' => 'admin.student-registry','match' => 'admin/student-registry*',  'icon' => $navIcons['registry']],
             ['label' => 'Photo Approvals',    'route' => 'admin.photo-approvals', 'match' => 'admin/photo-approvals*',   'icon' => $navIcons['photo'],      'badge' => $pendingPhotos],
+            ['label' => 'Photo Change Requests', 'route' => 'admin.profile-photo-change-requests', 'match' => 'admin/profile-photo-change-requests*', 'icon' => $navIcons['photo'], 'badge' => $pendingPhotoChangeRequests],
             ['section' => 'Students'],
             ['label' => 'Students',           'route' => 'admin.students',        'match' => 'admin/students*',          'icon' => $navIcons['students'],   'badge' => $warningCounts['students'] ?? 0],
             ['label' => 'Payments',           'route' => 'admin.payments',        'match' => 'admin/payments*',          'icon' => $navIcons['payments']],
@@ -72,6 +77,7 @@
             ['section' => 'Registry'],
             ['label' => 'Student Registry',   'route' => 'admin.student-registry','match' => 'admin/student-registry*',  'icon' => $navIcons['registry']],
             ['label' => 'Photo Approvals',    'route' => 'admin.photo-approvals', 'match' => 'admin/photo-approvals*',   'icon' => $navIcons['photo'],      'badge' => $pendingPhotos],
+            ['label' => 'Photo Change Requests', 'route' => 'admin.profile-photo-change-requests', 'match' => 'admin/profile-photo-change-requests*', 'icon' => $navIcons['photo'], 'badge' => $pendingPhotoChangeRequests],
             ['section' => 'Students'],
             ['label' => 'Students',           'route' => 'admin.students',        'match' => 'admin/students*',          'icon' => $navIcons['students'],   'badge' => $warningCounts['students'] ?? 0],
             ['label' => 'Payments',           'route' => 'admin.payments',        'match' => 'admin/payments*',          'icon' => $navIcons['payments']],

@@ -169,6 +169,13 @@ class ExaminerWebController extends Controller
             return redirect('/examiner/login');
         }
 
+        $todaysExams = $this->todaysExams((int) $examiner['id']);
+        $assignedAssessments = $this->assignedAssessments((int) $examiner['id']);
+        $allTimetableIds = array_values(array_unique(array_merge(
+            $todaysExams->pluck('id')->all(),
+            method_exists($assignedAssessments, 'pluck') ? $assignedAssessments->pluck('id')->all() : []
+        )));
+
         return view('examiner.dashboard', [
             'examiner'               => $examiner,
             'metrics'                => $this->metricsData((int) $examiner['id']),
@@ -176,7 +183,9 @@ class ExaminerWebController extends Controller
             'notificationUnreadCount' => $this->examinerUnreadNotes((int) $examiner['id']),
             'activeTimetable'        => $request->session()->get('examiner_active_timetable'),
             'activeTimetableId'      => $request->session()->get('examiner_active_timetable_id'),
-            'todaysExams'            => $this->todaysExams((int) $examiner['id']),
+            'todaysExams'            => $todaysExams,
+            'assignedAssessments'    => $assignedAssessments,
+            'scanCountsByTimetable'  => $this->scanCountsByTimetable($allTimetableIds),
         ]);
     }
 
@@ -356,6 +365,9 @@ class ExaminerWebController extends Controller
         $attendanceSummary   = collect();
         $checkedInStudents   = collect();
         $expectedCounts      = collect();
+        $scanCountsByTimetable = $this->scanCountsByTimetable(
+            $todaysExams->pluck('id')->all()
+        );
 
         if ($todaysExams->isNotEmpty() && Schema::hasTable('attendance_records')) {
             $timetableIds = $todaysExams->pluck('id')->all();
@@ -380,8 +392,9 @@ class ExaminerWebController extends Controller
                     'attendance_records.submitted_at',
                     'students.full_name',
                     'students.photo_path',
+                    'students.profile_photo_path',
                     'students.level',
-                    'departments.name as dept_name',
+                    'departments.dept_name as dept_name',
                 )
                 ->orderBy('attendance_records.timetable_id')
                 ->orderBy('attendance_records.checked_in_at')
@@ -405,6 +418,7 @@ class ExaminerWebController extends Controller
             'expectedCounts'        => $expectedCounts,
             'enableSubmissionScan'  => $this->settingBoolean('enable_submission_scan', true),
             'activeTimetableId'     => $request->session()->get('examiner_active_timetable_id'),
+            'scanCountsByTimetable' => $scanCountsByTimetable,
             'notificationUnreadCount' => $this->examinerUnreadNotes((int) $examiner['id']),
         ]);
     }
@@ -541,7 +555,9 @@ class ExaminerWebController extends Controller
                     $result['student']['level'] = $student->level;
                     $result['student']['department'] = $student->dept_name ?? ($result['student']['department'] ?? null);
                     $result['student']['faculty'] = $student->faculty ?? null;
+                    // photo_path retained for API contract; UI reads profile_photo_path.
                     $result['student']['photo_path'] = $student->photo_path;
+                    $result['student']['profile_photo_path'] = $student->profile_photo_path ?? null;
                     $result['exam_access'] = array_merge(
                         $result['exam_access'] ?? [],
                         $this->examAccessContext($student, $tokenId)
@@ -1014,6 +1030,182 @@ class ExaminerWebController extends Controller
         return response()->json(['success' => true, 'message' => 'Student marked as submitted.']);
     }
 
+    public function exportAssessmentReport(Request $request, int $timetableId)
+    {
+        $examiner = $this->examiner($request);
+        if (! $examiner) {
+            return redirect('/examiner/login');
+        }
+
+        $assessment = DB::table('timetables')
+            ->leftJoin('departments', 'timetables.department_id', '=', 'departments.dept_id')
+            ->leftJoin('examiners', 'timetables.examiner_id', '=', 'examiners.examiner_id')
+            ->where('timetables.id', $timetableId)
+            ->select('timetables.*', 'departments.dept_name', 'departments.faculty', 'examiners.full_name as examiner_name')
+            ->first();
+
+        abort_unless($assessment, 404);
+        abort_unless(
+            (int) ($assessment->examiner_id ?? 0) === (int) $examiner['id']
+                || Roles::isAdminLike($examiner['role']),
+            403
+        );
+
+        $logs = DB::table('verification_logs')
+            ->join('qr_tokens', 'verification_logs.token_id', '=', 'qr_tokens.token_id')
+            ->leftJoin('students', 'qr_tokens.student_id', '=', 'students.matric_no')
+            ->leftJoin('departments', 'students.department_id', '=', 'departments.dept_id')
+            ->leftJoin('examiners', 'verification_logs.examiner_id', '=', 'examiners.examiner_id')
+            ->when(
+                Schema::hasColumn('qr_tokens', 'timetable_id'),
+                fn ($q) => $q->where('qr_tokens.timetable_id', $timetableId),
+                fn ($q) => $q->whereRaw('1 = 0')
+            )
+            ->orderBy('verification_logs.timestamp')
+            ->select(
+                'verification_logs.log_id',
+                'verification_logs.token_id',
+                'verification_logs.decision',
+                'verification_logs.timestamp',
+                'qr_tokens.student_id as matric_no',
+                'students.full_name',
+                'students.level',
+                'departments.dept_name',
+                'examiners.full_name as scan_examiner_name'
+            )
+            ->get();
+
+        $attendanceByMatric = collect();
+        if (Schema::hasTable('attendance_records')) {
+            $attendanceByMatric = DB::table('attendance_records')
+                ->where('timetable_id', $timetableId)
+                ->select('matric_no', 'status', 'checked_in_at', 'submitted_at')
+                ->get()
+                ->keyBy('matric_no');
+        }
+
+        $expected = Schema::hasTable('timetable_students')
+            ? (int) DB::table('timetable_students')->where('timetable_id', $timetableId)->count()
+            : $logs->pluck('matric_no')->filter()->unique()->count();
+
+        $counts = $logs->groupBy('decision')->map->count();
+        $totalScanned = $logs->pluck('matric_no')->filter()->unique()->count();
+
+        if ($logs->isEmpty()) {
+            return redirect()->route('examiner.today-exams')
+                ->with('status', 'No verification records to export for this assessment yet.');
+        }
+
+        $institutionName = Schema::hasTable('cernix_settings')
+            ? ((string) DB::table('cernix_settings')->where('key', 'institution_name')->value('value') ?: 'Institution')
+            : 'Institution';
+
+        $format = strtolower((string) $request->query('format', 'csv'));
+
+        $this->auditService->logAction(
+            (string) $examiner['id'],
+            'examiner',
+            'assessment.report.exported',
+            [
+                'timetable_id' => $timetableId,
+                'course_code' => $assessment->course_code ?? null,
+                'format' => $format,
+                'record_count' => $logs->count(),
+            ]
+        );
+
+        $slug = strtolower((string) preg_replace('/[^A-Za-z0-9]+/', '-', (string) ($assessment->course_code ?? 'assessment')));
+        $datePart = $assessment->exam_date ? \Illuminate\Support\Carbon::parse($assessment->exam_date)->format('Y-m-d') : now()->format('Y-m-d');
+        $baseName = 'assessment-' . trim($slug, '-') . '-' . $datePart . '-report';
+
+        $typeLabel = match (strtolower((string) ($assessment->assessment_type ?? 'exam'))) {
+            'test' => 'Test',
+            'makeup' => 'Make-up',
+            default => 'Exam',
+        };
+
+        if ($format === 'html') {
+            $html = view('examiner.assessment-report', [
+                'institutionName' => $institutionName,
+                'assessment' => $assessment,
+                'typeLabel' => $typeLabel,
+                'logs' => $logs,
+                'attendanceByMatric' => $attendanceByMatric,
+                'counts' => $counts,
+                'totalScanned' => $totalScanned,
+                'expected' => $expected,
+                'generatedAt' => now(),
+                'examinerName' => $assessment->examiner_name ?? $examiner['full_name'] ?? 'Unassigned',
+            ])->render();
+
+            return response($html, 200, [
+                'Content-Type' => 'text/html; charset=UTF-8',
+                'Cache-Control' => 'no-store, private',
+            ]);
+        }
+
+        return response()->streamDownload(function () use (
+            $institutionName, $assessment, $typeLabel, $logs, $attendanceByMatric, $counts, $totalScanned, $expected
+        ) {
+            $out = fopen('php://output', 'w');
+            fputs($out, "\xEF\xBB\xBF");
+
+            fputcsv($out, [$institutionName]);
+            fputcsv($out, ['Assessment Report']);
+            fputcsv($out, ['Course', ($assessment->course_code ?? '') . ' — ' . ($assessment->course_title ?? '')]);
+            fputcsv($out, ['Type', $typeLabel]);
+            fputcsv($out, ['Date', $assessment->exam_date ?? '']);
+            fputcsv($out, ['Time', substr((string) ($assessment->start_time ?? ''), 0, 5) . ($assessment->end_time ? ' – ' . substr((string) $assessment->end_time, 0, 5) : '')]);
+            fputcsv($out, ['Venue', $assessment->venue ?? '']);
+            fputcsv($out, ['Examiner', $assessment->examiner_name ?? 'Unassigned']);
+            fputcsv($out, ['Generated', now()->format('Y-m-d H:i')]);
+            fputcsv($out, ['Expected', $expected]);
+            fputcsv($out, ['Unique Students Scanned', $totalScanned]);
+            fputcsv($out, ['Approved', (int) ($counts['APPROVED'] ?? 0)]);
+            fputcsv($out, ['Rejected', (int) ($counts['REJECTED'] ?? 0)]);
+            fputcsv($out, ['Already Used', (int) ($counts['DUPLICATE'] ?? 0)]);
+            fputcsv($out, []);
+
+            fputcsv($out, ['#', 'Student Name', 'Matric', 'Department', 'Level', 'Scan Timestamp', 'Outcome', 'Entry Status', 'Scanned By']);
+            foreach ($logs as $i => $log) {
+                $outcome = match ($log->decision) {
+                    'APPROVED' => 'Approved',
+                    'REJECTED' => 'Rejected',
+                    'DUPLICATE' => 'Already Used',
+                    default => (string) $log->decision,
+                };
+                $att = $attendanceByMatric->get($log->matric_no);
+                $entryStatus = 'Not tracked';
+                if ($att) {
+                    $entryStatus = match ($att->status) {
+                        'checked_in' => 'Entered',
+                        'submitted' => 'Submitted',
+                        'flagged' => 'Flagged',
+                        default => (string) $att->status,
+                    };
+                }
+                fputcsv($out, [
+                    $i + 1,
+                    $log->full_name ?? 'Unavailable',
+                    $log->matric_no ?? '',
+                    $log->dept_name ?? '',
+                    $log->level ?? '',
+                    $log->timestamp,
+                    $outcome,
+                    $entryStatus,
+                    $log->scan_examiner_name ?? '',
+                ]);
+            }
+
+            fputcsv($out, []);
+            fputcsv($out, ['This report is for official examination administration use only.']);
+            fclose($out);
+        }, $baseName . '.csv', [
+            'Content-Type' => 'text/csv; charset=UTF-8',
+            'Cache-Control' => 'no-store, private',
+        ]);
+    }
+
     private function safeVerificationLog(array $qrData, ?array $result, string $reason): void
     {
         if (app()->environment('testing')) {
@@ -1284,7 +1476,7 @@ class ExaminerWebController extends Controller
             ->leftJoin('departments', 'students.department_id', '=', 'departments.dept_id')
             ->leftJoin('examiners', 'verification_logs.examiner_id', '=', 'examiners.examiner_id')
             ->where('verification_logs.log_id', $logId)
-            ->select('verification_logs.*', 'qr_tokens.status as token_status', 'qr_tokens.student_id as matric_no', $timetableSelect, 'students.full_name', 'students.photo_path', 'students.level', 'departments.dept_name', 'departments.faculty', 'examiners.full_name as examiner_name')
+            ->select('verification_logs.*', 'qr_tokens.status as token_status', 'qr_tokens.student_id as matric_no', $timetableSelect, 'students.full_name', 'students.photo_path', 'students.profile_photo_path', 'students.level', 'departments.dept_name', 'departments.faculty', 'examiners.full_name as examiner_name')
             ->first();
     }
 
@@ -1416,6 +1608,34 @@ class ExaminerWebController extends Controller
         ];
     }
 
+    private function assignedAssessments(int $examinerId, int $limit = 20)
+    {
+        if (! DB::getSchemaBuilder()->hasTable('timetables')
+            || ! DB::getSchemaBuilder()->hasColumn('timetables', 'examiner_id')) {
+            return collect();
+        }
+
+        $hasRoster = Schema::hasTable('timetable_students');
+        $studentCountExpression = $hasRoster
+            ? '(SELECT COUNT(*) FROM timetable_students WHERE timetable_students.timetable_id = timetables.id)'
+            : '0';
+
+        return DB::table('timetables')
+            ->leftJoin('departments', 'timetables.department_id', '=', 'departments.dept_id')
+            ->where('timetables.examiner_id', $examinerId)
+            ->where('timetables.status', '!=', 'cancelled')
+            ->whereDate('timetables.exam_date', '>=', today()->subDays(1))
+            ->select(
+                'timetables.*',
+                'departments.dept_name',
+                DB::raw($studentCountExpression . ' as student_count')
+            )
+            ->orderBy('timetables.exam_date')
+            ->orderBy('timetables.start_time')
+            ->limit($limit)
+            ->get();
+    }
+
     private function todaysExams(?int $examinerId = null)
     {
         if (! DB::getSchemaBuilder()->hasTable('timetables')) {
@@ -1435,6 +1655,23 @@ class ExaminerWebController extends Controller
         }
 
         return $query->get();
+    }
+
+    private function scanCountsByTimetable(array $timetableIds): \Illuminate\Support\Collection
+    {
+        if (empty($timetableIds)
+            || ! Schema::hasTable('verification_logs')
+            || ! Schema::hasTable('qr_tokens')
+            || ! Schema::hasColumn('qr_tokens', 'timetable_id')) {
+            return collect();
+        }
+
+        return DB::table('verification_logs')
+            ->join('qr_tokens', 'verification_logs.token_id', '=', 'qr_tokens.token_id')
+            ->whereIn('qr_tokens.timetable_id', $timetableIds)
+            ->select('qr_tokens.timetable_id', DB::raw('COUNT(*) as total'))
+            ->groupBy('qr_tokens.timetable_id')
+            ->pluck('total', 'timetable_id');
     }
 
     private function settingBoolean(string $key, bool $default): bool

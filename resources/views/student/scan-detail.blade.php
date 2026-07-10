@@ -9,12 +9,26 @@
 
 <style>
     .access-case { display:grid; gap:14px; }
-    .access-head { background:rgba(235,241,255,.3); border-left:3px solid var(--navy); padding:16px; display:grid; gap:14px; }
+    .access-head {
+        background:#fff;
+        border:1px solid var(--line);
+        border-radius:18px;
+        padding:20px 22px;
+        display:grid; gap:14px;
+        box-shadow: 0 1px 2px rgba(14,18,38,.04), 0 8px 22px -14px rgba(14,18,38,.10);
+    }
     .access-person { display:flex; gap:14px; align-items:center; min-width:0; }
-    .access-person h1 { margin:0; font-size:clamp(22px,5vw,34px); line-height:1.02; letter-spacing:-.045em; overflow-wrap:break-word; word-break:normal; }
+    .access-person h1 { margin:0; font-size:clamp(20px,4.5vw,28px); line-height:1.1; letter-spacing:-.02em; font-weight:800; overflow-wrap:break-word; word-break:normal; }
     .access-person p { margin:5px 0 0; }
-    .access-panel { min-width:0; }
-    .access-panel h2 { margin:0; padding:0 0 12px; border-bottom:1px solid var(--line); font-size:14px; }
+    .access-panel {
+        min-width:0;
+        background:#fff;
+        border:1px solid var(--line);
+        border-radius:16px;
+        padding:18px 20px;
+        box-shadow: 0 1px 2px rgba(14,18,38,.03), 0 6px 16px -12px rgba(14,18,38,.10);
+    }
+    .access-panel h2 { margin:0; padding:0 0 12px; border-bottom:1px solid var(--line); font-size:13px; font-weight:800; letter-spacing:-.01em; }
     .access-panel-body { padding:4px 0; }
     .access-row { display:grid; gap:4px; padding:10px 0; border-bottom:1px solid var(--line); }
     .access-row:last-child { border-bottom:0; }
@@ -46,7 +60,7 @@
         <h2>Scan Record</h2>
         <div class="access-panel-body">
             <div class="access-row"><span class="access-label">Decision</span><span class="access-value">{{ $scan->decision === 'DUPLICATE' ? 'Repeated scan' : \Illuminate\Support\Str::headline(strtolower((string) $scan->decision)) }}</span></div>
-            <div class="access-row"><span class="access-label">Scan Time</span><span class="access-value mono">{{ $scan->timestamp }}</span></div>
+            <div class="access-row"><span class="access-label">Scan Time</span><span class="access-value mono">{{ !empty($scan->timestamp) ? \Illuminate\Support\Carbon::parse($scan->timestamp)->timezone(config('app.timezone'))->format('d M Y, H:i:s') : '—' }}</span></div>
             <div class="access-row"><span class="access-label">Examiner</span><span class="access-value">{{ $scan->examiner_name ?? $scan->examiner_username ?? 'Not available' }}</span></div>
             <div class="access-row"><span class="access-label">Course QR Pass</span><span class="access-value">{{ match(strtoupper((string) ($scan->token_status ?? ''))) { 'UNUSED' => 'Generated / Unused', 'USED' => 'Used', 'REVOKED' => 'Unavailable', default => $scan->token_status ?? 'Not available' } }}</span></div>
             <div class="access-row"><span class="access-label">Review Status</span><span class="access-value">{{ $scan->decision === 'DUPLICATE' ? 'Repeated scan recorded' : 'Recorded' }}</span></div>
@@ -56,7 +70,7 @@
                     @if($scan->token_timetable_id ?? null)
                         <a class="btn btn-primary" href="{{ route('student.exam-access-id.course', ['timetable' => $scan->token_timetable_id]) }}">View Course QR</a>
                     @else
-                        <a class="btn btn-primary" href="{{ route('student.generate-exam-pass') }}">Generate QR Pass</a>
+                        <a class="btn btn-primary" href="{{ route('student.timetable') }}">Open My Exams</a>
                     @endif
                 </div>
             </div>

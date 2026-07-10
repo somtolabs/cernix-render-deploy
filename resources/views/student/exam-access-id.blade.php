@@ -40,13 +40,13 @@
     <div class="qr-pass-actions no-print">
         <button class="btn btn-primary" type="button" id="saveExamAccessId">Save Course QR</button>
         <a class="btn btn-ghost" href="{{ route('student.exam-pass.course', ['timetable' => $passExam->id]) }}">Print Course QR</a>
-        <a class="btn btn-ghost" href="{{ route('student.generate-exam-pass') }}">Back to Generate QR Pass</a>
+        <a class="btn btn-ghost" href="{{ route('student.timetable') }}">Back to My Exams</a>
     </div>
 @else
     <div class="cx-empty">
         <strong>QR not generated for this course.</strong><br>
         Select a course to generate or view its QR pass.
-        <div style="margin-top:12px"><a class="btn btn-primary" href="{{ route('student.generate-exam-pass') }}">Generate QR Pass</a></div>
+        <div style="margin-top:12px"><a class="btn btn-primary" href="{{ route('student.timetable') }}">Open My Exams</a></div>
     </div>
 @endif
 @endsection

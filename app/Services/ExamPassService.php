@@ -247,7 +247,7 @@ class ExamPassService
         }
 
         if (! $this->settingBoolean('require_photo_approval_before_qr', true)) {
-            if ($verificationPhotoPath !== '' && ! Storage::disk('public')->exists($verificationPhotoPath)) {
+            if ($verificationPhotoPath !== '' && ! $this->verificationPhotoExists($verificationPhotoPath)) {
                 throw new RuntimeException('Your verification photo could not be located. Please contact an administrator to resolve this before generating a pass.');
             }
             return;
@@ -255,7 +255,7 @@ class ExamPassService
 
         $photoStatus = $student->photo_status ?? 'pending_photo_upload';
         if ($photoStatus === 'approved') {
-            if ($verificationPhotoPath === '' || ! Storage::disk('public')->exists($verificationPhotoPath)) {
+            if ($verificationPhotoPath === '' || ! $this->verificationPhotoExists($verificationPhotoPath)) {
                 throw new RuntimeException('Your verification photo could not be located. Please contact an administrator to resolve this before generating a pass.');
             }
             return;
@@ -309,6 +309,13 @@ class ExamPassService
         }
 
         return $this->settingBoolean('default_exam_payment_required', true);
+    }
+
+    private function verificationPhotoExists(string $path): bool
+    {
+        // Photos may live under /public (uploaded via public_path()) or storage/app/public (Storage disk).
+        // Check both so approved students aren't blocked by a false negative from the wrong disk.
+        return file_exists(public_path($path)) || Storage::disk('public')->exists($path);
     }
 
     private function settingBoolean(string $key, bool $default): bool

@@ -15,6 +15,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 use RuntimeException;
 use Throwable;
 
@@ -37,7 +38,12 @@ class StudentDashboardController extends Controller
             return $payload;
         }
 
-        // Cosmetic profile photo — no approval needed, never used for verification
+        // Profile photo is permanent once locked. Block re-uploads unless an admin has
+        // approved a change request (which clears profile_photo_locked_at).
+        if (Schema::hasColumn('students', 'profile_photo_locked_at') && ! empty($payload['student']->profile_photo_locked_at)) {
+            return back()->withErrors(['profile_photo' => 'Your profile photo is locked. Submit a change request for admin review before uploading a new photo.']);
+        }
+
         $request->validate([
             'profile_photo' => ['required', 'image', 'mimes:jpg,jpeg,png,webp,heic,heif', 'max:4096'],
         ]);
@@ -47,6 +53,10 @@ class StudentDashboardController extends Controller
         $updates = ['updated_at' => now()];
         if (Schema::hasColumn('students', 'profile_photo_path')) {
             $updates['profile_photo_path'] = $profilePhotoPath;
+        }
+        // Re-lock the photo the moment a new one is saved.
+        if (Schema::hasColumn('students', 'profile_photo_locked_at')) {
+            $updates['profile_photo_locked_at'] = now();
         }
 
         DB::table('students')
@@ -58,10 +68,72 @@ class StudentDashboardController extends Controller
             $payload['student']->matric_no,
             'student',
             'student.profile_photo_updated',
-            ['session_id' => $payload['student']->session_id]
+            ['session_id' => $payload['student']->session_id, 'profile_photo_path' => $profilePhotoPath]
         );
 
-        return back()->with('status', 'Profile photo updated successfully.');
+        return back()->with('status', 'Profile photo updated and locked.');
+    }
+
+    public function profilePhotoChangeRequestStore(Request $request): RedirectResponse
+    {
+        $payload = $this->dashboardPayload($request);
+        if ($payload instanceof RedirectResponse) {
+            return $payload;
+        }
+
+        $allowedReasons = [
+            'Photo is blurry or low quality',
+            'Wrong photo was uploaded by mistake',
+            'My appearance has changed significantly',
+            'Photo does not clearly show my face',
+            'Technical error during upload',
+            'Other reason (explain below)',
+        ];
+
+        $data = $request->validate([
+            'reasons'          => ['required', 'array', 'min:1'],
+            'reasons.*'        => ['required', 'string', Rule::in($allowedReasons)],
+            'additional_notes' => ['nullable', 'string', 'max:1000'],
+        ]);
+
+        if (in_array('Other reason (explain below)', $data['reasons'], true) && trim((string) ($data['additional_notes'] ?? '')) === '') {
+            return back()->withErrors(['additional_notes' => 'Please explain your reason in the notes field.'])->withInput();
+        }
+
+        $matric = $payload['student']->matric_no;
+
+        // Prevent duplicate pending requests.
+        $existingPending = DB::table('profile_photo_change_requests')
+            ->where('matric_no', $matric)
+            ->where('status', 'pending')
+            ->exists();
+
+        if ($existingPending) {
+            return back()->with('status', 'You already have a pending photo change request. Please wait for admin review.');
+        }
+
+        DB::table('profile_photo_change_requests')->insert([
+            'matric_no'        => $matric,
+            'reasons'          => json_encode(array_values($data['reasons'])),
+            'additional_notes' => $data['additional_notes'] ?? null,
+            'status'           => 'pending',
+            'submitted_at'     => now(),
+            'created_at'       => now(),
+            'updated_at'       => now(),
+        ]);
+
+        app(AuditService::class)->logAction(
+            $matric,
+            'student',
+            'student.profile_photo_change_requested',
+            [
+                'session_id'       => $payload['student']->session_id,
+                'reasons'          => $data['reasons'],
+                'additional_notes' => $data['additional_notes'] ?? null,
+            ]
+        );
+
+        return back()->with('status', 'Your request has been submitted for review. You will be notified once an admin responds.');
     }
 
     public function resubmitVerification(Request $request): RedirectResponse
@@ -231,6 +303,73 @@ class StudentDashboardController extends Controller
                 ->withErrors(['rrr_number' => $message])
                 ->with('exam_pass_error', $message)
                 ->withInput($request->except('rrr_number'));
+        }
+    }
+
+    public function quickGeneratePass(Request $request, int $timetable, ExamPassService $examPassService): RedirectResponse
+    {
+        $payload = $this->dashboardPayload($request);
+        if ($payload instanceof RedirectResponse) {
+            return $payload;
+        }
+
+        $selectedExam = $payload['coursePasses']->firstWhere('id', $timetable);
+        if (! $selectedExam) {
+            return redirect()->route('student.dashboard')
+                ->with('exam_pass_error', 'That course is not assigned to your session.');
+        }
+
+        // If a usable token already exists, show it — no re-generation.
+        if (! empty($selectedExam->qr_token) && in_array($selectedExam->qr_status, ['Generated / Unused', 'Used'], true)) {
+            return redirect()->route('student.exam-access-id.course', ['timetable' => $timetable]);
+        }
+
+        $paymentRequired = $this->examRequiresPayment($selectedExam);
+        $hasVerifiedPayment = $this->paymentQuery(
+            $payload['student']->matric_no,
+            (int) $payload['student']->session_id
+        )->exists();
+
+        if ($paymentRequired && ! $hasVerifiedPayment) {
+            return redirect()->route('student.dashboard')
+                ->with('exam_pass_error', 'Payment is required before you can generate this pass. Enter your RRR on the Exam Passes page.');
+        }
+
+        $expectedAmount = DepartmentFees::amountForDepartment($payload['student']->dept_name ?? null);
+        if ($paymentRequired && $expectedAmount <= 0) {
+            return redirect()->route('student.dashboard')
+                ->with('exam_pass_error', 'A course QR pass could not be generated because your school fee is not configured.');
+        }
+
+        try {
+            $result = $examPassService->generate(
+                $payload['student']->matric_no,
+                (int) $payload['student']->session_id,
+                $timetable,
+                null,
+                $expectedAmount,
+            );
+
+            app(AuditService::class)->logAction(
+                $payload['student']->matric_no,
+                'student',
+                'exam_pass.generated',
+                [
+                    'token_id' => $result['token_id'],
+                    'session_id' => $payload['student']->session_id,
+                    'timetable_id' => $timetable,
+                    'source' => 'dashboard.quick_generate',
+                ]
+            );
+
+            return redirect()->route('student.exam-access-id.course', ['timetable' => $timetable]);
+        } catch (Throwable $exception) {
+            if (! $exception instanceof RuntimeException || $this->isTechnicalExamPassFailure($exception)) {
+                report($exception);
+            }
+
+            return redirect()->route('student.dashboard')
+                ->with('exam_pass_error', $this->safeExamPassErrorMessage($exception));
         }
     }
 
@@ -537,6 +676,14 @@ class StudentDashboardController extends Controller
 
         $allNotes = $this->studentNotes($student->matric_no);
 
+        $profilePhotoChangeRequest = null;
+        if (Schema::hasTable('profile_photo_change_requests')) {
+            $profilePhotoChangeRequest = DB::table('profile_photo_change_requests')
+                ->where('matric_no', $student->matric_no)
+                ->orderByDesc('submitted_at')
+                ->first();
+        }
+
         return [
             'student' => $student,
             'session' => $activeSession,
@@ -558,6 +705,7 @@ class StudentDashboardController extends Controller
             'notificationUnreadCount' => $allNotes->filter(fn ($n) => ! $n->student_read_at)->count(),
             'generatedAt' => now(),
             'photoUrl' => $this->photoUrl($student->photo_path ?? null),
+            'profilePhotoChangeRequest' => $profilePhotoChangeRequest,
         ];
     }
 

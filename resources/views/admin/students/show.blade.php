@@ -135,10 +135,15 @@
 {{-- ── Warning (only if flagged) ── --}}
 @if($hasWarning)
     <div class="sd-group">
-        <div class="sd-group-head"><h2>Review Required</h2>
+        <div class="sd-group-head"><h2>Admin Actions and Review</h2>
             <span class="admin-status amber">{{ $studentWarning['label'] ?? 'Flagged' }}</span>
         </div>
         <div class="sd-warn-notice">{{ $studentWarning['message'] ?? 'Warning activity detected.' }}</div>
+        @if(! empty($studentWarning['reasons']))
+            @foreach($studentWarning['reasons'] as $reason)
+                <div class="sd-kv"><span class="sd-kv-label">Reason</span><span class="sd-kv-value">{{ $reason }}</span></div>
+            @endforeach
+        @endif
         @if(! empty($studentWarning['recommendation']))
             <div class="sd-kv"><span class="sd-kv-label">Recommended action</span><span class="sd-kv-value">{{ $studentWarning['recommendation'] }}</span></div>
         @endif
@@ -148,7 +153,7 @@
 {{-- ── Identity + Payment side by side ── --}}
 <div class="sd-cols">
     <div class="sd-group" style="margin:0">
-        <div class="sd-group-head"><h2>Identity &amp; Session</h2></div>
+        <div class="sd-group-head"><h2>Identity and Session</h2></div>
         <div class="sd-kv"><span class="sd-kv-label">Full name</span><span class="sd-kv-value">{{ $student->full_name }}</span></div>
         <div class="sd-kv"><span class="sd-kv-label">Matric</span><span class="sd-kv-value mono">{{ $student->matric_no }}</span></div>
         @if(!empty($student->email))
@@ -205,7 +210,7 @@
 
 {{-- ── Assigned courses & QR access ── --}}
 <div class="sd-group">
-    <div class="sd-group-head"><h2>Assigned Courses &amp; QR Access</h2><span>{{ $courseAccess->count() }} courses</span></div>
+    <div class="sd-group-head"><h2>Assigned Courses and QR Access</h2><span>{{ $courseAccess->count() }} courses</span></div>
     @forelse($courseAccess as $exam)
         @php
             $dot = match($exam->qr_status) { 'Generated / Unused' => '', 'Used' => 'amber', 'Unavailable' => 'red', default => 'amber' };

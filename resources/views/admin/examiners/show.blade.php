@@ -141,17 +141,22 @@
         <div class="xd-stat-cell"><span>Total</span><b>{{ number_format($total) }}</b></div>
         <div class="xd-stat-cell"><span>Approved</span><b class="ok">{{ number_format($approved) }}</b></div>
         <div class="xd-stat-cell"><span>Rejected</span><b class="{{ $rejected > 0 ? 'bad' : '' }}">{{ number_format($rejected) }}</b></div>
-        <div class="xd-stat-cell"><span>Repeated</span><b class="{{ $repeated > 0 ? 'warn' : '' }}">{{ number_format($repeated) }}</b></div>
+        <div class="xd-stat-cell"><span>Repeated Scans</span><b class="{{ $repeated > 0 ? 'warn' : '' }}">{{ number_format($repeated) }}</b></div>
     </div>
 </div>
 
 {{-- ── Warning (only when flagged) ── --}}
 @if($hasWarning)
     <div class="xd-group">
-        <div class="xd-group-head"><h2>Review Required</h2>
+        <div class="xd-group-head"><h2>Review Status</h2>
             <span class="admin-status red">{{ $examinerWarning['label'] ?? 'Flagged' }}</span>
         </div>
         <div class="xd-warn-notice">{{ $examinerWarning['message'] }}</div>
+        @if(! empty($examinerWarning['reasons']))
+            @foreach($examinerWarning['reasons'] as $reason)
+                <div class="xd-kv"><span class="xd-kv-label">Reason</span><span class="xd-kv-value">{{ $reason }}</span></div>
+            @endforeach
+        @endif
         <div class="xd-kv"><span class="xd-kv-label">Students affected</span><span class="xd-kv-value">{{ $examinerWarning['students_affected'] ?? 0 }}</span></div>
         <div class="xd-kv"><span class="xd-kv-label">Last activity</span><span class="xd-kv-value">{{ ! empty($examinerWarning['last_activity']) ? \Carbon\Carbon::parse($examinerWarning['last_activity'])->format('M j, Y g:i A') : 'Not recorded' }}</span></div>
         <div class="xd-kv"><span class="xd-kv-label">Recommended</span><span class="xd-kv-value">{{ $examinerWarning['recommendation'] }}</span></div>

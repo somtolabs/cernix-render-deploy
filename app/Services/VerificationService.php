@@ -474,7 +474,11 @@ class VerificationService
             'matric_no' => $student->matric_no,
             'department_id' => $student->department_id,
             'department' => $student->department_name ?? 'Department unavailable',
+            // photo_path is retained in the API contract for backward compatibility.
+            // The examiner UI must render profile_photo_path only — never photo_path —
+            // per the "profile photo, not verification selfie" rule.
             'photo_path' => $student->photo_path,
+            'profile_photo_path' => $student->profile_photo_path ?? null,
         ];
     }
 

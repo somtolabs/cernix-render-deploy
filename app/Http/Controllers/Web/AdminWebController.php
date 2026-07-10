@@ -348,6 +348,135 @@ class AdminWebController extends Controller
         return $this->reviewPhoto($request, 'flagged', 'student_profile.flagged', 'Profile flagged for manual review.', $request->input('reason'));
     }
 
+    public function profilePhotoChangeRequests(Request $request)
+    {
+        if ($response = $this->guardAdmin($request)) {
+            return $response;
+        }
+
+        $status = $request->input('status', 'pending');
+        $allowedStatuses = ['pending', 'approved', 'rejected'];
+        if (! in_array($status, $allowedStatuses, true)) {
+            $status = 'pending';
+        }
+
+        $ready = Schema::hasTable('profile_photo_change_requests');
+
+        $requests = collect();
+        $counts   = collect();
+
+        if ($ready) {
+            $requests = DB::table('profile_photo_change_requests')
+                ->leftJoin('students', 'profile_photo_change_requests.matric_no', '=', 'students.matric_no')
+                ->leftJoin('departments', 'students.department_id', '=', 'departments.dept_id')
+                ->where('profile_photo_change_requests.status', $status)
+                ->when($request->filled('q'), function ($query) use ($request) {
+                    $q = '%' . $request->input('q') . '%';
+                    $query->where(fn ($inner) => $inner
+                        ->where('students.full_name', 'like', $q)
+                        ->orWhere('profile_photo_change_requests.matric_no', 'like', $q));
+                })
+                ->select(
+                    'profile_photo_change_requests.*',
+                    'students.full_name',
+                    'students.profile_photo_path',
+                    'students.session_id',
+                    'departments.dept_name',
+                    'departments.faculty'
+                )
+                ->orderByDesc('profile_photo_change_requests.submitted_at')
+                ->paginate(20)
+                ->withQueryString();
+
+            $counts = DB::table('profile_photo_change_requests')
+                ->select('status', DB::raw('COUNT(*) as total'))
+                ->groupBy('status')
+                ->pluck('total', 'status');
+        }
+
+        return view('admin.profile-photo-change-requests.index', [
+            'requests'        => $requests,
+            'counts'          => $counts,
+            'status'          => $status,
+            'allowedStatuses' => $allowedStatuses,
+            'ready'           => $ready,
+        ]);
+    }
+
+    public function profilePhotoChangeRequestApprove(Request $request): RedirectResponse
+    {
+        return $this->reviewProfilePhotoChangeRequest($request, 'approved');
+    }
+
+    public function profilePhotoChangeRequestReject(Request $request): RedirectResponse
+    {
+        return $this->reviewProfilePhotoChangeRequest($request, 'rejected');
+    }
+
+    private function reviewProfilePhotoChangeRequest(Request $request, string $decision): RedirectResponse
+    {
+        if ($response = $this->guardAdmin($request)) {
+            return $response;
+        }
+
+        $rules = [
+            'request_id'     => ['required', 'integer'],
+            'admin_response' => ['nullable', 'string', 'max:1000'],
+        ];
+        if ($decision === 'rejected') {
+            $rules['admin_response'] = ['required', 'string', 'max:1000'];
+        }
+        $data = $request->validate($rules);
+
+        $changeRequest = DB::table('profile_photo_change_requests')->where('id', $data['request_id'])->first();
+        abort_unless($changeRequest, 404);
+
+        if ($changeRequest->status !== 'pending') {
+            return back()->withErrors(['request' => 'This request has already been reviewed.']);
+        }
+
+        $reviewer = (string) $request->session()->get('examiner_username')
+            ?: (string) $request->session()->get('examiner_id', 'admin-web');
+
+        DB::transaction(function () use ($changeRequest, $decision, $data, $reviewer) {
+            DB::table('profile_photo_change_requests')->where('id', $changeRequest->id)->update([
+                'status'         => $decision,
+                'reviewed_at'    => now(),
+                'reviewed_by'    => $reviewer,
+                'admin_response' => $data['admin_response'] ?? null,
+                'updated_at'     => now(),
+            ]);
+
+            if ($decision === 'approved' && Schema::hasColumn('students', 'profile_photo_locked_at')) {
+                DB::table('students')
+                    ->where('matric_no', $changeRequest->matric_no)
+                    ->update([
+                        'profile_photo_locked_at' => null,
+                        'updated_at'              => now(),
+                    ]);
+            }
+        });
+
+        app(AuditService::class)->logAction(
+            (string) $request->session()->get('examiner_id', 'admin-web'),
+            'admin',
+            $decision === 'approved' ? 'admin.profile_photo_change_approved' : 'admin.profile_photo_change_rejected',
+            [
+                'actor_role'     => $request->session()->get('examiner_role'),
+                'actor_username' => $request->session()->get('examiner_username'),
+                'request_id'     => $changeRequest->id,
+                'matric_no'      => $changeRequest->matric_no,
+                'admin_response' => $data['admin_response'] ?? null,
+            ],
+            'student',
+            $changeRequest->matric_no
+        );
+
+        return back()->with('status', $decision === 'approved'
+            ? 'Change request approved. The student can now upload a new profile photo.'
+            : 'Change request rejected. The student has been notified.');
+    }
+
     public function serveIdCard(Request $request, string $matric)
     {
         if ($response = $this->guardAdmin($request)) {

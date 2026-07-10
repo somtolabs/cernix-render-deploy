@@ -121,21 +121,25 @@
     .te-progress-bar { height: 4px; background: var(--line); border-radius: 999px; overflow: hidden; margin: 0; }
     .te-progress-fill { height: 100%; background: var(--emerald); border-radius: 999px; transition: width .4s ease; }
 
-    /* Attendance rows */
-    .att-list { padding: 0 20px; }
+    /* Attendance rows — Apple-style standalone cards */
+    .att-list { padding: 12px 20px 20px; display: grid; gap: 10px; }
     .att-row {
         display: flex;
         align-items: center;
         justify-content: space-between;
         gap: 12px;
-        padding: 11px 0;
-        border-bottom: 1px solid var(--line);
+        padding: 14px 16px;
+        background: #fff;
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        box-shadow: 0 1px 2px rgba(14,18,38,.03), 0 6px 16px -12px rgba(14,18,38,.10);
         flex-wrap: wrap;
+        transition: box-shadow .18s ease;
     }
-    .att-row:last-child { border-bottom: none; }
-    .att-identity { display: flex; align-items: center; gap: 10px; min-width: 0; flex: 1 1 180px; }
+    .att-row:hover { box-shadow: 0 1px 2px rgba(14,18,38,.04), 0 10px 22px -12px rgba(14,18,38,.14); }
+    .att-identity { display: flex; align-items: center; gap: 12px; min-width: 0; flex: 1 1 180px; }
     .att-avatar {
-        width: 38px; height: 38px; border-radius: 8px; flex-shrink: 0;
+        width: 42px; height: 42px; border-radius: 12px; flex-shrink: 0;
         background: var(--navy); color: #fff;
         display: grid; place-items: center;
         font-size: 13px; font-weight: 900; letter-spacing: -.01em;
@@ -333,6 +337,12 @@
                                 data-ttid="{{ $exam->id }}"
                                 data-course="{{ $exam->course_code }}">Start Session</button>
                     @endif
+                    @php $scanCount = (int) (($scanCountsByTimetable ?? collect())->get($exam->id, 0)); @endphp
+                    @if($scanCount > 0)
+                        <a class="ex-action secondary" href="{{ route('examiner.assessments.export', ['timetableId' => $exam->id]) }}">Export Report</a>
+                    @else
+                        <span style="font-size:11px;color:var(--ink-4);font-weight:700">No records yet</span>
+                    @endif
                     <span class="ex-badge {{ $isActive ? 'active' : '' }}">{{ ucfirst($exam->status ?? 'scheduled') }}</span>
                 </div>
             </div>
@@ -389,14 +399,19 @@
                             $checkedInAt = $att->checked_in_at ?? null;
                             $isLate      = false;
                             if ($checkedInAt && !empty($exam->start_time)) {
-                                $graceCutoff = \Carbon\Carbon::parse(today()->toDateString() . ' ' . $exam->start_time)->addMinutes(15);
-                                $isLate = \Carbon\Carbon::parse($checkedInAt)->gt($graceCutoff);
+                                try {
+                                    $graceCutoff = \Carbon\Carbon::parse(today()->toDateString() . ' ' . $exam->start_time)->addMinutes(15);
+                                    $isLate = \Carbon\Carbon::parse($checkedInAt)->gt($graceCutoff);
+                                } catch (\Throwable $e) {
+                                    $isLate = false;
+                                }
                             }
                         @endphp
                         @php
                             $attInitials = implode('', array_map(fn($p) => strtoupper(substr($p, 0, 1)), array_filter(explode(' ', $att->full_name ?? ''))));
                             $attInitials = substr($attInitials ?: 'ST', 0, 2);
-                            $attPhotoPath = $att->photo_path ?? null;
+                            // Profile photo only — never the verification selfie.
+                            $attPhotoPath = $att->profile_photo_path ?? null;
                             $attPhotoUrl  = $attPhotoPath ? '/photo-thumb/' . ltrim($attPhotoPath, '/') : null;
                         @endphp
                         <div class="att-row"

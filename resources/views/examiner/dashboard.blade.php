@@ -332,12 +332,14 @@
                     </div>
                     <div style="font-size:11px;color:var(--ink-3)">{{ $timeStr }} &middot; {{ $exam->venue }}</div>
                 </div>
+                @php $scanCount = (int) (($scanCountsByTimetable ?? collect())->get($exam->id, 0)); @endphp
+                @if($scanCount > 0)
+                    <a class="ex-action secondary" href="{{ route('examiner.assessments.export', ['timetableId' => $exam->id]) }}" style="flex-shrink:0;font-size:11px;min-height:32px;padding:0 10px">Export Report</a>
+                @endif
                 @if(!$isActive)
                     <a class="ex-action" href="{{ route('examiner.today-exams') }}" style="flex-shrink:0;font-size:12px;min-height:34px;padding:0 12px">Manage</a>
                 @else
-                    @if(!$request ?? true)
-                        <span style="flex-shrink:0;font-size:11px;font-weight:800;color:var(--emerald)">Scanning</span>
-                    @endif
+                    <span style="flex-shrink:0;font-size:11px;font-weight:800;color:var(--emerald)">Scanning</span>
                 @endif
             </div>
         @endforeach
@@ -348,6 +350,66 @@
     <p style="margin:0;font-size:13px;color:var(--ink-3)">No assessments scheduled for today. <a href="{{ route('examiner.today-exams') }}" style="color:var(--navy);font-weight:700">Check schedule</a></p>
 </section>
 @endif
+
+{{-- All Assigned Assessments (any date) --}}
+@php
+    $todayIds = ($todaysExams ?? collect())->pluck('id')->all();
+    $upcomingAssigned = ($assignedAssessments ?? collect())
+        ->reject(fn($ex) => in_array((int) $ex->id, array_map('intval', $todayIds), true));
+@endphp
+<section style="margin-top:20px">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px">
+        <h2 style="margin:0;font-size:15px;font-weight:900;color:var(--ink)">Your Assigned Assessments</h2>
+        <span style="font-size:11px;color:var(--ink-4);font-weight:700">{{ ($assignedAssessments ?? collect())->count() }} assigned</span>
+    </div>
+    @if($upcomingAssigned->isEmpty() && ($assignedAssessments ?? collect())->isEmpty())
+        <div style="padding:14px;border:1px solid var(--line);border-radius:12px;background:var(--bg-2)">
+            <p style="margin:0;font-size:13px;color:var(--ink-3);line-height:1.5">No assessments have been assigned to you yet. Assessments will appear here once an admin assigns you as invigilator on the timetable.</p>
+        </div>
+    @elseif($upcomingAssigned->isEmpty())
+        <div style="padding:12px 14px;border:1px solid var(--line);border-radius:12px;background:var(--bg-2)">
+            <p style="margin:0;font-size:12px;color:var(--ink-3)">All your assigned assessments are shown in Today's Assessments above.</p>
+        </div>
+    @else
+        <div style="display:grid;gap:9px">
+            @foreach($upcomingAssigned as $exam)
+                @php
+                    $typeLabel = match($exam->assessment_type ?? 'exam') {
+                        'test'   => 'Test',
+                        'makeup' => 'Make-up',
+                        default  => 'Exam',
+                    };
+                    $typeColour = match($exam->assessment_type ?? 'exam') {
+                        'test'   => 'color:var(--emerald);background:rgba(5,150,105,.1)',
+                        'makeup' => 'color:var(--amber);background:rgba(180,83,9,.1)',
+                        default  => 'color:var(--navy);background:rgba(15,32,80,.08)',
+                    };
+                    $timeStr = substr((string)($exam->start_time ?? ''), 0, 5)
+                        . (!empty($exam->end_time) ? ' – ' . substr((string) $exam->end_time, 0, 5) : '');
+                    $dateStr = !empty($exam->exam_date)
+                        ? \Illuminate\Support\Carbon::parse($exam->exam_date)->format('D, d M Y')
+                        : 'Date not set';
+                    $studentCount = (int) ($exam->student_count ?? 0);
+                @endphp
+                <div style="display:flex;align-items:center;gap:12px;padding:12px 14px;border:1px solid var(--line);border-radius:12px;background:#fff">
+                    <div style="flex:1;min-width:0">
+                        <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:4px">
+                            <strong style="font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:900;color:var(--navy)">{{ $exam->course_code ?? '—' }}</strong>
+                            <span style="padding:2px 7px;border-radius:6px;font-size:9px;font-weight:900;letter-spacing:.06em;text-transform:uppercase;{{ $typeColour }}">{{ $typeLabel }}</span>
+                        </div>
+                        <div style="font-size:12px;color:var(--ink-2);font-weight:700;margin-bottom:3px;line-height:1.35">{{ $exam->course_title ?? 'Course title not set' }}</div>
+                        <div style="font-size:11px;color:var(--ink-3);line-height:1.45">
+                            {{ $dateStr }}
+                            @if($timeStr) &middot; {{ $timeStr }}@endif
+                            @if(!empty($exam->venue)) &middot; {{ $exam->venue }}@endif
+                            @if($studentCount > 0) &middot; {{ $studentCount }} student{{ $studentCount !== 1 ? 's' : '' }}@endif
+                        </div>
+                    </div>
+                </div>
+            @endforeach
+        </div>
+    @endif
+</section>
 @endsection
 
 @push('scripts')
@@ -796,7 +858,9 @@
         const displayName = student.full_name || 'Student unavailable';
         const photo = document.getElementById('verifyPhoto');
         document.getElementById('verifyInitials').textContent = initialsFromName(displayName);
-        const src = photoUrl(student.photo_path);
+        // Show the student's profile photo — never the verification selfie.
+        // Fall back to the initials placeholder if no profile photo is on file.
+        const src = photoUrl(student.profile_photo_path);
         if (src) {
             photo.hidden = false;
             photo.src = src;

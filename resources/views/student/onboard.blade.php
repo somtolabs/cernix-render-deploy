@@ -107,6 +107,7 @@
             <div class="sr-stepper" role="tablist" aria-label="Registration steps">
                 <div class="sr-step active" id="step-tab-1">Step 1 — Identity &amp; Password</div>
                 <div class="sr-step" id="step-tab-2">Step 2 — Verification</div>
+                <div class="sr-step" id="step-tab-3">Step 3 — Profile Photo</div>
             </div>
 
             <div id="sr-global-error" class="sr-error" role="alert"></div>
@@ -215,6 +216,38 @@
 
                 <div style="display:grid;grid-template-columns:auto 1fr;gap:10px">
                     <button class="sr-ghost-btn" id="step2-back-btn" type="button" style="padding:0 18px">← Back</button>
+                    <button class="btn btn-primary sr-submit" id="step2-next-btn" type="button">Continue to Profile Photo →</button>
+                </div>
+            </div>
+
+            {{-- Step 3: profile photo (file upload, permanent, circular preview) --}}
+            <div id="step-3" class="sr-step-panel">
+                <p style="margin:0;font-size:13px;color:var(--ink-3);line-height:1.5">
+                    Upload a clear photo of your face or a passport photograph. This will be used on your profile and exam pass, and cannot be changed later without admin approval.
+                </p>
+
+                <div class="sr-field">
+                    <label>Profile Photo</label>
+
+                    {{-- File input styled like Step 1 (ID card upload panel) --}}
+                    <input id="profile_photo_file" type="file" class="input" accept="image/jpeg,image/png,image/webp,image/heic,image/heif,.jpg,.jpeg,.png,.webp,.heic,.heif" style="padding:10px 14px;min-height:48px;">
+                    <div class="sr-hint">Accepted: JPG, PNG, WebP, HEIC. Max 4 MB. This photo is permanent once you complete registration.</div>
+
+                    {{-- Circular preview (reuses .cernix-passport-photo from student-photo component) --}}
+                    <div id="profile-preview-wrap" style="display:none;margin-top:14px;text-align:center">
+                        <span class="cernix-passport-photo cernix-passport-photo--profile" style="width:160px;height:160px;font-size:0">
+                            <img id="profile-preview-img" src="" alt="Profile photo preview">
+                        </span>
+                        <div style="margin-top:10px">
+                            <button type="button" class="sr-ghost-btn" id="profile-change-btn" style="padding:0 18px;min-height:38px;font-size:13px">Change Photo</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="step3-error" class="sr-error" role="alert"></div>
+
+                <div style="display:grid;grid-template-columns:auto 1fr;gap:10px">
+                    <button class="sr-ghost-btn" id="step3-back-btn" type="button" style="padding:0 18px">← Back</button>
                     <button class="btn btn-primary sr-submit" id="submit-btn" type="button">Create Account</button>
                 </div>
             </div>
@@ -228,18 +261,21 @@
 (function () {
     const MATRIC   = @json($matric);
     const CSRF     = document.querySelector('meta[name="csrf-token"]').content;
-    let selfieBlob  = null;
-    let idCardBlob  = null;
-    let idCardFile  = null;
-    let cameraStream    = null;
-    let idCameraStream  = null;
+    let selfieBlob   = null;
+    let idCardBlob   = null;
+    let idCardFile   = null;
+    let profileFile   = null;
+    let cameraStream        = null;
+    let idCameraStream      = null;
     let idCaptureMode   = 'camera'; // 'camera' | 'upload'
 
     // Step navigation
     const step1Panel  = document.getElementById('step-1');
     const step2Panel  = document.getElementById('step-2');
+    const step3Panel  = document.getElementById('step-3');
     const stepTab1    = document.getElementById('step-tab-1');
     const stepTab2    = document.getElementById('step-tab-2');
+    const stepTab3    = document.getElementById('step-tab-3');
     const globalError = document.getElementById('sr-global-error');
 
     function showError(el, msg) {
@@ -274,6 +310,39 @@
         stepTab2.classList.remove('active');
         stepTab1.classList.remove('done');
         stepTab1.classList.add('active');
+    });
+
+    // Step 2 → Step 3
+    document.getElementById('step2-next-btn').addEventListener('click', function () {
+        const errEl = document.getElementById('step2-error');
+        clearError(errEl);
+
+        // Resolve ID card from either camera or upload
+        if (idCaptureMode === 'camera') {
+            if (!idCardBlob) { showError(errEl, 'Please take a photo of your school ID card using the camera.'); return; }
+        } else {
+            const uploadInput = document.getElementById('id_card_file');
+            if (!uploadInput.files[0]) { showError(errEl, 'Please upload a photo of your school ID card.'); return; }
+        }
+
+        if (!selfieBlob) { showError(errEl, 'Please take a selfie using the camera before continuing.'); return; }
+
+        stopSelfieCamera();
+        stopIdCamera();
+        step2Panel.classList.remove('active');
+        step3Panel.classList.add('active');
+        stepTab2.classList.remove('active');
+        stepTab2.classList.add('done');
+        stepTab3.classList.add('active');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    });
+
+    document.getElementById('step3-back-btn').addEventListener('click', function () {
+        step3Panel.classList.remove('active');
+        step2Panel.classList.add('active');
+        stepTab3.classList.remove('active');
+        stepTab2.classList.remove('done');
+        stepTab2.classList.add('active');
     });
 
     // ── ID Card tab switching ──────────────────────────────────
@@ -463,35 +532,65 @@
         }
     });
 
+    // ── Profile photo file upload (Step 3) ─────────────────────
+    const profileInput       = document.getElementById('profile_photo_file');
+    const profilePreviewWrap = document.getElementById('profile-preview-wrap');
+    const profilePreviewImg  = document.getElementById('profile-preview-img');
+    const profileChangeBtn   = document.getElementById('profile-change-btn');
+    const finalSubmitBtn     = document.getElementById('submit-btn');
+
+    function setProfileFile(file) {
+        clearError(document.getElementById('step3-error'));
+        profileFile = file || null;
+        if (profileFile) {
+            profilePreviewImg.src = URL.createObjectURL(profileFile);
+            profilePreviewWrap.style.display = '';
+            profileInput.style.display = 'none';
+        } else {
+            profilePreviewImg.removeAttribute('src');
+            profilePreviewWrap.style.display = 'none';
+            profileInput.style.display = '';
+            profileInput.value = '';
+        }
+    }
+
+    profileInput.addEventListener('change', function () {
+        const file = this.files && this.files[0];
+        if (!file) { setProfileFile(null); return; }
+        if (file.size > 4 * 1024 * 1024) {
+            showError(document.getElementById('step3-error'), 'File is too large. Maximum size is 4 MB.');
+            setProfileFile(null);
+            return;
+        }
+        setProfileFile(file);
+    });
+
+    profileChangeBtn.addEventListener('click', function () {
+        setProfileFile(null);
+    });
+
     // ── Final submit ───────────────────────────────────────────
     document.getElementById('submit-btn').addEventListener('click', async function () {
-        clearError(document.getElementById('step2-error'));
-        const errEl = document.getElementById('step2-error');
+        const errEl = document.getElementById('step3-error');
+        clearError(errEl);
 
-        // Resolve ID card from either camera or upload
+        // Resolve ID card from either camera or upload (validated at step 2 → step 3 transition,
+        // but re-check here as a safety net).
         let idPayload = null;
         let idFilename = 'id_card.jpg';
 
         if (idCaptureMode === 'camera') {
-            if (!idCardBlob) {
-                showError(errEl, 'Please take a photo of your school ID card using the camera.');
-                return;
-            }
-            idPayload  = idCardBlob;
+            if (!idCardBlob) { showError(errEl, 'ID card is missing. Go back to Step 2.'); return; }
+            idPayload = idCardBlob;
         } else {
             const uploadInput = document.getElementById('id_card_file');
-            if (!uploadInput.files[0]) {
-                showError(errEl, 'Please upload a photo of your school ID card.');
-                return;
-            }
+            if (!uploadInput.files[0]) { showError(errEl, 'ID card is missing. Go back to Step 2.'); return; }
             idPayload  = uploadInput.files[0];
             idFilename = uploadInput.files[0].name;
         }
 
-        if (!selfieBlob) {
-            showError(errEl, 'Please take a selfie using the camera before submitting.');
-            return;
-        }
+        if (!selfieBlob) { showError(errEl, 'Verification selfie is missing. Go back to Step 2.'); return; }
+        if (!profileFile) { showError(errEl, 'Please upload your profile photo before submitting.'); return; }
 
         const submitBtn = this;
         submitBtn.disabled    = true;
@@ -502,8 +601,9 @@
         fd.append('matric_no',            MATRIC);
         fd.append('password',             document.getElementById('password').value);
         fd.append('password_confirmation', document.getElementById('password_confirmation').value);
-        fd.append('id_card',  idPayload, idFilename);
-        fd.append('selfie',   selfieBlob, 'selfie.jpg');
+        fd.append('id_card',       idPayload, idFilename);
+        fd.append('selfie',        selfieBlob, 'selfie.jpg');
+        fd.append('profile_photo', profileFile, profileFile.name);
 
         try {
             const res  = await fetch('{{ route('student.onboard.store') }}', {

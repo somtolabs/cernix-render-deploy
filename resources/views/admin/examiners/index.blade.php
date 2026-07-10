@@ -157,7 +157,7 @@
                     @if($warning)<span class="admin-status amber">Needs Review</span>@endif
                     @if(($examiner->approved_scans ?? 0) > 0)<span class="ei-chip ok">{{ $examiner->approved_scans }} approved</span>@endif
                     @if(($examiner->rejected_scans ?? 0) > 0)<span class="ei-chip bad">{{ $examiner->rejected_scans }} rejected</span>@endif
-                    @if(($examiner->duplicate_scans ?? 0) > 0)<span class="ei-chip dup">{{ $examiner->duplicate_scans }} repeated</span>@endif
+                    @if(($examiner->duplicate_scans ?? 0) > 0)<span class="ei-chip dup">{{ $examiner->duplicate_scans }} Repeated</span>@endif
                 </div>
                 @php $lastActive = $examiner->last_active_at ?? $examiner->last_scan_at ?? null; @endphp
                 @if($lastActive)
