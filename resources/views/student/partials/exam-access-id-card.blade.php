@@ -148,7 +148,7 @@
     .qp-scan-hint { margin: 12px 0 0; font-size: 11.5px; color: var(--ink-3); letter-spacing: 0.02em; }
 
     /* Block 4: Exam info */
-    .qp-block-exam { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 20px; }
+    .qp-block-exam .qp-exam-section { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 20px; }
     .qp-detail-label { display: block; font-size: 9.5px; font-weight: 900; color: var(--ink-4); letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 3px; }
     .qp-detail-value { display: block; font-size: 12.5px; font-weight: 700; color: var(--ink); line-height: 1.4; overflow-wrap: break-word; }
     .qp-exam-status { grid-column: 1 / -1; display: flex; gap: 6px; flex-wrap: wrap; padding-top: 4px; border-top: 1px dashed var(--line); margin-top: 4px; }
@@ -174,7 +174,7 @@
         .qp-qr-box { width: 220px; height: 220px; }
         .qp-course-code { font-size: 20px; }
         .qp-id-name { font-size: 16px; }
-        .qp-block-exam { grid-template-columns: 1fr; gap: 12px; }
+        .qp-block-exam .qp-exam-section { grid-template-columns: 1fr; gap: 12px; }
     }
 </style>
 
@@ -208,8 +208,9 @@
                 <h3 class="qp-id-name">{{ $student->full_name }}</h3>
                 <span class="qp-id-matric">{{ $student->matric_no }}</span>
                 <span class="qp-id-meta">
-                    {{ $student->dept_name ?? 'Department N/A' }}@if($student->level) &middot; Level {{ $student->level }} @endif
+                    {{ $student->dept_name ?? 'Department N/A' }}@if(!empty($student->faculty)) &middot; {{ $student->faculty }}@endif @if($student->level) &middot; {{ $student->level }} Level @endif
                 </span>
+                <span class="chip emerald" style="margin-top:6px;display:inline-flex;align-items:center;gap:4px;font-size:10px;font-weight:800;letter-spacing:.04em">CERNIX Verified</span>
             </div>
         </section>
 
@@ -221,19 +222,22 @@
         </section>
 
         {{-- Block 3 — QR code (visual anchor) --}}
-        <section class="qp-block qp-block-qr qr-pass-code" aria-label="Exam QR code">
-            <div class="qp-qr-box">
-                @if($qrSvg)
-                    {!! $qrSvg !!}
-                @else
-                    <div class="qp-qr-missing">QR unavailable</div>
-                @endif
+        <section class="qp-block qp-block-qr" aria-label="Exam QR code">
+            <div class="qp-qr-section qr-pass-code" style="display:grid;place-items:center;width:100%">
+                <div class="qp-qr-box">
+                    @if($qrSvg)
+                        {!! $qrSvg !!}
+                    @else
+                        <div class="qp-qr-missing">QR unavailable</div>
+                    @endif
+                </div>
+                <p class="qp-scan-hint">Present at examination gate</p>
             </div>
-            <p class="qp-scan-hint">Present at examination gate</p>
         </section>
 
         {{-- Block 4 — Exam info --}}
-        <section class="qp-block qp-block-exam qr-pass-exam" aria-label="Examination details">
+        <section class="qp-block qp-block-exam" aria-label="Examination details">
+        <div class="qp-exam-section qr-pass-exam">
             <div>
                 <span class="qp-detail-label">Date</span>
                 <span class="qp-detail-value">{{ $examDate }}</span>
@@ -258,6 +262,7 @@
                 <span class="qp-detail-label">Status</span>
                 <span class="qp-detail-value">{{ $statusLabel }}</span>
             </div>
+        </div>
         </section>
 
     </div>

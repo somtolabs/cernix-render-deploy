@@ -17,6 +17,24 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Uploaded Media Key Prefixes
+    |--------------------------------------------------------------------------
+    |
+    | Student media lives in one private bucket under two key prefixes. These
+    | are applied by MediaService when it generates a storage key, rather than
+    | via each disk's "root" option: Laravel builds signed URLs with a prefixer
+    | that uses DIRECTORY_SEPARATOR, so a disk root would sign a backslashed
+    | key on Windows and 404 against the bucket.
+    |
+    */
+
+    'media' => [
+        'private_prefix' => trim(env('AWS_PRIVATE_PREFIX', 'private'), '/'),
+        'public_prefix' => trim(env('AWS_PUBLIC_PREFIX', 'public'), '/'),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Filesystem Disks
     |--------------------------------------------------------------------------
     |
@@ -47,6 +65,8 @@ return [
             'report' => false,
         ],
 
+        // Profile photos. Same bucket as s3_private, separate key prefix.
+        // The bucket itself stays private; access is via signed URLs only.
         's3' => [
             'driver' => 's3',
             'key' => env('AWS_ACCESS_KEY_ID'),
@@ -56,7 +76,22 @@ return [
             'url' => env('AWS_URL'),
             'endpoint' => env('AWS_ENDPOINT'),
             'use_path_style_endpoint' => env('AWS_USE_PATH_STYLE_ENDPOINT', false),
-            'throw' => false,
+            'visibility' => 'private',
+            'throw' => true,
+            'report' => false,
+        ],
+
+        // Verification selfies and ID cards. Never served by a permanent URL.
+        's3_private' => [
+            'driver' => 's3',
+            'key' => env('AWS_ACCESS_KEY_ID'),
+            'secret' => env('AWS_SECRET_ACCESS_KEY'),
+            'region' => env('AWS_DEFAULT_REGION'),
+            'bucket' => env('AWS_BUCKET'),
+            'endpoint' => env('AWS_ENDPOINT'),
+            'use_path_style_endpoint' => env('AWS_USE_PATH_STYLE_ENDPOINT', false),
+            'visibility' => 'private',
+            'throw' => true,
             'report' => false,
         ],
 

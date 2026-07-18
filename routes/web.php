@@ -5,6 +5,7 @@ use App\Http\Controllers\Web\AdminWebController;
 use App\Http\Controllers\Web\ExaminerWebController;
 use App\Http\Controllers\Web\StudentDashboardController;
 use App\Http\Controllers\Web\StudentWebController;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', fn () => view('welcome'));
@@ -114,6 +115,7 @@ Route::get('/admin/exam-sessions', [AdminWebController::class, 'examSessions'])-
 Route::get('/admin/attendance',   [AdminWebController::class, 'attendance'])->name('admin.attendance');
 Route::get('/admin/activity', [AdminWebController::class, 'activity'])->name('admin.activity');
 Route::get('/admin/settings', [AdminWebController::class, 'settings'])->name('admin.settings');
+Route::get('/admin/diagnostics/persistence', [AdminWebController::class, 'persistenceDiagnostics'])->name('admin.diagnostics.persistence');
 Route::patch('/admin/settings/fees', [AdminWebController::class, 'settingsFeesUpdate'])->name('admin.settings.fees.update');
 Route::patch('/admin/settings/live-phase', [AdminWebController::class, 'settingsLivePhaseUpdate'])->name('admin.settings.live-phase.update');
 Route::patch('/admin/settings/demo-mode', [AdminWebController::class, 'settingsDemoUpdate'])->name('admin.settings.demo.update');
@@ -138,44 +140,41 @@ Route::get('/admin/session-audits', [AdminWebController::class, 'sessionAudits']
 Route::get('/admin/session-audits/{id}', [AdminWebController::class, 'sessionAuditShow'])->name('admin.session-audits.show');
 Route::get('/admin/live-sessions', [AdminWebController::class, 'liveSessions'])->name('admin.live-sessions');
 
-// Passport photo thumbnails — resize + disk cache (GD)
+// Passport photo thumbnails — resize + in-memory cache (GD).
+//
+// Media lives in object storage, so the source is fetched by storage key via
+// MediaService. Nothing is read from or written to local disk: the Render
+// container filesystem is ephemeral and would lose the cache on restart.
 Route::get('/photo-thumb/{path}', function (string $path) {
     $path = ltrim(str_replace('\\', '/', $path), '/');
 
-    if (str_contains($path, '..') || preg_match('/^https?:/i', $path) || ! preg_match('/^[\w\-\/]+\.(jpe?g|png|webp|gif)$/i', $path)) {
+    if (str_contains($path, '..') || preg_match('/^https?:/i', $path) || ! preg_match('/^[\w\-\/]+\.(jpe?g|png|webp|gif|heic|heif)$/i', $path)) {
         abort(404);
     }
 
-    if (! str_contains($path, '/')) {
-        $path = 'photos/' . $path;
-    }
+    $media = app(App\Services\MediaService::class)->findByStorageKey($path);
 
-    if (! str_starts_with($path, 'photos/') && ! str_starts_with($path, 'demo-passports/')) {
+    if (! $media) {
         abort(404);
     }
 
-    $srcPath = public_path($path);
-    if (! file_exists($srcPath)) {
+    // A verification selfie or ID card must never be reachable here: this route
+    // is unauthenticated and its URL is embedded in pages. Those are admin-only
+    // and are served by short-lived signed URLs instead.
+    if ($media->purpose !== App\Models\Media::PURPOSE_PROFILE_PHOTO) {
         abort(404);
     }
 
-    $thumbDir  = storage_path('app/thumbs');
-    $thumbPath = $thumbDir . '/' . md5('passport-v2-' . $path) . '-' . basename($path);
+    $cacheKey = 'photo-thumb:' . md5('passport-v3-' . $path);
 
-    if (! is_dir($thumbDir)) {
-        mkdir($thumbDir, 0755, true);
-    }
-
-    // Serve disk-cached thumb if source is unchanged
-    if (file_exists($thumbPath) && filemtime($thumbPath) >= filemtime($srcPath)) {
-        return response()->file($thumbPath, [
+    if ($cached = Cache::get($cacheKey)) {
+        return response($cached, 200, [
             'Content-Type'  => 'image/jpeg',
-            'Cache-Control' => 'public, max-age=86400',
+            'Cache-Control' => 'private, max-age=86400',
         ]);
     }
 
-    // Crop to a consistent passport-style 3:4 frame.
-    $raw = @file_get_contents($srcPath);
+    $raw = app(App\Services\MediaService::class)->contents($media);
     $src = $raw ? @imagecreatefromstring($raw) : false;
     if (! $src) {
         abort(404);
@@ -206,11 +205,11 @@ Route::get('/photo-thumb/{path}', function (string $path) {
     imagedestroy($dst);
     $jpeg = ob_get_clean();
 
-    file_put_contents($thumbPath, $jpeg);
+    Cache::put($cacheKey, $jpeg, now()->addDay());
 
     return response($jpeg, 200, [
         'Content-Type'  => 'image/jpeg',
-        'Cache-Control' => 'public, max-age=86400',
+        'Cache-Control' => 'private, max-age=86400',
     ]);
 })->where('path', '.*');
 

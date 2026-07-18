@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Web;
 
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Web\Concerns\StoresStudentMedia;
 use App\Services\AuditService;
 use App\Services\RegistrationService;
 use App\Support\MatricNumber;
@@ -18,6 +19,8 @@ use Illuminate\Support\Str;
 
 class StudentWebController extends Controller
 {
+    use StoresStudentMedia;
+
     public function __construct(
         private readonly RegistrationService $registrationService,
     ) {}
@@ -496,66 +499,6 @@ class StudentWebController extends Controller
         }
 
         Log::warning('Student registration failed.', $context);
-    }
-
-    private function storePassportPhoto(Request $request, string $matricNo): string
-    {
-        $file      = $request->file('selfie') ?? $request->file('passport_photo');
-        $directory = public_path('photos/student-submissions');
-
-        if (! is_dir($directory)) {
-            mkdir($directory, 0755, true);
-        }
-
-        $filename = Str::slug(str_replace('/', '-', $matricNo))
-            . '-'
-            . now()->format('YmdHis')
-            . '-'
-            . Str::random(8)
-            . '.jpg';
-
-        file_put_contents($directory . DIRECTORY_SEPARATOR . $filename, file_get_contents($file->getRealPath()));
-
-        return 'photos/student-submissions/' . $filename;
-    }
-
-    private function storeProfilePhoto(Request $request, string $matricNo): string
-    {
-        $file      = $request->file('profile_photo');
-        $directory = public_path('photos/profiles');
-
-        if (! is_dir($directory)) {
-            mkdir($directory, 0755, true);
-        }
-
-        $filename = 'profile-'
-            . Str::slug(str_replace('/', '-', $matricNo))
-            . '-'
-            . now()->format('YmdHis')
-            . '-'
-            . Str::random(6)
-            . '.jpg';
-
-        file_put_contents($directory . DIRECTORY_SEPARATOR . $filename, file_get_contents($file->getRealPath()));
-
-        return 'photos/profiles/' . $filename;
-    }
-
-    private function storeIdCard(Request $request, string $matricNo): string
-    {
-        $file      = $request->file('id_card');
-        $extension = strtolower($file->getClientOriginalExtension() ?: 'jpg');
-        $filename  = 'idcard-'
-            . Str::slug(str_replace('/', '-', $matricNo))
-            . '-'
-            . now()->format('YmdHis')
-            . '-'
-            . Str::random(8)
-            . '.' . $extension;
-
-        Storage::disk('local')->put('id-cards/' . $filename, file_get_contents($file->getRealPath()));
-
-        return 'id-cards/' . $filename;
     }
 
     private function assertOfficialStudentCanRegister(string $matricNo, array $matricParts): object

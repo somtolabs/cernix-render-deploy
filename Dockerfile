@@ -18,10 +18,11 @@ RUN apt-get update \
         libpng-dev \
         libpq-dev \
         libsodium-dev \
+        libwebp-dev \
         libzip-dev \
         unzip \
         zip \
-    && docker-php-ext-configure gd --with-freetype --with-jpeg \
+    && docker-php-ext-configure gd --with-freetype --with-jpeg --with-webp \
     && docker-php-ext-install -j"$(nproc)" \
         bcmath \
         exif \

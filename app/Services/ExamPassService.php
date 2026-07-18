@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Services\MediaService;
 use App\Support\DepartmentFees;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -311,11 +312,15 @@ class ExamPassService
         return $this->settingBoolean('default_exam_payment_required', true);
     }
 
+    /**
+     * The media row records the disk its file was written to, so existence is a
+     * single authoritative lookup. There is no second location to guess at.
+     */
     private function verificationPhotoExists(string $path): bool
     {
-        // Photos may live under /public (uploaded via public_path()) or storage/app/public (Storage disk).
-        // Check both so approved students aren't blocked by a false negative from the wrong disk.
-        return file_exists(public_path($path)) || Storage::disk('public')->exists($path);
+        $media = app(MediaService::class)->findByStorageKey($path);
+
+        return $media !== null && app(MediaService::class)->exists($media);
     }
 
     private function settingBoolean(string $key, bool $default): bool

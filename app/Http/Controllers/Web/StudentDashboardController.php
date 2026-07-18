@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Web;
 
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Web\Concerns\StoresStudentMedia;
 use App\Services\AuditService;
 use App\Services\CryptoService;
 use App\Services\ExamPassService;
@@ -21,6 +22,8 @@ use Throwable;
 
 class StudentDashboardController extends Controller
 {
+    use StoresStudentMedia;
+
     public function index(Request $request)
     {
         return $this->portalView($request, 'student.dashboard', 'overview');
@@ -153,7 +156,7 @@ class StudentDashboardController extends Controller
         ]);
 
         $photoPath  = $this->storePassportPhoto($request, $payload['student']->matric_no);
-        $idCardPath = $this->storeIdCardPhoto($request, $payload['student']->matric_no);
+        $idCardPath = $this->storeIdCard($request, $payload['student']->matric_no);
 
         DB::transaction(function () use ($payload, $photoPath, $idCardPath) {
             $updates = $this->studentColumnUpdates([
@@ -943,66 +946,6 @@ class StudentDashboardController extends Controller
             ->implode('/');
 
         return url('/photo-thumb/' . $encoded);
-    }
-
-    private function storeProfilePhoto(Request $request, string $matricNo): string
-    {
-        $file      = $request->file('profile_photo');
-        $directory = public_path('photos/profiles');
-
-        if (! is_dir($directory)) {
-            mkdir($directory, 0755, true);
-        }
-
-        $filename = 'profile-'
-            . Str::slug(str_replace('/', '-', $matricNo))
-            . '-'
-            . now()->format('YmdHis')
-            . '-'
-            . Str::random(6)
-            . '.jpg';
-
-        file_put_contents($directory . DIRECTORY_SEPARATOR . $filename, file_get_contents($file->getRealPath()));
-
-        return 'photos/profiles/' . $filename;
-    }
-
-    private function storePassportPhoto(Request $request, string $matricNo): string
-    {
-        $file = $request->file('selfie') ?? $request->file('passport_photo');
-        $directory = public_path('photos/student-submissions');
-
-        if (! is_dir($directory)) {
-            mkdir($directory, 0755, true);
-        }
-
-        $filename = Str::slug(str_replace('/', '-', $matricNo))
-            . '-'
-            . now()->format('YmdHis')
-            . '-'
-            . Str::random(8)
-            . '.jpg';
-
-        file_put_contents($directory . DIRECTORY_SEPARATOR . $filename, file_get_contents($file->getRealPath()));
-
-        return 'photos/student-submissions/' . $filename;
-    }
-
-    private function storeIdCardPhoto(Request $request, string $matricNo): string
-    {
-        $file      = $request->file('id_card');
-        $extension = strtolower($file->getClientOriginalExtension() ?: 'jpg');
-        $filename  = 'idcard-'
-            . Str::slug(str_replace('/', '-', $matricNo))
-            . '-'
-            . now()->format('YmdHis')
-            . '-'
-            . Str::random(8)
-            . '.' . $extension;
-
-        Storage::disk('local')->put('id-cards/' . $filename, file_get_contents($file->getRealPath()));
-
-        return 'id-cards/' . $filename;
     }
 
     private function studentColumnUpdates(array $updates): array

@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Web;
 
 use App\Http\Controllers\Controller;
 use App\Services\AuditService;
+use App\Services\MediaService;
 use App\Services\QrTokenService;
 use App\Services\RiskIntelligenceService;
 use App\Services\StudentRegistryImportService;
@@ -492,20 +493,14 @@ class AdminWebController extends Controller
 
         $idCardPath = ltrim(str_replace('\\', '/', trim($idCardPath)), '/');
 
-        // Support both public (photos/) and private local-disk (id-cards/) storage paths.
-        // Storage::disk('local') is rooted at storage/app/private — NOT storage/app/.
-        $fullPath = str_starts_with($idCardPath, 'photos/')
-            ? public_path($idCardPath)
-            : Storage::disk('local')->path($idCardPath);
+        // Streamed through this admin-guarded route rather than exposed by URL.
+        $media = app(MediaService::class)->findByStorageKey($idCardPath);
+        abort_unless($media, 404);
 
-        abort_unless(file_exists($fullPath), 404);
+        $raw = app(MediaService::class)->contents($media);
+        abort_unless($raw !== null, 404);
 
-        $raw  = file_get_contents($fullPath);
-        $mime = 'image/jpeg';
-        $info = @getimagesizefromstring($raw);
-        if ($info && isset($info['mime'])) {
-            $mime = $info['mime'];
-        }
+        $mime = $media->mime_type ?: 'image/jpeg';
 
         return response($raw, 200, [
             'Content-Type'  => $mime,
@@ -527,23 +522,14 @@ class AdminWebController extends Controller
 
         $photoPath = ltrim(str_replace('\\', '/', trim($photoPath)), '/');
 
-        // Support both public (photos/) and private local-disk storage paths.
-        if (str_starts_with($photoPath, 'photos/')) {
-            $fullPath = public_path($photoPath);
-        } else {
-            $fullPath = Storage::disk('local')->path($photoPath);
-        }
+        // Streamed through this admin-guarded route rather than exposed by URL.
+        $media = app(MediaService::class)->findByStorageKey($photoPath);
+        abort_unless($media, 404);
 
-        abort_unless(file_exists($fullPath), 404);
+        $raw = app(MediaService::class)->contents($media);
+        abort_unless($raw !== null, 404);
 
-        $raw  = file_get_contents($fullPath);
-        $mime = 'image/jpeg';
-
-        // Detect image type from content
-        $info = @getimagesizefromstring($raw);
-        if ($info && isset($info['mime'])) {
-            $mime = $info['mime'];
-        }
+        $mime = $media->mime_type ?: 'image/jpeg';
 
         return response($raw, 200, [
             'Content-Type'  => $mime,
@@ -1515,6 +1501,58 @@ class AdminWebController extends Controller
         });
 
         return view('admin.activity.index', compact('auditLogs'));
+    }
+
+    public function persistenceDiagnostics(Request $request)
+    {
+        if ($response = $this->guardAdmin($request)) {
+            return $response;
+        }
+
+        $connectionName = config('database.default');
+        $connection     = config("database.connections.$connectionName");
+        $driver         = $connection['driver'] ?? 'unknown';
+        $databaseUrl    = env('DATABASE_URL') ?: env('DB_URL');
+        $host           = null;
+        if ($databaseUrl) {
+            $parts = @parse_url($databaseUrl);
+            $host  = $parts['host'] ?? null;
+        }
+
+        $tables = ['students', 'timetables', 'qr_tokens', 'verification_logs', 'attendance_records', 'payments', 'cernix_settings'];
+        $counts = [];
+        foreach ($tables as $t) {
+            try {
+                $counts[$t] = \Illuminate\Support\Facades\Schema::hasTable($t) ? DB::table($t)->count() : null;
+            } catch (\Throwable) {
+                $counts[$t] = null;
+            }
+        }
+
+        $logoStoredInDb = false;
+        try {
+            $logoStoredInDb = (bool) DB::table('cernix_settings')
+                ->where('key', \App\Support\Branding::SETTING_KEY_DATA)
+                ->value('value');
+        } catch (\Throwable) {}
+
+        $report = [
+            'app_env'          => config('app.env'),
+            'connection'       => $connectionName,
+            'driver'           => $driver,
+            'database_url_set' => $databaseUrl !== null && $databaseUrl !== '',
+            'host'             => $host,
+            'cache_store'      => config('cache.default'),
+            'session_driver'   => config('session.driver'),
+            'queue_driver'     => config('queue.default'),
+            'filesystem_disk'  => config('filesystems.default'),
+            'seed_on_boot'     => env('CERNIX_SEED_ON_BOOT', 'false'),
+            'allow_reset'      => env('CERNIX_ALLOW_PRODUCTION_RESET', 'false'),
+            'logo_in_database' => $logoStoredInDb,
+            'table_counts'     => $counts,
+        ];
+
+        return view('admin.diagnostics.persistence', ['report' => $report]);
     }
 
     public function settings(Request $request)
