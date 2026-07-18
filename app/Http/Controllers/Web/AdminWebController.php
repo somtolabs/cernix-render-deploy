@@ -1555,6 +1555,72 @@ class AdminWebController extends Controller
         return view('admin.diagnostics.persistence', ['report' => $report]);
     }
 
+    /**
+     * TEMPORARY admin-only object-storage probe. Mirrors `php artisan
+     * media:diagnose` for environments without shell access (Render free tier).
+     * Remove this method and its route once the R2 fix is confirmed.
+     */
+    public function mediaDiagnostics(Request $request)
+    {
+        if ($response = $this->guardAdmin($request)) {
+            return $response;
+        }
+
+        $present = static fn ($v): bool => $v !== null && $v !== '' && $v !== false;
+        $lines = [];
+        $lines[] = 'Object storage runtime diagnosis:';
+        $lines[] = '  default_disk=' . config('filesystems.default');
+        $lines[] = '  filesystem_disk_env=' . ($present(env('FILESYSTEM_DISK')) ? env('FILESYSTEM_DISK') : 'MISSING');
+        $lines[] = '';
+        $lines[] = 'Credentials (presence and length only, never the value):';
+        foreach (['AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY', 'AWS_BUCKET', 'AWS_ENDPOINT', 'AWS_DEFAULT_REGION'] as $key) {
+            $value = env($key);
+            $lines[] = "  {$key}=" . ($present($value) ? 'set' : 'MISSING') . ' length=' . ($present($value) ? strlen((string) $value) : 0);
+        }
+        $lines[] = '';
+        $lines[] = 'GD WebP support: ' . (function_exists('imagewebp') ? 'available' : 'UNAVAILABLE (toWebp will fail)');
+
+        $ok = true;
+        foreach (['s3', 's3_private'] as $disk) {
+            $lines[] = '';
+            $lines[] = "Disk [{$disk}] round-trip test:";
+            $lines[] = '  configured_bucket=' . ($present(config("filesystems.disks.{$disk}.bucket")) ? config("filesystems.disks.{$disk}.bucket") : 'MISSING');
+            $lines[] = '  configured_endpoint=' . ($present(config("filesystems.disks.{$disk}.endpoint")) ? config("filesystems.disks.{$disk}.endpoint") : 'MISSING');
+
+            $key = 'diagnostics/media-diagnose-' . now()->format('YmdHis') . '-' . \Illuminate\Support\Str::random(6) . '.txt';
+            $payload = 'cernix media:diagnose probe ' . now()->toIso8601String();
+
+            try {
+                \Illuminate\Support\Facades\Storage::disk($disk)->put($key, $payload);
+                $readBack = \Illuminate\Support\Facades\Storage::disk($disk)->get($key);
+                if ($readBack === $payload) {
+                    $lines[] = "  WRITE+READ OK ({$key})";
+                } else {
+                    $lines[] = '  WRITE succeeded but READ returned unexpected content.';
+                    $ok = false;
+                }
+                \Illuminate\Support\Facades\Storage::disk($disk)->delete($key);
+                $lines[] = '  cleanup=deleted';
+            } catch (\Throwable $e) {
+                $lines[] = '  FAILED: ' . get_class($e) . ': ' . $e->getMessage();
+                $ok = false;
+            }
+        }
+
+        $lines[] = '';
+        $lines[] = $ok
+            ? 'Result: object storage is reachable and writable from this container.'
+            : 'Result: object storage is NOT fully functional - see errors above.';
+
+        $body = e(implode("\n", $lines));
+
+        return response(
+            '<!doctype html><meta name="robots" content="noindex"><title>media diagnose</title>'
+            . '<pre style="font:13px/1.5 ui-monospace,Menlo,Consolas,monospace;padding:24px;white-space:pre-wrap">'
+            . $body . '</pre>'
+        )->header('Cache-Control', 'no-store');
+    }
+
     public function settings(Request $request)
     {
         if ($response = $this->guardAdmin($request)) {
