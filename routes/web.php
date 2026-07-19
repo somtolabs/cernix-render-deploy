@@ -116,8 +116,6 @@ Route::get('/admin/attendance',   [AdminWebController::class, 'attendance'])->na
 Route::get('/admin/activity', [AdminWebController::class, 'activity'])->name('admin.activity');
 Route::get('/admin/settings', [AdminWebController::class, 'settings'])->name('admin.settings');
 Route::get('/admin/diagnostics/persistence', [AdminWebController::class, 'persistenceDiagnostics'])->name('admin.diagnostics.persistence');
-// TEMPORARY: object-storage probe for Render free tier (no shell). Remove once R2 fix is confirmed.
-Route::get('/admin/media-diagnose', [AdminWebController::class, 'mediaDiagnostics'])->name('admin.media-diagnose');
 Route::patch('/admin/settings/fees', [AdminWebController::class, 'settingsFeesUpdate'])->name('admin.settings.fees.update');
 Route::patch('/admin/settings/live-phase', [AdminWebController::class, 'settingsLivePhaseUpdate'])->name('admin.settings.live-phase.update');
 Route::patch('/admin/settings/demo-mode', [AdminWebController::class, 'settingsDemoUpdate'])->name('admin.settings.demo.update');
