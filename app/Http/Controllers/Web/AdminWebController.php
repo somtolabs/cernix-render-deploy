@@ -1588,6 +1588,13 @@ class AdminWebController extends Controller
             $lines[] = "  {$key}: getenv=" . $fmt($g) . ' | $_SERVER=' . $fmt($s) . ' | env()=' . $fmt($e);
         }
         $lines[] = '';
+        $allEnv = getenv();
+        $names = is_array($allEnv) ? array_keys($allEnv) : [];
+        sort($names);
+        $lines[] = 'Environment variable NAMES present in this container (names only, never values):';
+        $lines[] = '  count=' . count($names);
+        $lines[] = '  ' . ($names ? implode(', ', $names) : '(none)');
+        $lines[] = '';
         $lines[] = 'GD WebP support: ' . (function_exists('imagewebp') ? 'available' : 'UNAVAILABLE (toWebp will fail)');
 
         $ok = true;
