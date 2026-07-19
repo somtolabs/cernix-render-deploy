@@ -116,7 +116,7 @@ class DashboardController extends Controller
             'is_active'     => false,
             'created_at'    => now(),
             'updated_at'    => now(),
-        ]);
+        ], 'session_id');
 
         return response()->json([
             'status'  => 'success',
@@ -243,7 +243,7 @@ class DashboardController extends Controller
             $insert['last_active_at'] = null;
         }
 
-        $id = DB::table('examiners')->insertGetId($insert);
+        $id = DB::table('examiners')->insertGetId($insert, 'examiner_id');
 
         $this->auditService->logAction(
             (string) $this->user()->id,

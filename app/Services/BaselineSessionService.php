@@ -28,7 +28,7 @@ class BaselineSessionService
                     'is_active' => ! $activeSessionExists,
                     'created_at' => $now,
                     'updated_at' => $now,
-                ]);
+                ], 'session_id');
             }
 
             $updates = [];

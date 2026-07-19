@@ -848,7 +848,7 @@ class AdminWebController extends Controller
                     }
                 }
 
-                $id = DB::table('examiners')->insertGetId($insert);
+                $id = DB::table('examiners')->insertGetId($insert, 'examiner_id');
                 $this->audit('user.created', [
                     'entity_type' => $role === 'examiner' ? 'examiner' : 'admin_user',
                     'entity_id' => $id,
@@ -2318,7 +2318,7 @@ class AdminWebController extends Controller
             'note' => trim($data['note']),
             'created_at' => now(),
             'updated_at' => now(),
-        ]);
+        ], 'note_id');
 
         $this->audit('admin_note_created', [
             'entity_type' => $data['entity_type'],

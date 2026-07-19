@@ -543,6 +543,6 @@ class VerificationService
             'device_fp' => $deviceFp,
             'ip_address' => $ip,
             'rejection_reason' => $decision === 'REJECTED' && $reason !== '' ? $reason : null,
-        ]);
+        ], 'log_id');
     }
 }

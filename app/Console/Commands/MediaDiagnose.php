@@ -38,6 +38,55 @@ class MediaDiagnose extends Command
         $this->line('');
         $this->line('GD WebP support: ' . (function_exists('imagewebp') ? 'available' : 'UNAVAILABLE (toWebp will fail)'));
 
+        $this->line('');
+        $this->line('Database persistence (must be managed Postgres, not ephemeral SQLite):');
+        try {
+            $conn = \Illuminate\Support\Facades\DB::connection();
+            $driver = $conn->getDriverName();
+            $this->line('  default_connection=' . config('database.default'));
+            $this->line('  driver=' . $driver);
+            if ($driver === 'sqlite') {
+                $this->error('  EPHEMERAL: SQLite on container disk — ALL data is wiped on every restart.');
+                $this->line('  sqlite_path=' . config('database.connections.sqlite.database'));
+            } else {
+                $this->line('  host=' . config("database.connections.{$driver}.host"));
+                $this->line('  database=' . config("database.connections.{$driver}.database"));
+            }
+            $probeKey = '__diag_probe_' . now()->format('YmdHis');
+            \Illuminate\Support\Facades\DB::table('cernix_settings')->insert(['key' => $probeKey, 'value' => 'probe', 'created_at' => now(), 'updated_at' => now()]);
+            $readBack = \Illuminate\Support\Facades\DB::table('cernix_settings')->where('key', $probeKey)->value('value');
+            \Illuminate\Support\Facades\DB::table('cernix_settings')->where('key', $probeKey)->delete();
+            $this->line('  write/read test: ' . ($readBack === 'probe' ? 'OK' : 'FAILED (unexpected read)'));
+        } catch (Throwable $e) {
+            $this->error('  DB test FAILED: ' . get_class($e) . ': ' . $e->getMessage());
+        }
+
+        $this->line('');
+        $this->line('Branding persistence (survives Render restart when stored in the database):');
+        try {
+            $logoData = \Illuminate\Support\Facades\DB::table('cernix_settings')
+                ->where('key', \App\Support\Branding::SETTING_KEY_DATA)->value('value');
+            $logoPath = \Illuminate\Support\Facades\DB::table('cernix_settings')
+                ->where('key', \App\Support\Branding::SETTING_KEY)->value('value');
+            $name = \App\Support\Branding::institutionName();
+
+            $dbLogo = is_string($logoData) && str_starts_with($logoData, 'data:image/');
+            $this->line('  logo_in_database (data URI): ' . ($dbLogo
+                ? 'PRESENT len=' . strlen($logoData) . ' [PERSISTENT]'
+                : 'absent'));
+            $this->line('  logo_disk_path setting: ' . ($this->present($logoPath) ? $logoPath : 'none')
+                . ($this->present($logoPath)
+                    ? (Storage::disk('public')->exists($logoPath) ? ' (file exists, EPHEMERAL fallback)' : ' (file MISSING on this container)')
+                    : ''));
+            $this->line('  logoUrl() resolves via: ' . ($dbLogo ? 'database data URI' : ($this->present($logoPath) ? 'ephemeral disk (AT RISK on restart)' : 'no custom logo')));
+            $this->line('  institution_name: "' . $name . '"');
+            if (! $dbLogo && $this->present($logoPath)) {
+                $this->warn('  WARNING: custom logo is only on ephemeral disk. Re-upload it once to persist it in the database.');
+            }
+        } catch (Throwable $e) {
+            $this->error('  branding read FAILED: ' . get_class($e) . ': ' . $e->getMessage());
+        }
+
         $overall = self::SUCCESS;
 
         foreach (['s3', 's3_private'] as $disk) {

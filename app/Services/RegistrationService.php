@@ -125,7 +125,7 @@ class RegistrationService
             $insert['faculty_code'] = null;
         }
 
-        $id = DB::table('departments')->insertGetId($insert);
+        $id = DB::table('departments')->insertGetId($insert, 'dept_id');
 
         return DB::table('departments')->where('dept_id', $id)->first();
     }
