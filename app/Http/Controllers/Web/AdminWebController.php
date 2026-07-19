@@ -1570,12 +1570,22 @@ class AdminWebController extends Controller
         $lines = [];
         $lines[] = 'Object storage runtime diagnosis:';
         $lines[] = '  default_disk=' . config('filesystems.default');
-        $lines[] = '  filesystem_disk_env=' . ($present(env('FILESYSTEM_DISK')) ? env('FILESYSTEM_DISK') : 'MISSING');
+        $lines[] = '  config_cached=' . (file_exists(base_path('bootstrap/cache/config.php')) ? 'yes' : 'no');
+        $lines[] = '  dotenv_file_present=' . (file_exists(base_path('.env')) ? 'yes' : 'no');
+        $lines[] = '  variables_order=' . (ini_get('variables_order') ?: 'unset');
         $lines[] = '';
-        $lines[] = 'Credentials (presence and length only, never the value):';
-        foreach (['AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY', 'AWS_BUCKET', 'AWS_ENDPOINT', 'AWS_DEFAULT_REGION'] as $key) {
-            $value = env($key);
-            $lines[] = "  {$key}=" . ($present($value) ? 'set' : 'MISSING') . ' length=' . ($present($value) ? strlen((string) $value) : 0);
+        $lines[] = 'Credential visibility per source (presence + length only, never value):';
+        $lines[] = '  getenv() reads the live process environment (immune to config:cache).';
+        $lines[] = '  env()   reads Laravel\'s repository (returns null after config:cache unless OS-visible).';
+        $lines[] = '';
+        foreach (['FILESYSTEM_DISK', 'AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY', 'AWS_BUCKET', 'AWS_ENDPOINT', 'AWS_DEFAULT_REGION'] as $key) {
+            $g = getenv($key);
+            $s = $_SERVER[$key] ?? null;
+            $e = env($key);
+            $fmt = static function ($v) use ($present) {
+                return $present($v) ? ('set len=' . strlen((string) $v)) : 'MISSING';
+            };
+            $lines[] = "  {$key}: getenv=" . $fmt($g) . ' | $_SERVER=' . $fmt($s) . ' | env()=' . $fmt($e);
         }
         $lines[] = '';
         $lines[] = 'GD WebP support: ' . (function_exists('imagewebp') ? 'available' : 'UNAVAILABLE (toWebp will fail)');
