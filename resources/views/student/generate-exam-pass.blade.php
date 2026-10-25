@@ -7,35 +7,35 @@
     /* ── layout shell ─────────────────────────────────────── */
     .gp-flow        { display: grid; gap: 20px; }
 
-    /* ── status strip ─────────────────────────────────────── */
-    .gp-strip       { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); border-block: 1px solid var(--line); background: rgba(235,241,255,.18); }
+    /* ── status strip — built on the shared student surface tokens ── */
+    .gp-strip       { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); border: 1px solid var(--line); border-radius: var(--stu-r-md); overflow: hidden; background: var(--bg-2); box-shadow: var(--stu-shadow-1); }
     .gp-strip-cell  { padding: 13px 14px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); min-width: 0; }
     .gp-strip-cell:nth-child(2n) { border-right: 0; }
     .gp-strip-label { display: block; color: var(--ink-4); font-size: 9px; font-weight: 900; letter-spacing: .11em; text-transform: uppercase; }
     .gp-strip-value { display: block; margin-top: 5px; font-size: 13px; font-weight: 700; color: var(--ink); overflow-wrap: break-word; word-break: normal; }
 
-    /* ── notice banners ───────────────────────────────────── */
-    .gp-notice      { padding: 14px 16px; border-left: 3px solid var(--navy); background: rgba(51,71,95,.04); border-radius: 0 8px 8px 0; line-height: 1.55; }
+    /* ── notice banners — same anatomy as .cx-notice in the design system ── */
+    .gp-notice      { padding: 14px 16px; border: 1px solid var(--stu-navy-line); border-left: 3px solid var(--navy); background: var(--stu-navy-wash); border-radius: var(--stu-r-sm); line-height: 1.55; }
     .gp-notice strong { display: block; font-size: 13px; font-weight: 800; margin-bottom: 3px; color: var(--ink); }
     .gp-notice p    { margin: 0; font-size: 13px; color: var(--ink-3); }
-    .gp-notice.success { border-left-color: var(--emerald); background: rgba(85,117,101,.05); }
+    .gp-notice.success { border-color: var(--stu-emerald-line); border-left-color: var(--emerald); background: var(--stu-emerald-wash); }
     .gp-notice.success strong { color: var(--emerald); }
-    .gp-notice.error   { border-left-color: var(--red);     background: rgba(138,91,91,.05); }
+    .gp-notice.error   { border-color: var(--stu-red-line); border-left-color: var(--red); background: var(--stu-red-wash); }
     .gp-notice.error strong  { color: var(--red); }
 
-    /* ── course card list ─────────────────────────────────── */
-    .gp-course-list  { display: grid; gap: 12px; padding-top: 4px; }
+    /* ── course card list — matches the .tt-card treatment on My Exams ── */
+    .gp-course-list  { display: grid; gap: 14px; padding-top: 4px; }
     .gp-course-card  {
         display: grid;
         gap: 12px;
         padding: 18px 20px;
-        background: #fff;
+        background: var(--bg-2);
         border: 1px solid var(--line);
-        border-radius: 12px;
-        box-shadow: 0 2px 8px rgba(0,0,0,.06);
-        transition: box-shadow .15s;
+        border-radius: var(--stu-r);
+        box-shadow: var(--stu-shadow-2);
+        transition: box-shadow .2s ease;
     }
-    .gp-course-card:hover { box-shadow: 0 6px 20px rgba(0,0,0,.09); }
+    .gp-course-card:hover { box-shadow: var(--stu-shadow-3); }
     .gp-course-card-top  {
         display: grid;
         grid-template-columns: minmax(0,1fr) auto;
@@ -76,7 +76,7 @@
     }
     .gp-choice:last-child { border-bottom: 0; }
     .gp-choice:has(input:checked) {
-        background: rgba(85,117,101,.04);
+        background: var(--stu-emerald-wash);
         padding-inline: 12px;
         box-shadow: inset 3px 0 0 var(--emerald);
     }
@@ -144,8 +144,8 @@
     };
 @endphp
 
-<div class="cx-page-head">
-    <div class="cx-eyebrow">Exam Access</div>
+<div class="stu-head">
+    <p class="stu-head-eyebrow">Exam Access</p>
     <h1>Generate QR Pass</h1>
     <p>{{ $payment
         ? 'Payment verified. Select any course below to generate or view its QR pass — no additional reference needed.'
@@ -199,14 +199,20 @@
     @endif
 
     @if($coursePasses->isEmpty())
-        <div class="cx-empty">
-            <strong style="display:block;margin-bottom:4px;color:var(--ink-2)">No exam timetable assigned yet</strong>
-            Your department and level do not have an available paper for this exam session.
+        <div class="stu-empty">
+            <span class="stu-empty-icon" aria-hidden="true">
+                <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="14" height="13" rx="2"/><path d="M3 8h14M7 2v3M13 2v3"/></svg>
+            </span>
+            <b>No exam timetable assigned yet</b>
+            <span>Your department and level do not have an available paper for this exam session.</span>
         </div>
 
     @elseif(! $profileApproved)
-        <div class="cx-empty">
-            <strong style="display:block;margin-bottom:4px;color:var(--ink-2)">QR generation locked</strong>
+        <div class="stu-empty">
+            <span class="stu-empty-icon" aria-hidden="true">
+                <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="9" width="12" height="8" rx="2"/><path d="M7 9V6.5a3 3 0 016 0V9"/></svg>
+            </span>
+            <b>QR generation locked</b>
             Your profile must be approved before you can generate a pass. <a href="{{ route('student.profile') }}" style="color:var(--navy);font-weight:700">Open your profile</a> to check status or resubmit photos.
         </div>
 
@@ -305,7 +311,7 @@
                                 @if($qrChipClass)
                                     <span class="chip {{ $qrChipClass }}" style="font-size:10px;padding:3px 8px">{{ $exam->qr_status }}</span>
                                 @else
-                                    <span class="chip" style="background:rgba(110,120,130,.09);color:var(--ink-4);font-size:10px;padding:3px 8px">Not Generated</span>
+                                    <span class="chip neutral" style="font-size:10px;padding:3px 8px">Not Generated</span>
                                 @endif
                             </div>
                         </div>

@@ -40,13 +40,19 @@
         width: 100%;
         max-width: 420px;
         margin: 0 auto;
-        background: #fff;
+        background: var(--bg-2);
         border: 1px solid var(--line);
-        border-radius: 16px;
+        border-radius: var(--stu-r-lg, 20px);
+        /* Matches the elevation of the assessment cards this pass is opened from */
+        box-shadow: var(--stu-shadow-3, 0 1px 2px rgba(14,18,38,.05), 0 14px 32px -16px rgba(14,18,38,.18));
         overflow: hidden;
         color: var(--ink);
         font-family: 'Inter', system-ui, -apple-system, sans-serif;
+        animation: qpIn .45s cubic-bezier(.22,.9,.3,1) both;
     }
+    /* The pass becoming visible is itself a state change worth acknowledging */
+    @keyframes qpIn { from { opacity: 0; transform: translateY(10px) scale(.985); } to { opacity: 1; transform: none; } }
+    @media (prefers-reduced-motion: reduce) { .qp-card { animation: none; } }
 
     /* Institution logo watermark — subtle security/branding feature.
        Sourced from the branding system (Branding::logoUrl()) so it always
@@ -194,7 +200,7 @@
         @if($statusChip)
             <span class="chip {{ $statusChip }}" style="font-size:10px">{{ $statusLabel }}</span>
         @else
-            <span class="chip" style="background:rgba(110,120,130,.08);color:var(--ink-3);font-size:10px">{{ $statusLabel }}</span>
+            <span class="chip neutral" style="font-size:10px">{{ $statusLabel }}</span>
         @endif
     </div>
 

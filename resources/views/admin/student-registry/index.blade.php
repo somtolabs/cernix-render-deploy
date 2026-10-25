@@ -365,6 +365,7 @@
                     <div style="display:flex;gap:10px;flex-wrap:wrap">
                         <button type="button" class="admin-action ghost" id="importBack2">← Back</button>
                         <button type="submit" class="admin-action" id="registryImportBtn">Import Registry Now</button>
+                        <x-loading-state preset="import" inline="true" />
                     </div>
                 </div>
             </div>

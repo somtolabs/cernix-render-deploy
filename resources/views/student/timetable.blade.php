@@ -18,27 +18,28 @@
         : $timetable;
 @endphp
 
-<div class="cx-page-head">
-    <div class="cx-eyebrow">Assessment Schedule</div>
+<div class="stu-head">
+    <p class="stu-head-eyebrow">Assessment Schedule</p>
     <h1>{{ $typeHeading }}</h1>
     <p>{{ $typeDescription }}</p>
 </div>
 
-<section class="cx-card cx-card-pad">
-    <div class="cx-section-title">
-        <h2>{{ $typeHeading }}</h2>
-        <span>{{ $filteredTimetable->count() }} {{ $filteredTimetable->count() === 1 ? 'entry' : 'entries' }}</span>
-    </div>
-    @php $timetable = $filteredTimetable; @endphp
-    @include('student.partials.timetable-list')
-</section>
+{{-- Count sits above the stack rather than inside a wrapper card — each
+     assessment is already its own card, so wrapping them would nest cards. --}}
+<div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:14px">
+    <h2 style="margin:0;font-size:13px;font-weight:800;color:var(--ink)">{{ $typeHeading }}</h2>
+    <span style="font-size:11px;font-weight:600;color:var(--ink-3)">
+        {{ $filteredTimetable->count() }} {{ $filteredTimetable->count() === 1 ? 'entry' : 'entries' }}
+    </span>
+</div>
+
+@php $timetable = $filteredTimetable; @endphp
+@include('student.partials.timetable-list')
 
 @if($tf === 'test' || $tf === 'makeup')
-<section class="cx-card cx-card-pad" style="margin-top:16px">
-    <div class="cx-notice" role="note" style="padding:16px 18px;border-left:3px solid var(--navy);background:rgba(51,71,95,.04);border-radius:0 8px 8px 0">
-        <strong style="display:block;font-size:13px;font-weight:800;color:var(--navy);margin-bottom:3px">Coming Soon — Computer-Based Testing</strong>
-        <span style="display:block;font-size:12px;color:var(--ink-3);line-height:1.55">CBT is planned for future sessions. Your access codes and schedule will appear here when available.</span>
+    <div class="cx-notice" role="note" style="margin-top:16px">
+        <b>Coming soon — computer-based testing</b><br>
+        CBT is planned for future sessions. Your access codes and schedule will appear here when available.
     </div>
-</section>
 @endif
 @endsection

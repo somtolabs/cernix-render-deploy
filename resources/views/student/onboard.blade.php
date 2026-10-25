@@ -3,6 +3,9 @@
 @section('title', 'Create Your Account')
 
 @section('content')
+
+@include('student.partials.design-system')
+
 <style>
     .student-register { min-height:100vh; background:var(--bg); color:var(--ink); }
     .sr-top { min-height:74px; display:flex; align-items:center; justify-content:space-between; gap:14px; padding:0 18px; border-bottom:1px solid var(--line); background:rgba(255,255,255,.88); backdrop-filter:blur(14px); }
@@ -16,10 +19,25 @@
     .sr-panel-head h1 { margin:0; font-size:clamp(26px,5vw,38px); line-height:1; letter-spacing:-.05em; color:var(--navy); }
     .sr-panel-head p { margin:0; max-width:540px; color:var(--ink-3); line-height:1.6; }
     .sr-chip { display:inline-flex; width:fit-content; padding:5px 9px; border-radius:999px; background:rgba(15,32,80,.06); color:var(--ink-2); font-size:10px; font-weight:900; letter-spacing:.08em; text-transform:uppercase; }
-    .sr-stepper { display:flex; gap:0; margin-bottom:24px; }
-    .sr-step { flex:1; padding:10px 12px; border-bottom:2px solid var(--line); color:var(--ink-4); font-size:11px; font-weight:900; text-transform:uppercase; letter-spacing:.08em; }
-    .sr-step.active { border-color:var(--navy); color:var(--navy); }
-    .sr-step.done { border-color:var(--emerald); color:var(--emerald); }
+    /* Progress meter. Class names and the .active/.done states are unchanged so
+       the existing step JS keeps working; only the presentation is new. */
+    .sr-stepper { display:flex; gap:8px; margin-bottom:26px; }
+    .sr-step {
+        flex:1; min-width:0; padding:0; border-bottom:0;
+        color:var(--ink-4); font-size:10.5px; font-weight:800;
+        text-transform:uppercase; letter-spacing:.07em;
+        overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+        transition:color .3s ease;
+    }
+    .sr-step::before {
+        content:''; display:block; height:4px; border-radius:999px;
+        background:var(--line); margin-bottom:9px;
+        transition:background .45s ease;
+    }
+    .sr-step.active { color:var(--navy); }
+    .sr-step.active::before { background:var(--navy); }
+    .sr-step.done { color:var(--emerald); }
+    .sr-step.done::before { background:var(--emerald); }
     .sr-body { padding:24px 0 0; display:grid; gap:16px; }
     .sr-field label { display:block; margin-bottom:7px; color:var(--ink); font-size:12px; font-weight:900; }
     .sr-field .input { width:100%; min-height:48px; border-radius:13px; border:1px solid var(--line-2); background:#fff; transition:border-color .16s ease, box-shadow .16s ease; padding:0 14px; font-size:14px; }
@@ -27,7 +45,7 @@
     .sr-field .input[readonly] { background:rgba(15,32,80,.03); color:var(--ink-2); cursor:default; }
     .sr-hint { margin-top:7px; color:var(--ink-3); font-size:12px; line-height:1.45; }
     .sr-row { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
-    .sr-identity-block { padding:16px; border:1px solid var(--line); border-radius:14px; background:rgba(15,32,80,.025); display:grid; gap:10px; }
+    .sr-identity-block { padding:18px; border:1px solid var(--line); border-radius:var(--stu-r-md); background:var(--stu-navy-wash); display:grid; gap:10px; }
     .sr-identity-row { display:flex; justify-content:space-between; gap:12px; align-items:baseline; }
     .sr-identity-row span { color:var(--ink-4); font-size:11px; font-weight:900; text-transform:uppercase; letter-spacing:.08em; }
     .sr-identity-row b { color:var(--ink); font-size:14px; text-align:right; }
@@ -44,11 +62,12 @@
     .sr-camera-wrap video.active { display:block; }
     .sr-camera-placeholder { color:var(--ink-4); font-size:13px; text-align:center; padding:20px; pointer-events:none; }
     .sr-capture-bar { display:flex; gap:10px; flex-wrap:wrap; }
-    .sr-selfie-preview { width:100%; border:1px solid var(--emerald); border-radius:14px; overflow:hidden; display:none; }
-    .sr-selfie-preview.show { display:block; }
+    .sr-selfie-preview { width:100%; border:2px solid var(--emerald); border-radius:var(--stu-r-md); overflow:hidden; display:none; }
+    .sr-selfie-preview.show { display:block; animation:stuReady .5s cubic-bezier(.22,.9,.3,1) both; }
     .sr-selfie-preview img { width:100%; aspect-ratio:4/3; object-fit:cover; display:block; }
-    .sr-selfie-check { display:none; padding:8px 12px; border-radius:8px; background:rgba(85,117,101,.08); border:1px solid rgba(85,117,101,.2); color:var(--emerald); font-size:12px; font-weight:900; align-items:center; gap:8px; }
-    .sr-selfie-check.show { display:flex; }
+    /* Capture confirmation — brief emerald acknowledgement that the step is done */
+    .sr-selfie-check { display:none; padding:10px 13px; border-radius:var(--stu-r-sm); background:var(--stu-emerald-wash); border:1px solid var(--stu-emerald-line); color:var(--emerald); font-size:12px; font-weight:800; align-items:center; gap:8px; }
+    .sr-selfie-check.show { display:flex; animation:stuCelebrate .9s ease-out both; }
 
     /* ID card capture tabs */
     .sr-id-tabs { display:flex; gap:0; border-bottom:1px solid var(--line); margin-bottom:12px; }
@@ -63,8 +82,8 @@
     .sr-id-guide-frame { position:absolute; inset:8%; border:2px dashed rgba(255,255,255,.7); border-radius:8px; pointer-events:none; display:flex; align-items:center; justify-content:center; }
     .sr-id-guide-label { position:absolute; bottom:calc(8% + 8px); left:50%; transform:translateX(-50%); background:rgba(0,0,0,.55); color:#fff; font-size:11px; font-weight:900; padding:4px 10px; border-radius:999px; white-space:nowrap; pointer-events:none; }
     .sr-id-placeholder { color:var(--ink-4); font-size:13px; text-align:center; padding:20px; pointer-events:none; }
-    .sr-id-preview { width:100%; border:1px solid var(--emerald); border-radius:12px; overflow:hidden; display:none; }
-    .sr-id-preview.show { display:block; }
+    .sr-id-preview { width:100%; border:2px solid var(--emerald); border-radius:var(--stu-r-md); overflow:hidden; display:none; }
+    .sr-id-preview.show { display:block; animation:stuReady .5s cubic-bezier(.22,.9,.3,1) both; }
     .sr-id-preview img { width:100%; aspect-ratio:3/2; object-fit:cover; display:block; }
 
     .sr-step-panel { display:none; }
@@ -105,9 +124,9 @@
             </div>
 
             <div class="sr-stepper" role="tablist" aria-label="Registration steps">
-                <div class="sr-step active" id="step-tab-1">Step 1 — Identity &amp; Password</div>
-                <div class="sr-step" id="step-tab-2">Step 2 — Verification</div>
-                <div class="sr-step" id="step-tab-3">Step 3 — Profile Photo</div>
+                <div class="sr-step active" id="step-tab-1">1 &middot; Identity</div>
+                <div class="sr-step" id="step-tab-2">2 &middot; Verification</div>
+                <div class="sr-step" id="step-tab-3">3 &middot; Profile Photo</div>
             </div>
 
             <div id="sr-global-error" class="sr-error" role="alert"></div>

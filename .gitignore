@@ -25,3 +25,4 @@ __pycache__/
 /.nova
 /.vscode
 /.zed
+.claude/worktrees/

@@ -29,8 +29,8 @@
     }
 </style>
 
-<div class="cx-page-head">
-    <div class="cx-eyebrow">Course Access</div>
+<div class="stu-head">
+    <p class="stu-head-eyebrow">Course Access</p>
     <h1>Course QR Pass</h1>
     <p>Your QR pass for this course, ready to present at the examination entrance.</p>
 </div>
@@ -43,10 +43,13 @@
         <a class="btn btn-ghost" href="{{ route('student.timetable') }}">Back to My Exams</a>
     </div>
 @else
-    <div class="cx-empty">
-        <strong>QR not generated for this course.</strong><br>
-        Select a course to generate or view its QR pass.
-        <div style="margin-top:12px"><a class="btn btn-primary" href="{{ route('student.timetable') }}">Open My Exams</a></div>
+    <div class="stu-empty">
+        <span class="stu-empty-icon" aria-hidden="true">
+            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="6" height="6" rx="1"/><rect x="11" y="3" width="6" height="6" rx="1"/><rect x="3" y="11" width="6" height="6" rx="1"/><path d="M11 11h2v2h-2zM15 15h2v2h-2z"/></svg>
+        </span>
+        <b>QR not generated for this course</b>
+        <span>Select a course to generate or view its QR pass.</span>
+        <div style="margin-top:16px"><a class="btn btn-primary stu-btn-sm" href="{{ route('student.timetable') }}">Open My Exams</a></div>
     </div>
 @endif
 @endsection

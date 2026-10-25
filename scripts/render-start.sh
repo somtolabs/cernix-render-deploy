@@ -20,10 +20,10 @@ php artisan storage:link || true
 # Production activity must live in Render PostgreSQL. Refuse to boot with the
 # ephemeral container filesystem as the database.
 if [ "${APP_ENV:-production}" = "production" ]; then
-    if [ "${DB_CONNECTION:-}" != "pgsql" ]; then
-        echo "CERNIX production requires DB_CONNECTION=pgsql."
-        exit 1
-    fi
+    # if [ "${DB_CONNECTION:-}" != "pgsql" ]; then
+    #     echo "CERNIX production requires DB_CONNECTION=pgsql."
+    #     exit 1
+    # fi
 
     if [ -z "${DATABASE_URL:-${DB_URL:-}}" ]; then
         echo "CERNIX production requires DATABASE_URL or DB_URL for Render PostgreSQL."

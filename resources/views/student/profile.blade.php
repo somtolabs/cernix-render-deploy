@@ -51,142 +51,160 @@
 @endphp
 
 <style>
-    .sp2-notice { margin-bottom: 20px; }
+    /* Tabs — restyled onto the shared student design system. Class names and
+       data-attributes are unchanged so the existing tab JS keeps working. */
+    .sp2-tabs {
+        background: var(--bg-2); border: 1px solid var(--line);
+        border-radius: var(--stu-r); overflow: hidden;
+        box-shadow: var(--stu-shadow-1);
+    }
+    .sp2-tabbar { display: flex; border-bottom: 1px solid var(--line); background: var(--bg); }
+    .sp2-tabbtn {
+        flex: 1; min-height: 50px; padding: 0 16px;
+        background: transparent; border: none; border-bottom: 2px solid transparent;
+        font-size: 13.5px; font-weight: 700; color: var(--ink-3); cursor: pointer;
+        transition: color .18s ease, border-color .18s ease, background .18s ease;
+    }
+    .sp2-tabbtn:hover { color: var(--ink); background: var(--stu-navy-wash); }
+    .sp2-tabbtn.is-active { color: var(--navy); border-bottom-color: var(--navy); background: var(--bg-2); }
+    .sp2-tabpanel { padding: var(--stu-pad); display: none; }
+    .sp2-tabpanel.is-active { display: block; animation: stuRise .32s cubic-bezier(.22,.9,.3,1) both; }
 
-    /* Identity card — subtle left accent stripe + tighter hierarchy */
-    .sp2-id-card { position: relative; background: #fff; border: 1px solid var(--line); border-radius: 16px; padding: 24px 24px 24px 28px; display: flex; gap: 20px; align-items: flex-start; margin-bottom: 20px; overflow: hidden; }
-    .sp2-id-card::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--navy); opacity: .8; }
-    .sp2-id-photo { width: 80px; height: 80px; border-radius: 50%; overflow: hidden; flex: 0 0 auto; border: 1px solid var(--line); background: var(--bg-2); }
-    .sp2-id-photo .cernix-passport-photo { width: 80px !important; height: 80px !important; border-radius: 50% !important; box-shadow: none !important; }
-    .sp2-id-fallback { width: 80px; height: 80px; border-radius: 50%; background: var(--navy); color: #fff; display: grid; place-items: center; font-size: 24px; font-weight: 700; letter-spacing: -.02em; flex: 0 0 auto; }
-    .sp2-id-body { min-width: 0; flex: 1; }
-    .sp2-id-name { margin: 0 0 6px; font-size: 1.3rem; font-weight: 800; color: var(--ink); line-height: 1.15; letter-spacing: -.015em; overflow-wrap: break-word; }
-    .sp2-id-matric { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 0.875rem; font-weight: 600; color: var(--navy); display: block; margin-bottom: 10px; }
-    .sp2-id-meta { font-size: 0.875rem; color: var(--ink-2); line-height: 1.55; margin: 0 0 12px; }
-    .sp2-id-badges { display: flex; flex-wrap: wrap; gap: 6px; }
+    /* Read-only academic fields */
+    .sp2-field-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
+    .sp2-field {
+        padding: 14px 16px; border: 1px solid var(--line);
+        border-radius: var(--stu-r-sm); background: var(--bg); min-width: 0;
+    }
+    .sp2-field-lbl {
+        display: block; font-size: 10.5px; font-weight: 800; text-transform: uppercase;
+        letter-spacing: .09em; color: var(--ink-4); margin-bottom: 6px;
+    }
+    .sp2-field-val { display: block; font-size: 14.5px; font-weight: 600; color: var(--ink); overflow-wrap: break-word; }
+    .sp2-field-val.mono { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 13.5px; font-weight: 500; }
+    .sp2-field-val.empty { color: var(--ink-4); font-weight: 500; }
 
-    /* Stat cards — each with a muted top accent stripe using existing tokens */
-    .sp2-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-bottom: 20px; }
-    .sp2-stat { position: relative; background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 20px 18px 16px; min-width: 0; overflow: hidden; }
-    .sp2-stat::before { content: ''; position: absolute; left: 0; right: 0; top: 0; height: 2px; background: var(--emerald); opacity: .55; }
-    .sp2-stat:nth-child(2)::before { background: var(--navy); }
-    .sp2-stat:nth-child(3)::before { background: var(--amber); }
-    .sp2-stat-num { font-size: 2rem; font-weight: 800; color: var(--navy); line-height: 1; margin: 0 0 8px; letter-spacing: -.02em; }
-    .sp2-stat-lbl { font-size: 0.75rem; color: var(--ink-3); font-weight: 800; text-transform: uppercase; letter-spacing: .06em; margin: 0; }
-    .sp2-stat-note { font-size: 0.7rem; color: var(--ink-4); margin: 4px 0 0; font-style: italic; }
-
-    /* Tabs */
-    .sp2-tabs { background: #fff; border: 1px solid var(--line); border-radius: 16px; overflow: hidden; }
-    .sp2-tabbar { display: flex; border-bottom: 1px solid var(--line); background: var(--bg-2); }
-    .sp2-tabbtn { flex: 1; min-height: 48px; padding: 0 16px; background: transparent; border: none; border-bottom: 2px solid transparent; font-size: 0.875rem; font-weight: 600; color: var(--ink-3); cursor: pointer; transition: color .15s ease, border-color .15s ease, background .15s ease; }
-    .sp2-tabbtn:hover { color: var(--ink); }
-    .sp2-tabbtn.is-active { color: var(--navy); border-bottom-color: var(--navy); background: #fff; }
-    .sp2-tabpanel { padding: 24px; display: none; }
-    .sp2-tabpanel.is-active { display: block; }
-
-    /* Profile tab: read-only fields */
-    .sp2-field-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
-    .sp2-field { padding: 14px 16px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg-2); min-width: 0; }
-    .sp2-field-lbl { display: block; font-size: 0.6875rem; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: var(--ink-4); margin-bottom: 6px; }
-    .sp2-field-val { display: block; font-size: 0.9375rem; font-weight: 600; color: var(--ink); overflow-wrap: break-word; }
-    .sp2-field-val.mono { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 0.875rem; }
-    .sp2-field-val.empty { color: var(--ink-4); font-style: italic; font-weight: 500; }
-    .sp2-readonly-note { margin: 0 0 18px; padding: 12px 14px; background: var(--bg-2); border: 1px solid var(--line); border-radius: 10px; font-size: 0.8125rem; color: var(--ink-3); line-height: 1.5; }
-
-    /* Documents tab */
-    .sp2-doc-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin-bottom: 20px; }
-    .sp2-doc-slot { border: 1px solid var(--line); border-radius: 12px; padding: 16px; background: var(--bg-2); min-width: 0; }
-    .sp2-doc-head { font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: var(--ink-4); margin: 0 0 12px; }
-    .sp2-doc-thumb { width: 56px; height: 56px; border-radius: 10px; overflow: hidden; border: 1px solid var(--line); background: #fff; margin-bottom: 12px; }
-    .sp2-doc-thumb img { width: 100%; height: 100%; object-fit: cover; }
-    .sp2-doc-thumb .cernix-passport-photo { width: 56px !important; height: 56px !important; border-radius: 10px !important; box-shadow: none !important; }
-    .sp2-doc-thumb-empty { width: 56px; height: 56px; border-radius: 10px; border: 1.5px dashed var(--line-2); background: #fff; display: grid; place-items: center; margin-bottom: 12px; color: var(--ink-4); font-size: 0.6875rem; font-weight: 700; text-transform: uppercase; }
-    .sp2-doc-placeholder { padding: 14px; border: 1.5px dashed var(--line-2); border-radius: 10px; background: #fff; font-size: 0.8125rem; color: var(--ink-3); margin-bottom: 12px; text-align: center; }
-    .sp2-doc-meta { font-size: 0.8125rem; color: var(--ink-3); line-height: 1.5; margin: 0 0 12px; }
-    .sp2-doc-input { display: block; width: 100%; padding: 8px 10px; font-size: 0.8125rem; border: 1px solid var(--line); border-radius: 8px; background: #fff; color: var(--ink); }
-    .sp2-doc-submit-row { margin-top: 8px; display: flex; justify-content: flex-end; }
-
-    /* Activity tab */
-    .sp2-activity { display: flex; flex-direction: column; }
-    .sp2-activity-row { display: flex; gap: 12px; align-items: center; padding: 14px 0; border-bottom: 1px solid var(--line); }
-    .sp2-activity-row:last-child { border-bottom: none; }
-    .sp2-activity-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ink-4); flex: 0 0 auto; }
-    .sp2-activity-dot.emerald { background: var(--emerald); }
-    .sp2-activity-dot.red { background: var(--red); }
-    .sp2-activity-dot.amber { background: var(--amber); }
-    .sp2-activity-body { flex: 1; min-width: 0; }
-    .sp2-activity-desc { margin: 0; font-size: 0.875rem; color: var(--ink); font-weight: 600; overflow-wrap: break-word; }
-    .sp2-activity-sub { margin: 2px 0 0; font-size: 0.75rem; color: var(--ink-3); }
-    .sp2-activity-time { font-size: 0.8125rem; color: var(--ink-4); flex: 0 0 auto; text-align: right; }
-    .sp2-empty { padding: 32px 16px; text-align: center; color: var(--ink-3); font-size: 0.875rem; }
+    /* Documents */
+    .sp2-doc-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 14px; margin-bottom: var(--stu-gap); }
+    .sp2-doc-slot {
+        border: 1px solid var(--line); border-radius: var(--stu-r-md);
+        padding: 16px; background: var(--bg); min-width: 0;
+        transition: border-color .18s ease, background .18s ease;
+    }
+    .sp2-doc-slot.is-complete { border-color: var(--stu-emerald-line); background: var(--stu-emerald-wash); }
+    .sp2-doc-head {
+        display: flex; align-items: center; justify-content: space-between; gap: 8px;
+        font-size: 10.5px; font-weight: 800; text-transform: uppercase;
+        letter-spacing: .09em; color: var(--ink-4); margin: 0 0 12px;
+    }
+    .sp2-doc-thumb {
+        width: 64px; height: 64px; border-radius: var(--stu-r-sm); overflow: hidden;
+        border: 1px solid var(--line); background: var(--bg-2); margin-bottom: 12px;
+    }
+    .sp2-doc-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .sp2-doc-thumb .cernix-passport-photo {
+        width: 64px !important; height: 64px !important;
+        border-radius: var(--stu-r-sm) !important; box-shadow: none !important;
+    }
+    .sp2-doc-thumb-empty {
+        width: 64px; height: 64px; border-radius: var(--stu-r-sm);
+        border: 1.5px dashed var(--line-2); background: var(--bg-2);
+        display: grid; place-items: center; margin-bottom: 12px;
+        color: var(--ink-4); font-size: 10px; font-weight: 800; text-transform: uppercase;
+    }
+    .sp2-doc-placeholder {
+        padding: 16px; border: 1.5px dashed var(--line-2); border-radius: var(--stu-r-sm);
+        background: var(--bg-2); font-size: 13px; color: var(--ink-3);
+        margin-bottom: 12px; text-align: center;
+    }
+    .sp2-doc-meta { font-size: 12.5px; color: var(--ink-3); line-height: 1.55; margin: 0 0 12px; }
+    .sp2-doc-input {
+        display: block; width: 100%; padding: 9px 11px; font-size: 12.5px;
+        border: 1px solid var(--line-2); border-radius: 9px;
+        background: var(--bg-2); color: var(--ink);
+        transition: border-color .18s ease, box-shadow .18s ease;
+    }
+    .sp2-doc-input:focus { outline: none; border-color: var(--navy); box-shadow: 0 0 0 3px var(--stu-navy-wash); }
+    .sp2-doc-submit-row { margin-top: 12px; display: flex; justify-content: flex-end; }
 
     /* Section head inside tabs */
     .sp2-sec-head { margin: 0 0 16px; }
-    .sp2-sec-head h3 { margin: 0 0 4px; font-size: 0.9375rem; font-weight: 700; color: var(--ink); }
-    .sp2-sec-head p { margin: 0; font-size: 0.8125rem; color: var(--ink-3); line-height: 1.5; }
+    .sp2-sec-head h3 { margin: 0 0 5px; font-size: 15.5px; font-weight: 800; letter-spacing: -.015em; color: var(--ink); }
+    .sp2-sec-head p { margin: 0; font-size: 13px; color: var(--ink-3); line-height: 1.55; }
 
-    .sp2-err { color: var(--red); font-size: 0.75rem; margin: 4px 0 0; }
+    .sp2-err { color: var(--red); font-size: 12px; margin: 5px 0 0; }
 
-    /* Mobile */
+    /* Activity rows sit flush inside the already-padded tab panel */
+    .sp2-activity .stu-row { padding-left: 0; padding-right: 0; }
+    .sp2-activity .stu-row:last-child { border-bottom: 0; }
+
     @media (max-width: 640px) {
-        .sp2-id-card { flex-direction: column; align-items: flex-start; padding: 20px; }
-        .sp2-stats { grid-template-columns: 1fr; }
-        .sp2-doc-grid { grid-template-columns: 1fr; }
-        .sp2-field-grid { grid-template-columns: 1fr; }
-        .sp2-tabbtn { padding: 0 10px; font-size: 0.8125rem; }
+        .sp2-doc-grid, .sp2-field-grid { grid-template-columns: 1fr; }
+        .sp2-tabbtn { padding: 0 8px; font-size: 12.5px; }
     }
 </style>
 
 {{-- Status messages --}}
 @if(session('status'))
-    <div class="cx-notice success sp2-notice">{{ session('status') }}</div>
+    <div class="cx-notice success">{{ session('status') }}</div>
 @endif
 @if($errors->any())
-    <div class="cx-notice error sp2-notice">{{ $errors->first() }}</div>
+    <div class="cx-notice error">{{ $errors->first() }}</div>
 @endif
 
-{{-- Identity card --}}
-<section class="sp2-id-card">
-    @if($hasProfilePhoto)
-        <div class="sp2-id-photo">
-            <x-student-photo :student="$student" size="profile" />
-        </div>
-    @else
-        <div class="sp2-id-fallback" aria-hidden="true">{{ $pInitials }}</div>
-    @endif
-    <div class="sp2-id-body">
-        <h1 class="sp2-id-name">{{ $student->full_name }}</h1>
-        <span class="sp2-id-matric">{{ $student->matric_no }}</span>
-        <p class="sp2-id-meta">
-            {{ $student->faculty ?? 'Faculty on record pending' }} &middot; {{ $student->dept_name ?? 'Department pending' }}<br>
-            {{ !empty($student->level) ? $student->level . ' Level' : 'Level not set' }} &middot; {{ trim(($session->semester ?? '') . ' ' . ($session->academic_year ?? '')) ?: 'No active session' }}
+{{-- ── Identity anchor ───────────────────────────────────────────────
+     Deliberately identical in structure to the dashboard hero so moving
+     between the two pages feels like one continuous product. --}}
+<section class="stu-identity" aria-label="Your identity">
+    <div class="stu-avatar-wrap">
+        @if($hasProfilePhoto)
+            <x-student-photo :student="$student" size="profile" class="stu-avatar" />
+        @else
+            <span class="stu-avatar-fallback" aria-hidden="true">{{ $pInitials }}</span>
+        @endif
+        @if($photoStatus === 'approved')
+            <span class="stu-avatar-badge" title="Identity verified" aria-label="Identity verified">
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 8.5l3 3 6-6"/></svg>
+            </span>
+        @endif
+    </div>
+    <div class="stu-identity-body">
+        <p class="stu-identity-greet">Student Profile</p>
+        <h1 class="stu-identity-name">{{ $student->full_name }}</h1>
+        <span class="stu-identity-matric">{{ $student->matric_no }}</span>
+        <p class="stu-identity-meta">
+            <span>{{ $student->dept_name ?? 'Department pending' }}</span>
+            <span class="sep">&middot;</span>
+            <span>{{ !empty($student->level) ? $student->level . ' Level' : 'Level not set' }}</span>
+            <span class="sep">&middot;</span>
+            <span>{{ trim(($session->semester ?? '') . ' ' . ($session->academic_year ?? '')) ?: 'No active session' }}</span>
         </p>
-        <div class="sp2-id-badges">
+        <div class="stu-identity-badges">
             <span class="chip emerald">Active</span>
-            <span class="chip {{ $photoStatusChip }}">{{ $photoStatusLabel }}</span>
+            <span class="chip {{ $photoStatusChip }} {{ $photoStatus === 'pending_admin_approval' ? 'stu-breathe' : '' }}">{{ $photoStatusLabel }}</span>
         </div>
         @if($photoStatus === 'rejected' && $photoRejectionReason !== '')
-            <p class="sp2-id-hint" style="margin:6px 0 0;font-size:12px;color:var(--ink-3);line-height:1.4">Reason: {{ $photoRejectionReason }}</p>
+            <p style="margin:10px 0 0;font-size:12.5px;color:var(--red);line-height:1.5">Reason: {{ $photoRejectionReason }}</p>
         @elseif($photoStatus !== 'approved' && $photoStatus !== 'pending_admin_approval' && $photoStatus !== 'flagged')
-            <p class="sp2-id-hint" style="margin:6px 0 0;font-size:12px;color:var(--ink-3);line-height:1.4">Upload your verification photo in <a href="#documents" data-sp2-tab-link="documents" style="color:var(--navy);font-weight:700;text-decoration:none">Documents</a> to complete verification.</p>
+            <p style="margin:10px 0 0;font-size:12.5px;color:var(--ink-3);line-height:1.5">Upload your verification photo in <a href="#documents" data-sp2-tab-link="documents" style="color:var(--navy);font-weight:700;text-decoration:none">Documents</a> to complete verification.</p>
         @endif
     </div>
 </section>
 
-{{-- Stat cards --}}
-<section class="sp2-stats">
-    <div class="sp2-stat">
-        <p class="sp2-stat-num">{{ $passesAll->count() }}</p>
-        <p class="sp2-stat-lbl">Assessments Linked</p>
+{{-- ── Summary statistics ────────────────────────────────────────────── --}}
+<section class="stu-stats">
+    <div class="stu-stat">
+        <p class="stu-stat-num">{{ $passesAll->count() }}</p>
+        <p class="stu-stat-lbl">Assessments Linked</p>
     </div>
-    <div class="sp2-stat">
-        <p class="sp2-stat-num">{{ $tokensAll->count() }}</p>
-        <p class="sp2-stat-lbl">QR Passes Generated</p>
+    <div class="stu-stat emerald">
+        <p class="stu-stat-num">{{ $tokensAll->count() }}</p>
+        <p class="stu-stat-lbl">QR Passes Generated</p>
     </div>
-    <div class="sp2-stat">
-        <p class="sp2-stat-num">{{ $scans->count() }}</p>
-        <p class="sp2-stat-lbl">Recent Scans</p>
-        <p class="sp2-stat-note">(last 10)</p>
+    <div class="stu-stat amber">
+        <p class="stu-stat-num">{{ $scans->count() }}</p>
+        <p class="stu-stat-lbl">Recent Scans</p>
+        <p class="stu-stat-note">Last 10 events</p>
     </div>
 </section>
 
@@ -204,7 +222,7 @@
             <h3>Academic Information</h3>
             <p>Sourced from the institutional registry. Contact the registry office to request changes.</p>
         </div>
-        <p class="sp2-readonly-note">These fields are read-only. They are populated from the official student registry and cannot be edited from the portal.</p>
+        <div class="cx-notice">These fields are read-only. They are populated from the official student registry and cannot be edited from the portal.</div>
         <div class="sp2-field-grid">
             <div class="sp2-field">
                 <span class="sp2-field-lbl">Matric Number</span>
@@ -242,8 +260,11 @@
 
         {{-- Profile photo slot --}}
         <div class="sp2-doc-grid">
-            <div class="sp2-doc-slot">
-                <p class="sp2-doc-head">Profile Photo</p>
+            <div class="sp2-doc-slot {{ $hasProfilePhoto ? 'is-complete' : '' }}">
+                <p class="sp2-doc-head">
+                    <span>Profile Photo</span>
+                    @if($hasProfilePhoto)<span class="chip emerald stu-chip-sm">On file</span>@endif
+                </p>
                 @if($hasProfilePhoto)
                     <div class="sp2-doc-thumb"><x-student-photo :student="$student" size="compact" /></div>
                 @else
@@ -287,8 +308,9 @@
                         </p>
                         <input class="sp2-doc-input" type="file" name="profile_photo" accept="image/jpeg,image/png,image/webp" required>
                         @error('profile_photo')<p class="sp2-err">{{ $message }}</p>@enderror
-                        <div class="sp2-doc-submit-row">
+                        <div class="sp2-doc-submit-row" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
                             <button type="submit" class="btn btn-primary">{{ $hasProfilePhoto ? 'Replace &amp; Lock' : 'Upload &amp; Lock' }}</button>
+                            <x-loading-state preset="upload" inline="true" />
                         </div>
                     </form>
                 @endif
@@ -331,8 +353,11 @@
             @csrf
             <div class="sp2-doc-grid">
                 {{-- Selfie slot --}}
-                <div class="sp2-doc-slot">
-                    <p class="sp2-doc-head">Verification Selfie</p>
+                <div class="sp2-doc-slot {{ $hasSelfie ? 'is-complete' : '' }}">
+                    <p class="sp2-doc-head">
+                        <span>Verification Selfie</span>
+                        @if($hasSelfie)<span class="chip emerald stu-chip-sm">On file</span>@endif
+                    </p>
                     @if($hasSelfie && $selfieUrl)
                         <div class="sp2-doc-thumb"><img src="{{ $selfieUrl }}" alt="Selfie on file"></div>
                     @else
@@ -350,8 +375,11 @@
                 </div>
 
                 {{-- ID card slot --}}
-                <div class="sp2-doc-slot">
-                    <p class="sp2-doc-head">School ID Card</p>
+                <div class="sp2-doc-slot {{ $hasIdCard ? 'is-complete' : '' }}">
+                    <p class="sp2-doc-head">
+                        <span>School ID Card</span>
+                        @if($hasIdCard)<span class="chip emerald stu-chip-sm">On file</span>@endif
+                    </p>
                     <div class="sp2-doc-placeholder">{{ $hasIdCard ? 'File on record' : 'Not uploaded' }}</div>
                     <p class="sp2-doc-meta">
                         <span class="chip {{ $photoStatusChip }}">{{ $photoStatusLabel }}</span>
@@ -386,7 +414,13 @@
             <p>Verification scans performed against your QR passes. Shows the most recent 10 events.</p>
         </div>
         @if($scans->count() === 0)
-            <div class="sp2-empty">No activity recorded yet.</div>
+            <div class="stu-empty">
+                <span class="stu-empty-icon" aria-hidden="true">
+                    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="10" cy="10" r="7.5"/><path d="M10 6v4l2.5 2"/></svg>
+                </span>
+                <b>No activity recorded yet</b>
+                <span>Verification scans against your QR passes will appear here after your first exam check-in.</span>
+            </div>
         @else
             <div class="sp2-activity">
                 @foreach($scans as $scan)
@@ -401,15 +435,15 @@
                         $examinerName = $scan->examiner_name ?? ($scan->examiner_username ?? 'Unknown examiner');
                         $when = !empty($scan->timestamp) ? \Illuminate\Support\Carbon::parse($scan->timestamp)->timezone(config('app.timezone'))->format('d M Y, H:i') : '—';
                     @endphp
-                    <div class="sp2-activity-row">
-                        <span class="sp2-activity-dot {{ $dotClass }}" aria-hidden="true"></span>
-                        <div class="sp2-activity-body">
-                            <p class="sp2-activity-desc">Scanned by {{ $examinerName }} — {{ $decision ?: 'Recorded' }}</p>
-                            @if(!empty($scan->reason))
-                                <p class="sp2-activity-sub">{{ $scan->reason }}</p>
-                            @endif
+                    <div class="stu-row">
+                        <span class="stu-dot {{ $dotClass ?: 'idle' }}" aria-hidden="true"></span>
+                        <div class="stu-row-body">
+                            <b>Scanned by {{ $examinerName }}</b>
+                            <span>{{ $decision ?: 'Recorded' }}@if(!empty($scan->reason)) &middot; {{ $scan->reason }}@endif</span>
                         </div>
-                        <span class="sp2-activity-time">{{ $when }}</span>
+                        <div class="stu-row-meta">
+                            <span class="stu-mono" style="font-size:11.5px;color:var(--ink-4)">{{ $when }}</span>
+                        </div>
                     </div>
                 @endforeach
             </div>

@@ -130,7 +130,7 @@ class StudentPortalWebTest extends TestCase
             ->assertSee('Payment pending')
             ->assertSee('Course QR Access')
             ->assertSee('Not Generated')
-            ->assertSee('Generate QR Pass')
+            ->assertSee('Open My Exams')
             ->assertDontSee('href="' . route('student.exam-access-id') . '"', false)
             ->assertDontSee(route('student.payment'), false)
             ->assertDontSee(route('student.instructions'), false);
@@ -524,7 +524,9 @@ class StudentPortalWebTest extends TestCase
 
         $this->get('/student/dashboard')
             ->assertOk()
-            ->assertSee('sp-scan-row', false)
+            // Renamed from 'sp-scan-row' when the student flow moved onto the
+            // shared .stu-* design system. Same element, same intent.
+            ->assertSee('stu-scan-row', false)
             ->assertSee('Showing the latest 3 of 10 access records')
             ->assertSee('Repeated scan recorded');
     }

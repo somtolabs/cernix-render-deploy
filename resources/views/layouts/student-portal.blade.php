@@ -18,6 +18,9 @@
         ['key' => 'profile',       'label' => 'Profile',          'route' => 'student.profile'],
     ];
 @endphp
+
+@include('student.partials.design-system')
+
 <style>
     .sp-shell { min-height: 100dvh; background: var(--bg); color: var(--ink); overflow-x: clip; overflow-y: visible; }
 
