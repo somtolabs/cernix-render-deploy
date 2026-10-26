@@ -113,6 +113,18 @@
         }
 
         document.addEventListener('submit', function (ev) {
+            var form = ev.target;
+            if (form && !ev.defaultPrevented) {
+                var btns = form.querySelectorAll('button[type="submit"], input[type="submit"], .admin-action:not([type="button"]):not([href])');
+                setTimeout(function () {
+                    btns.forEach(function (btn) {
+                        btn.disabled = true;
+                        btn.style.opacity = '0.65';
+                        btn.style.cursor = 'not-allowed';
+                        btn.setAttribute('aria-busy', 'true');
+                    });
+                }, 10);
+            }
             var node = findNodeFor(ev.target);
             if (node) activate(node);
         }, true);

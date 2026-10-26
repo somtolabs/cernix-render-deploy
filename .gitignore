@@ -26,3 +26,4 @@ __pycache__/
 /.vscode
 /.zed
 .claude/worktrees/
+extracted_files_dump.txt

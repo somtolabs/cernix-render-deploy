@@ -287,11 +287,22 @@
                     @if($canManageSettings)
                         <form method="POST" action="{{ route('admin.settings.branding.update') }}" enctype="multipart/form-data" style="padding:0 20px 16px">
                             @csrf
-                            <label class="admin-label" for="branding_logo" style="display:block;margin-bottom:6px">Replace logo</label>
-                            <input class="st-input" id="branding_logo" name="branding_logo" type="file"
-                                   accept=".png,.jpg,.jpeg,.webp,image/png,image/jpeg,image/webp" required>
-                            <p style="margin:6px 0 12px;font-size:12px;color:var(--ink-3)">PNG, JPEG, or WebP · max 2 MB. Transparent background recommended.</p>
-                            <button class="admin-action" type="submit">Update Logo</button>
+                            <label class="admin-label" style="display:block;margin-bottom:8px;font-size:11px;font-weight:900;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-3)">Replace System Logo</label>
+                            <x-file-uploader
+                                name="branding_logo"
+                                id="branding_logo"
+                                accept=".png,.jpg,.jpeg,.webp,image/png,image/jpeg,image/webp"
+                                maxSizeMb="2"
+                                label="Upload New System Logo"
+                                help="Drag and drop your logo file here, or click to browse"
+                                subHelp="Supported: PNG, JPEG, or WebP &middot; Max 2 MB &middot; Transparent background recommended"
+                                :isImage="true"
+                                :required="true"
+                            />
+                            <div style="display:flex;align-items:center;gap:10px;margin-top:12px;flex-wrap:wrap">
+                                <button class="admin-action" type="submit">Update Logo</button>
+                                <x-loading-state preset="upload" inline="true" />
+                            </div>
                         </form>
                     @else
                         <p style="padding:0 20px 16px;margin:0;font-size:13px;color:var(--ink-3)">Only Super Admin can replace the system logo.</p>

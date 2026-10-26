@@ -20,6 +20,23 @@
         @endif
     </div>
 @endif
+@if(session('last_import_id') && isset($imports) && $imports->first() && $imports->first()->failed_rows > 0)
+    <div class="admin-notice" style="margin-bottom:16px;border-left-color:var(--red);background:rgba(220,38,38,.06);padding:14px 18px">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
+            <div>
+                <strong style="color:var(--red);font-size:13.5px">Action Required: {{ $imports->first()->failed_rows }} row(s) failed during import</strong>
+                <p style="margin:4px 0 0;font-size:12.5px;color:var(--ink-2)">
+                    Valid student rows were successfully saved to the registry. Download the rejected rows CSV below to review the specific rejection reasons, fix them, and re-upload.
+                </p>
+            </div>
+            <a href="{{ route('admin.student-registry.rejected-rows', session('last_import_id')) }}"
+               class="admin-action"
+               style="background:var(--red);color:#fff;border-color:var(--red);font-size:12px;padding:8px 14px;white-space:nowrap">
+                Download Rejected Rows CSV
+            </a>
+        </div>
+    </div>
+@endif
 @if($errors->any())
     <div class="admin-notice error" style="margin-bottom:16px">{{ $errors->first() }}</div>
 @endif
@@ -275,7 +292,6 @@
         @else
         <form method="POST" action="{{ route('admin.student-registry.import') }}" enctype="multipart/form-data" id="registryImportForm">
             @csrf
-            <input type="file" name="registry_csv" id="registryCsvInput" accept=".csv,text/csv" required style="display:none">
 
             <div class="import-wizard">
                 {{-- Step indicators --}}
@@ -298,25 +314,29 @@
 
                 {{-- Step 1: Select file --}}
                 <div class="import-panel active" id="importStep1">
-                    <div class="import-drop-zone" id="importDropZone">
-                        <div class="import-drop-title">Drop your CSV file here</div>
-                        <div class="import-drop-sub">
-                            or <strong>click to browse</strong><br>
-                            Required columns: <code>matric_number</code> <code>full_name</code> <code>department</code> <code>faculty</code> <code>level</code><br>
-                            Optional: <code>programme</code> <code>academic_session</code> <code>status</code>
-                        </div>
-                        <div class="import-drop-chosen" id="importChosen" style="display:none"></div>
-                    </div>
+                    <x-file-uploader
+                        name="registry_csv"
+                        id="registryCsvInput"
+                        accept=".csv,text/csv"
+                        maxSizeMb="5"
+                        label="Upload Official Student Registry CSV"
+                        help="Drag and drop your university student registry CSV here, or click to browse"
+                        subHelp="Required header columns: <code>matric_number</code> <code>full_name</code> <code>department</code> <code>faculty</code> <code>level</code>"
+                        :required="true"
+                    />
                     <div id="importStep1Error" class="admin-notice error" style="display:none;margin-top:12px"></div>
                 </div>
 
                 {{-- Step 2: Validate & Preview --}}
                 <div class="import-panel" id="importStep2">
-                    <div id="importColCheck" class="import-col-check"></div>
+                    <div style="background:#fff;border:1px solid var(--line);border-radius:12px;padding:14px 16px;margin-bottom:14px">
+                        <span style="display:block;font-size:11px;font-weight:900;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-4);margin-bottom:8px">Header Verification</span>
+                        <div id="importColCheck" class="import-col-check"></div>
+                    </div>
                     <div id="importStep2Error" class="admin-notice error" style="display:none;margin-bottom:10px"></div>
                     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;flex-wrap:wrap;gap:8px">
-                        <span style="font-size:11px;font-weight:900;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-3)">Preview — first 10 rows</span>
-                        <span id="importRowCount" style="font-size:12px;color:var(--ink-3)"></span>
+                        <span style="font-size:11px;font-weight:900;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-3)">Preview — first 10 data rows</span>
+                        <span id="importRowCount" style="font-size:12px;color:var(--ink-3);font-family:'JetBrains Mono',monospace"></span>
                     </div>
                     <div class="reg-preview-wrap">
                         <div class="reg-preview-scroll">
@@ -328,7 +348,7 @@
                     </div>
                     <div style="display:flex;gap:10px;margin-top:16px;flex-wrap:wrap">
                         <button type="button" class="admin-action ghost" id="importBack1">← Back</button>
-                        <button type="button" class="admin-action" id="importToStep3" disabled>Continue →</button>
+                        <button type="button" class="admin-action" id="importToStep3" disabled>Continue to Confirmation →</button>
                     </div>
                 </div>
 
@@ -362,7 +382,7 @@
                         Students who registered with conflicting data will be synced to this CSV's values.
                         This operation runs inside a transaction — if anything fails, no changes are made.
                     </div>
-                    <div style="display:flex;gap:10px;flex-wrap:wrap">
+                    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
                         <button type="button" class="admin-action ghost" id="importBack2">← Back</button>
                         <button type="submit" class="admin-action" id="registryImportBtn">Import Registry Now</button>
                         <x-loading-state preset="import" inline="true" />
@@ -383,32 +403,21 @@
     var totalRows = 0;
 
     var input    = document.getElementById('registryCsvInput');
-    var dropZone = document.getElementById('importDropZone');
-    var chosen   = document.getElementById('importChosen');
     var step1Err = document.getElementById('importStep1Error');
     var step2Err = document.getElementById('importStep2Error');
 
-    if (!input || !dropZone) return;
-
-    // ── Drop zone click ──────────────────────────────────
-    dropZone.addEventListener('click', function() { input.click(); });
-    dropZone.addEventListener('dragover', function(e) { e.preventDefault(); dropZone.classList.add('drag-over'); });
-    dropZone.addEventListener('dragleave', function() { dropZone.classList.remove('drag-over'); });
-    dropZone.addEventListener('drop', function(e) {
-        e.preventDefault();
-        dropZone.classList.remove('drag-over');
-        var file = e.dataTransfer.files[0];
-        if (file) { setFile(file); }
-    });
+    if (!input) return;
 
     input.addEventListener('change', function() {
-        if (this.files[0]) setFile(this.files[0]);
+        if (this.files && this.files[0]) {
+            setFile(this.files[0]);
+        } else {
+            goToStep(1);
+        }
     });
 
     function setFile(file) {
-        step1Err.style.display = 'none';
-        chosen.textContent = file.name + ' (' + (file.size / 1024).toFixed(1) + ' KB)';
-        chosen.style.display = '';
+        if (step1Err) step1Err.style.display = 'none';
 
         var reader = new FileReader();
         reader.onload = function(e) { processFile(file, e.target.result); };
@@ -419,8 +428,11 @@
         var lines = text.split(/\r?\n/).filter(function(l) { return l.trim() !== ''; });
 
         if (lines.length < 2) {
-            step1Err.textContent = 'The file appears empty or contains no data rows.';
-            step1Err.style.display = '';
+            if (step1Err) {
+                step1Err.textContent = 'The selected file appears empty or contains no data rows.';
+                step1Err.style.display = 'block';
+            }
+            goToStep(1);
             return;
         }
 
@@ -430,39 +442,59 @@
 
         // Column check display
         var colCheck = document.getElementById('importColCheck');
-        colCheck.innerHTML = REQUIRED.map(function(r) {
-            var ok = parsedHeaders.indexOf(r) !== -1;
-            return '<span class="' + (ok ? 'import-col-ok' : 'import-col-miss') + '">' + r + '</span>';
-        }).join('');
+        if (colCheck) {
+            colCheck.innerHTML = REQUIRED.map(function(r) {
+                var ok = parsedHeaders.indexOf(r) !== -1;
+                return '<span class="' + (ok ? 'import-col-ok' : 'import-col-miss') + '">' + (ok ? '✓ ' : '✗ ') + r + '</span>';
+            }).join('');
+        }
 
         // Preview table
-        document.getElementById('importPreviewHead').innerHTML = '<tr>' + parsedHeaders.map(function(h) { return '<th>' + esc(h) + '</th>'; }).join('') + '</tr>';
-        document.getElementById('importPreviewBody').innerHTML = lines.slice(1, 11).map(function(line) {
-            return '<tr>' + parseCSVRow(line).map(function(c) { return '<td>' + esc(c) + '</td>'; }).join('') + '</tr>';
-        }).join('');
-        document.getElementById('importRowCount').textContent = totalRows + ' data row' + (totalRows !== 1 ? 's' : '') + ' detected';
+        var headEl = document.getElementById('importPreviewHead');
+        var bodyEl = document.getElementById('importPreviewBody');
+        var countEl = document.getElementById('importRowCount');
 
+        if (headEl) headEl.innerHTML = '<tr>' + parsedHeaders.map(function(h) { return '<th>' + esc(h) + '</th>'; }).join('') + '</tr>';
+        if (bodyEl) {
+            bodyEl.innerHTML = lines.slice(1, 11).map(function(line) {
+                return '<tr>' + parseCSVRow(line).map(function(c) { return '<td>' + esc(c) + '</td>'; }).join('') + '</tr>';
+            }).join('');
+        }
+        if (countEl) countEl.textContent = totalRows + ' data row' + (totalRows !== 1 ? 's' : '') + ' detected';
+
+        var toStep3Btn = document.getElementById('importToStep3');
         if (missing.length > 0) {
-            step2Err.textContent = 'Missing required columns: ' + missing.join(', ') + '. Fix the CSV headers and re-select.';
-            step2Err.style.display = '';
-            document.getElementById('importToStep3').disabled = true;
+            if (step2Err) {
+                step2Err.textContent = 'Missing required columns: ' + missing.join(', ') + '. Fix the CSV headers and re-select.';
+                step2Err.style.display = 'block';
+            }
+            if (toStep3Btn) toStep3Btn.disabled = true;
         } else {
-            step2Err.style.display = 'none';
-            document.getElementById('importToStep3').disabled = false;
+            if (step2Err) step2Err.style.display = 'none';
+            if (toStep3Btn) toStep3Btn.disabled = false;
         }
 
         goToStep(2);
     }
 
-    document.getElementById('importBack1').addEventListener('click', function() { goToStep(1); });
-    document.getElementById('importBack2').addEventListener('click', function() { goToStep(2); });
+    var back1 = document.getElementById('importBack1');
+    var back2 = document.getElementById('importBack2');
+    var toStep3 = document.getElementById('importToStep3');
 
-    document.getElementById('importToStep3').addEventListener('click', function() {
-        document.getElementById('importSumFile').textContent = input.files[0] ? input.files[0].name : '—';
-        document.getElementById('importSumRows').textContent = totalRows;
-        document.getElementById('importSumCols').textContent = parsedHeaders.join(', ');
-        goToStep(3);
-    });
+    if (back1) back1.addEventListener('click', function() { goToStep(1); });
+    if (back2) back2.addEventListener('click', function() { goToStep(2); });
+
+    if (toStep3) {
+        toStep3.addEventListener('click', function() {
+            var sumFile = document.getElementById('importSumFile');
+            var sumRows = document.getElementById('importSumRows');
+            var sumCols = document.getElementById('importSumCols');
+            if (sumFile) sumFile.textContent = input.files[0] ? input.files[0].name : '—';
+            if (sumRows) sumRows.textContent = totalRows;
+            if (sumCols) sumCols.textContent = parsedHeaders.join(', ');
+            goToStep(3);
+        });
+    }
 
     function goToStep(n) {
         currentStep = n;
@@ -611,11 +643,21 @@
                 </div>
                 <span class="rg-import-rows">{{ $import->total_rows }} rows</span>
             </div>
-            <div class="rg-import-badges">
-                @if($newCount !== null)<span class="admin-status green">+{{ $newCount }} new</span>@endif
-                @if($updCount !== null && $updCount > 0)<span class="admin-status neutral">{{ $updCount }} updated</span>@endif
-                @if($cflCount > 0)<span class="admin-status amber">{{ $cflCount }} conflict{{ $cflCount !== 1 ? 's' : '' }}</span>@endif
-                @if($errCount > 0)<span class="admin-status red">{{ $errCount }} failed</span>@else<span style="font-size:11px;color:var(--ink-4)">0 failures</span>@endif
+            <div class="rg-import-badges" style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
+                <div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center">
+                    @if($newCount !== null)<span class="admin-status green">+{{ $newCount }} new</span>@endif
+                    @if($updCount !== null && $updCount > 0)<span class="admin-status neutral">{{ $updCount }} updated</span>@endif
+                    @if($cflCount > 0)<span class="admin-status amber">{{ $cflCount }} conflict{{ $cflCount !== 1 ? 's' : '' }}</span>@endif
+                    @if($errCount > 0)<span class="admin-status red">{{ $errCount }} failed</span>@else<span style="font-size:11px;color:var(--ink-4)">0 failures</span>@endif
+                </div>
+                @if($errCount > 0)
+                    <a href="{{ route('admin.student-registry.rejected-rows', $import->id) }}"
+                       class="admin-action ghost"
+                       style="font-size:11.5px;min-height:28px;padding:0 10px;color:var(--red);border-color:rgba(220,38,38,.3)"
+                       title="Download rejected rows from this import">
+                        Download {{ $errCount }} Rejected Row{{ $errCount > 1 ? 's' : '' }}
+                    </a>
+                @endif
             </div>
         </div>
     @empty
