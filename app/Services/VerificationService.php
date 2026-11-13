@@ -18,7 +18,14 @@ class VerificationService
      * invalid or untrusted passes, with display_status providing the safe
      * examiner-facing explanation.
      */
-    public function verifyQr(array $qrData, int $examinerId, string $deviceFp, string $ip): array
+    public function verifyQr(
+        array $qrData,
+        int $examinerId,
+        string $deviceFp,
+        string $ip,
+        ?int $expectedTimetableId = null,
+        array $options = []
+    ): array
     {
         $now = now();
         $timestamp = $now->toIso8601String();
@@ -167,6 +174,22 @@ class VerificationService
             );
         }
 
+        // Contextual examination session / hall enforcement:
+        // Must reject BEFORE mutating token or writing verification log.
+        if ($expectedTimetableId !== null && (int) $tokenTimetableId !== (int) $expectedTimetableId) {
+            return $this->rejected(
+                reason: 'wrong_session',
+                timestamp: $timestamp,
+                qrData: $qrData,
+                token: $token,
+                payload: $payload,
+                examinerId: $examinerId,
+                deviceFp: $deviceFp,
+                ip: $ip,
+                now: $now,
+            );
+        }
+
         $exam = DB::table('timetables')
             ->where('id', $tokenTimetableId)
             ->where('exam_session_id', $qrSessionId)
@@ -187,6 +210,68 @@ class VerificationService
                 ip: $ip,
                 now: $now,
             );
+        }
+
+        // Custom roster enforcement if applicable (tests/makeups)
+        if (Schema::hasTable('timetable_students')) {
+            $hasCustomRoster = DB::table('timetable_students')
+                ->where('timetable_id', $tokenTimetableId)
+                ->exists();
+            if ($hasCustomRoster) {
+                $isInRoster = DB::table('timetable_students')
+                    ->where('timetable_id', $tokenTimetableId)
+                    ->where('matric_no', $student->matric_no)
+                    ->exists();
+                if (! $isInRoster) {
+                    return $this->rejected(
+                        reason: 'course_not_assigned',
+                        timestamp: $timestamp,
+                        qrData: $qrData,
+                        token: $token,
+                        payload: $payload,
+                        examinerId: $examinerId,
+                        deviceFp: $deviceFp,
+                        ip: $ip,
+                        now: $now,
+                    );
+                }
+            }
+        }
+
+        // Examiner assignment enforcement
+        if (! empty($options['enforce_examiner']) && DB::getSchemaBuilder()->hasColumn('timetables', 'examiner_id')) {
+            if ($exam->examiner_id !== null && (int) $exam->examiner_id !== $examinerId) {
+                return $this->rejected(
+                    reason: 'wrong_examiner',
+                    timestamp: $timestamp,
+                    qrData: $qrData,
+                    token: $token,
+                    payload: $payload,
+                    examinerId: $examinerId,
+                    deviceFp: $deviceFp,
+                    ip: $ip,
+                    now: $now,
+                );
+            }
+        }
+
+        // Time window enforcement
+        if (! empty($options['enforce_time_window']) && ! empty($exam->start_time) && ! empty($exam->end_time)) {
+            $earliest = \Carbon\Carbon::parse($exam->start_time)->subMinutes(60);
+            $latest   = \Carbon\Carbon::parse($exam->end_time)->addMinutes(60);
+            if ($now->lt($earliest) || $now->gt($latest)) {
+                return $this->rejected(
+                    reason: 'outside_time_window',
+                    timestamp: $timestamp,
+                    qrData: $qrData,
+                    token: $token,
+                    payload: $payload,
+                    examinerId: $examinerId,
+                    deviceFp: $deviceFp,
+                    ip: $ip,
+                    now: $now,
+                );
+            }
         }
 
         $examType = strtolower((string) ($exam->assessment_type ?? 'exam'));
@@ -220,14 +305,22 @@ class VerificationService
             'end_time' => $exam->end_time,
         ];
 
-        // Status mutation and its verification log are one transaction. A log
-        // failure can no longer consume a valid pass and then surface as rejected.
+        // Determine whether attendance must be recorded
+        $recordAttendance = ! empty($options['record_attendance'])
+            || ($expectedTimetableId !== null && Schema::hasTable('attendance_records'));
+
+        // Status mutation, attendance persistence, and verification log are one atomic transaction.
+        // If attendance persistence fails, the entire transaction rolls back and the token is NOT consumed.
         $statusResult = DB::transaction(function () use (
             $tokenId,
             $examinerId,
             $deviceFp,
             $ip,
-            $now
+            $now,
+            $recordAttendance,
+            $student,
+            $tokenTimetableId,
+            $qrSessionId
         ): array {
             $locked = DB::table('qr_tokens')
                 ->where('token_id', $tokenId)
@@ -236,19 +329,20 @@ class VerificationService
 
             if (! $locked) {
                 return [
-                    'decision' => 'REJECTED',
-                    'reason' => 'token_not_found',
-                    'used_at' => null,
-                    'trace_id' => null,
+                    'decision'      => 'REJECTED',
+                    'reason'        => 'token_not_found',
+                    'used_at'       => null,
+                    'trace_id'      => null,
+                    'attendance_id' => null,
                 ];
             }
 
             if ($locked->status === 'USED') {
                 return [
-                    'decision' => 'DUPLICATE',
-                    'reason' => 'token_already_used',
-                    'used_at' => $locked->used_at ? (string) $locked->used_at : null,
-                    'trace_id' => $this->log(
+                    'decision'      => 'DUPLICATE',
+                    'reason'        => 'token_already_used',
+                    'used_at'       => $locked->used_at ? (string) $locked->used_at : null,
+                    'trace_id'      => $this->log(
                         $tokenId,
                         $examinerId,
                         'DUPLICATE',
@@ -256,15 +350,16 @@ class VerificationService
                         $ip,
                         $now
                     ),
+                    'attendance_id' => null,
                 ];
             }
 
             if ($locked->status === 'REVOKED') {
                 return [
-                    'decision' => 'REJECTED',
-                    'reason' => 'token_revoked',
-                    'used_at' => null,
-                    'trace_id' => $this->log(
+                    'decision'      => 'REJECTED',
+                    'reason'        => 'token_revoked',
+                    'used_at'       => null,
+                    'trace_id'      => $this->log(
                         $tokenId,
                         $examinerId,
                         'REJECTED',
@@ -273,15 +368,16 @@ class VerificationService
                         $now,
                         'token_revoked'
                     ),
+                    'attendance_id' => null,
                 ];
             }
 
             if ($locked->status !== 'UNUSED') {
                 return [
-                    'decision' => 'REJECTED',
-                    'reason' => 'invalid_status',
-                    'used_at' => null,
-                    'trace_id' => $this->log(
+                    'decision'      => 'REJECTED',
+                    'reason'        => 'invalid_status',
+                    'used_at'       => null,
+                    'trace_id'      => $this->log(
                         $tokenId,
                         $examinerId,
                         'REJECTED',
@@ -290,7 +386,36 @@ class VerificationService
                         $now,
                         'invalid_status'
                     ),
+                    'attendance_id' => null,
                 ];
+            }
+
+            // ATOMIC ATTENDANCE PERSISTENCE:
+            // Persist the attendance record inside the same transaction BEFORE consuming the QR pass.
+            $attendanceId = null;
+            if ($recordAttendance) {
+                $existingAtt = DB::table('attendance_records')
+                    ->where('matric_no', $student->matric_no)
+                    ->where('timetable_id', $tokenTimetableId)
+                    ->where('session_id', $qrSessionId)
+                    ->lockForUpdate()
+                    ->first();
+
+                if (! $existingAtt) {
+                    $attendanceId = (int) DB::table('attendance_records')->insertGetId([
+                        'matric_no'         => $student->matric_no,
+                        'timetable_id'      => $tokenTimetableId,
+                        'session_id'        => $qrSessionId,
+                        'token_id'          => $tokenId,
+                        'status'            => 'checked_in',
+                        'checked_in_at'     => $now,
+                        'entry_examiner_id' => $examinerId,
+                        'created_at'        => $now,
+                        'updated_at'        => $now,
+                    ], 'id');
+                } else {
+                    $attendanceId = (int) $existingAtt->id;
+                }
             }
 
             DB::table('qr_tokens')
@@ -298,10 +423,11 @@ class VerificationService
                 ->update(['status' => 'USED', 'used_at' => $now]);
 
             return [
-                'decision' => 'APPROVED',
-                'reason' => '',
-                'used_at' => null,
-                'trace_id' => $this->log(
+                'decision'      => 'APPROVED',
+                'reason'        => '',
+                'used_at'       => null,
+                'attendance_id' => $attendanceId,
+                'trace_id'      => $this->log(
                     $tokenId,
                     $examinerId,
                     'APPROVED',
@@ -354,6 +480,7 @@ class VerificationService
             ],
             traceId: $statusResult['trace_id'],
             examAccess: $examAccess,
+            attendanceId: $statusResult['attendance_id'] ?? null,
         );
     }
 
@@ -405,7 +532,8 @@ class VerificationService
         ?string $usedAt = null,
         ?array $session = null,
         ?int $traceId = null,
-        ?array $examAccess = null
+        ?array $examAccess = null,
+        ?int $attendanceId = null,
     ): array {
         [$displayStatus, $message] = $this->presentation($status, $reason);
 
@@ -417,6 +545,11 @@ class VerificationService
             'token_id' => $tokenId,
             'timestamp' => $timestamp,
         ];
+
+        if ($attendanceId !== null) {
+            $response['checked_in'] = true;
+            $response['attendance_id'] = $attendanceId;
+        }
 
         if ($reason !== '') {
             $response['reason'] = $reason;
@@ -448,22 +581,24 @@ class VerificationService
         }
 
         return match ($reason) {
-            'invalid_format'        => ['Invalid QR', 'This is not a valid exam pass for this system.'],
-            'token_not_found'       => ['Pass Not Found', 'This exam pass could not be found in the system.'],
-            'token_record_mismatch' => ['Tampered QR', 'The QR pass data does not match system records.'],
-            'tampered_token'        => ['Tampered QR', 'This exam pass could not be authenticated.'],
-            'invalid_session'       => ['Wrong Session', 'This QR is not valid for the active exam session.'],
-            'identity_mismatch'     => ['Wrong Student/Course', 'The QR does not match the student identity on record.'],
-            'course_mismatch'       => ['Wrong Course', 'This QR was issued for a different course.'],
-            'payment_not_verified'  => ['Payment Not Verified', 'No verified session payment found. Student must pay school fees before entry.'],
-            'course_not_assigned'   => ['Course Not Assigned', 'This course is not assigned to the student\'s department or level.'],
-            'older_qr_format'       => ['Older QR Format', 'This QR was generated in an older format. Student must generate a new course QR pass.'],
-            'wrong_session'         => ['Wrong Exam Session', 'This QR was scanned outside the active exam session.'],
-            'wrong_examiner'        => ['Not Your Assignment', 'This assessment is assigned to a different examiner.'],
-            'token_revoked'         => ['QR Revoked', 'This exam pass has been revoked and is no longer valid.'],
-            'invalid_status'        => ['Invalid Pass', 'This exam pass has an unrecognised status and cannot be accepted.'],
-            'verification_failed'   => ['Verification Error', 'The QR could not be verified right now. Please try again.'],
-            default                 => ['Verification Failed', 'This QR could not be verified. Check the exam pass and try again.'],
+            'invalid_format'                => ['Invalid QR', 'This is not a valid exam pass for this system.'],
+            'token_not_found'               => ['Pass Not Found', 'This exam pass could not be found in the system.'],
+            'token_record_mismatch'         => ['Tampered QR', 'The QR pass data does not match system records.'],
+            'tampered_token'                => ['Tampered QR', 'This exam pass could not be authenticated.'],
+            'invalid_session'               => ['Wrong Session', 'This QR is not valid for the active exam session.'],
+            'identity_mismatch'             => ['Wrong Student/Course', 'The QR does not match the student identity on record.'],
+            'course_mismatch'               => ['Wrong Course', 'This QR was issued for a different course.'],
+            'payment_not_verified'          => ['Payment Not Verified', 'No verified session payment found. Student must pay school fees before entry.'],
+            'course_not_assigned'           => ['Course Not Assigned', 'This course is not assigned to the student\'s department or level.'],
+            'older_qr_format'               => ['Older QR Format', 'This QR was generated in an older format. Student must generate a new course QR pass.'],
+            'wrong_session'                 => ['Wrong Exam Session', 'This QR was scanned outside the active exam session.'],
+            'wrong_examiner'                => ['Not Your Assignment', 'This assessment is assigned to a different examiner.'],
+            'outside_time_window'           => ['Outside Exam Hours', 'This assessment is outside the permitted scanning time window.'],
+            'attendance_persistence_failed' => ['Check-in Failed', 'Attendance could not be recorded. The pass has not been consumed. Please try again.'],
+            'token_revoked'                 => ['QR Revoked', 'This exam pass has been revoked and is no longer valid.'],
+            'invalid_status'                => ['Invalid Pass', 'This exam pass has an unrecognised status and cannot be accepted.'],
+            'verification_failed'           => ['Verification Error', 'The QR could not be verified right now. Please try again.'],
+            default                         => ['Verification Failed', 'This QR could not be verified. Check the exam pass and try again.'],
         };
     }
 

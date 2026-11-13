@@ -1635,7 +1635,7 @@ class AdminWebController extends Controller
             'photo_resubmit_allowed'              => $this->settingBoolean('photo_resubmit_allowed', true),
             'auto_flag_unverified_before_exam'    => $this->settingBoolean('auto_flag_unverified_before_exam', false),
             // Attendance policy
-            'attendance_tracking_enabled'         => $this->settingBoolean('attendance_tracking_enabled', false),
+            'attendance_tracking_enabled'         => $this->settingBoolean('attendance_tracking_enabled', true),
             'mark_attendance_on_qr_scan'          => $this->settingBoolean('mark_attendance_on_qr_scan', true),
             // Audit policy
             'audit_logging_enabled'               => $this->settingBoolean('audit_logging_enabled', true),

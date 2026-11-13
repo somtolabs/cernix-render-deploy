@@ -529,15 +529,27 @@ class ExaminerWebController extends Controller
                 $data['qr_data'],
                 $examinerId,
                 $deviceFp,
-                $ip
+                $ip,
+                (int) $activeTimetableId,
+                [
+                    'record_attendance'   => true,
+                    'enforce_examiner'    => true,
+                    'enforce_time_window' => true,
+                ]
             );
-        } catch (Throwable) {
+        } catch (Throwable $e) {
+            Log::error('Attendance check-in failed during verification', [
+                'error'               => $e->getMessage(),
+                'examiner_id'         => $examinerId,
+                'active_timetable_id' => $activeTimetableId,
+                'token_id'            => $data['qr_data']['token_id'] ?? null,
+            ]);
             $this->safeVerificationLog($data['qr_data'], null, 'verification_service_error');
 
             return response()->json([
                 'status' => 'ERROR',
                 'display_status' => 'Error Verifying QR',
-                'message' => 'The QR could not be verified right now. Please try again.',
+                'message' => 'The QR could not be verified right now. The exam pass has not been consumed. Please try again.',
                 'student' => null,
                 'timestamp' => now()->toIso8601String(),
                 'reason' => 'verification_failed',
@@ -584,19 +596,14 @@ class ExaminerWebController extends Controller
             }
         }
 
-        // Contextual session check: enforce that the scanned QR matches the active assessment.
-        if ($activeTimetableId && $result['status'] === 'APPROVED' && $tokenId !== null) {
-            $qrTimetableId = DB::table('qr_tokens')->where('token_id', $tokenId)->value('timetable_id');
-            if ($qrTimetableId && (int) $qrTimetableId !== (int) $activeTimetableId) {
-                // Revert the token to UNUSED so the correct examiner can still scan it.
-                DB::table('qr_tokens')->where('token_id', $tokenId)->where('status', 'USED')->update(['status' => 'UNUSED', 'used_at' => null]);
-
-                $activeTt   = $request->session()->get('examiner_active_timetable', []);
-                $qrExam     = DB::table('timetables')->where('id', (int) $qrTimetableId)->first();
-                $result['status']         = 'REJECTED';
-                $result['reason']         = 'wrong_session';
+        // Contextual rejection messaging enrichment
+        if ($result['status'] === 'REJECTED' && isset($result['reason'])) {
+            $activeTt = $request->session()->get('examiner_active_timetable', []);
+            if ($result['reason'] === 'wrong_session') {
+                $qrTimetableId = $tokenId ? DB::table('qr_tokens')->where('token_id', $tokenId)->value('timetable_id') : null;
+                $qrExam = $qrTimetableId ? DB::table('timetables')->where('id', (int) $qrTimetableId)->first() : null;
                 $result['display_status'] = 'Wrong Exam Session';
-                $result['message']        = sprintf(
+                $result['message'] = sprintf(
                     'This QR is for %s (%s). Your active session is %s (%s). Direct the student to their correct hall.',
                     $qrExam?->course_code ?? 'a different course',
                     $qrExam?->venue ?? 'unknown venue',
@@ -609,58 +616,24 @@ class ExaminerWebController extends Controller
                     'course_code' => $activeTt['course_code'] ?? null,
                     'reason'      => 'Wrong venue / Wrong examiner',
                 ];
-            } elseif (! $qrTimetableId) {
-                // Revert token — QR has no timetable binding.
-                DB::table('qr_tokens')->where('token_id', $tokenId)->where('status', 'USED')->update(['status' => 'UNUSED', 'used_at' => null]);
-                $result['status']         = 'REJECTED';
-                $result['reason']         = 'wrong_session';
-                $result['display_status'] = 'Session Not Matched';
-                $result['message']        = 'This QR pass could not be matched to your active session. Ask the student to regenerate their exam pass.';
-            }
-        }
-
-        // Examiner assignment check: if the active session has an assigned examiner, verify it is this examiner.
-        if ($activeTimetableId && $result['status'] === 'APPROVED') {
-            $hasExaminerId = DB::getSchemaBuilder()->hasColumn('timetables', 'examiner_id');
-            if ($hasExaminerId) {
+            } elseif ($result['reason'] === 'wrong_examiner') {
                 $assignedExaminerId = DB::table('timetables')->where('id', $activeTimetableId)->value('examiner_id');
-                if ($assignedExaminerId !== null && (int) $assignedExaminerId !== $examinerId) {
-                    // Revert token — this examiner is not assigned.
-                    DB::table('qr_tokens')->where('token_id', $tokenId)->where('status', 'USED')->update(['status' => 'UNUSED', 'used_at' => null]);
-                    $assignedExaminerName = DB::table('examiners')->where('examiner_id', $assignedExaminerId)->value('full_name');
-                    $activeTt = $request->session()->get('examiner_active_timetable', []);
-                    $result['status']         = 'REJECTED';
-                    $result['reason']         = 'wrong_examiner';
-                    $result['display_status'] = 'Not Your Assignment';
-                    $result['message']        = sprintf(
-                        'This assessment (%s) is assigned to %s. You are not authorised to scan for it. Contact admin if this is incorrect.',
-                        $activeTt['course_code'] ?? 'this assessment',
-                        $assignedExaminerName ?? 'another examiner'
-                    );
-                }
-            }
-        }
-
-        // Time window enforcement: reject approved scans outside the exam hours.
-        if ($activeTimetableId && $result['status'] === 'APPROVED' && $tokenId !== null) {
-            $activeTt  = $request->session()->get('examiner_active_timetable', []);
-            $startTime = $activeTt['start_time'] ?? null;
-            $endTime   = $activeTt['end_time'] ?? null;
-            if ($startTime && $endTime) {
-                $now      = now();
-                $earliest = \Carbon\Carbon::parse($startTime)->subMinutes(60);
-                $latest   = \Carbon\Carbon::parse($endTime)->addMinutes(60);
-                if ($now->lt($earliest) || $now->gt($latest)) {
-                    DB::table('qr_tokens')->where('token_id', $tokenId)->where('status', 'USED')->update(['status' => 'UNUSED', 'used_at' => null]);
-                    $result['status']         = 'REJECTED';
-                    $result['reason']         = 'outside_time_window';
-                    $result['display_status'] = 'Outside Exam Hours';
-                    $result['message']        = sprintf(
-                        'This exam runs from %s to %s. Scanning is only permitted within 60 minutes of the exam window.',
-                        \Carbon\Carbon::parse($startTime)->format('g:i A'),
-                        \Carbon\Carbon::parse($endTime)->format('g:i A')
-                    );
-                }
+                $assignedExaminerName = $assignedExaminerId ? DB::table('examiners')->where('examiner_id', $assignedExaminerId)->value('full_name') : 'another examiner';
+                $result['display_status'] = 'Not Your Assignment';
+                $result['message'] = sprintf(
+                    'This assessment (%s) is assigned to %s. You are not authorised to scan for it. Contact admin if this is incorrect.',
+                    $activeTt['course_code'] ?? 'this assessment',
+                    $assignedExaminerName ?? 'another examiner'
+                );
+            } elseif ($result['reason'] === 'outside_time_window') {
+                $startTime = $activeTt['start_time'] ?? null;
+                $endTime   = $activeTt['end_time'] ?? null;
+                $result['display_status'] = 'Outside Exam Hours';
+                $result['message'] = sprintf(
+                    'This exam runs from %s to %s. Scanning is only permitted within 60 minutes of the exam window.',
+                    $startTime ? \Carbon\Carbon::parse($startTime)->format('g:i A') : 'start time',
+                    $endTime ? \Carbon\Carbon::parse($endTime)->format('g:i A') : 'end time'
+                );
             }
         }
 
@@ -688,43 +661,37 @@ class ExaminerWebController extends Controller
             );
         }
 
+        // Attendance integrity verification:
+        // Ensure attendance record was successfully persisted for this check-in.
         if (
             $result['status'] === 'APPROVED'
             && $tokenId !== null
             && Schema::hasTable('attendance_records')
-            && $this->settingBoolean('attendance_tracking_enabled', true)
         ) {
-            try {
-                $qrToken = DB::table('qr_tokens')->where('token_id', $tokenId)->first();
-                if (
-                    $qrToken
-                    && ! empty($qrToken->timetable_id)
-                    && ! empty($qrToken->session_id)
-                    && ! empty($qrToken->student_id)
-                ) {
-                    $alreadyCheckedIn = DB::table('attendance_records')
-                        ->where('matric_no', $qrToken->student_id)
-                        ->where('timetable_id', $qrToken->timetable_id)
-                        ->where('session_id', $qrToken->session_id)
-                        ->exists();
+            $confirmedAtt = DB::table('attendance_records')
+                ->where('token_id', $tokenId)
+                ->where('timetable_id', (int) $activeTimetableId)
+                ->first();
 
-                    if (! $alreadyCheckedIn) {
-                        DB::table('attendance_records')->insert([
-                            'matric_no'         => $qrToken->student_id,
-                            'timetable_id'      => $qrToken->timetable_id,
-                            'session_id'        => $qrToken->session_id,
-                            'token_id'          => $tokenId,
-                            'status'            => 'checked_in',
-                            'checked_in_at'     => now(),
-                            'entry_examiner_id' => $examinerId,
-                            'created_at'        => now(),
-                            'updated_at'        => now(),
-                        ]);
-                    }
-                }
-            } catch (Throwable) {
-                // Attendance upsert must never block a verified APPROVED decision.
+            if (! $confirmedAtt) {
+                Log::critical('Inconsistent verification state: token approved but attendance missing', [
+                    'token_id'     => $tokenId,
+                    'examiner_id'  => $examinerId,
+                    'timetable_id' => $activeTimetableId,
+                ]);
+
+                return response()->json([
+                    'status'         => 'ERROR',
+                    'display_status' => 'Check-in Failed',
+                    'message'        => 'Attendance could not be verified. Please scan again.',
+                    'student'        => null,
+                    'timestamp'      => now()->toIso8601String(),
+                    'reason'         => 'attendance_verification_failed',
+                ]);
             }
+
+            $result['checked_in'] = true;
+            $result['checked_in_at'] = $confirmedAtt->checked_in_at;
         }
 
         // Submission scan: if DUPLICATE and enable_submission_scan is on, treat as exit scan

@@ -20,6 +20,7 @@ class CernixSettingsSeeder extends Seeder
             'demo_mode_enabled' => 'false',
             'institution_name' => 'AAUA',
             'system_name' => 'CERNIX',
+            'attendance_tracking_enabled' => 'true',
         ];
 
         foreach ($defaults as $key => $value) {
