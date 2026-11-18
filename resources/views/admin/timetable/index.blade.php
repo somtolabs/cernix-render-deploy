@@ -87,6 +87,13 @@
         cursor: pointer;
         user-select: none;
     }
+    @media (max-width: 520px) {
+        .tt-panel-head {
+            padding: 12px 14px;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+    }
     .tt-panel-head:hover {
         background: rgba(51, 71, 95, 0.03);
     }
@@ -94,6 +101,8 @@
         display: flex;
         align-items: center;
         gap: 12px;
+        min-width: 0;
+        flex: 1 1 auto;
     }
     .tt-panel-icon {
         width: 34px;
@@ -111,11 +120,17 @@
         font-size: 14.5px;
         font-weight: 900;
         color: var(--ink);
+        overflow-wrap: break-word;
+        word-break: break-word;
+        min-width: 0;
     }
     .tt-panel-head p {
         margin: 2px 0 0;
         font-size: 12px;
         color: var(--ink-3);
+        overflow-wrap: break-word;
+        word-break: break-word;
+        min-width: 0;
     }
     .tt-panel-toggle-btn {
         display: inline-flex;
@@ -198,7 +213,13 @@
     .tt-col-4  { grid-column: span 12; }
     .tt-col-3  { grid-column: span 12; }
 
-    @media (min-width: 720px) {
+    @media (min-width: 600px) and (max-width: 899px) {
+        .tt-col-6 { grid-column: span 6; }
+        .tt-col-4 { grid-column: span 6; }
+        .tt-col-3 { grid-column: span 6; }
+    }
+
+    @media (min-width: 900px) {
         .tt-col-6 { grid-column: span 6; }
         .tt-col-4 { grid-column: span 4; }
         .tt-col-3 { grid-column: span 3; }
@@ -227,12 +248,20 @@
     .tt-field input,
     .tt-field select {
         width: 100%;
-        height: 42px;
+        min-width: 0;
+        max-width: 100%;
+        min-height: 44px;
+        height: 44px;
         padding: 0 12px;
         border: 1px solid var(--line);
         border-radius: 10px;
         background: #ffffff;
         color: var(--ink);
+        font-size: 13px;
+        font-family: 'Inter', system-ui, sans-serif;
+        transition: border-color .15s ease, box-shadow .15s ease;
+        box-sizing: border-box;
+    }
         font-size: 13px;
         font-family: 'Inter', system-ui, sans-serif;
         transition: border-color .15s ease, box-shadow .15s ease;
@@ -348,6 +377,9 @@
         overflow: hidden;
         margin-top: 14px;
         background: #ffffff;
+        min-width: 0;
+        max-width: 100%;
+        box-sizing: border-box;
     }
     .tt-csv-preview-head {
         display: flex;
@@ -365,6 +397,10 @@
     .tt-csv-preview-scroll {
         max-height: 220px;
         overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        min-width: 0;
+        max-width: 100%;
+        box-sizing: border-box;
     }
     .tt-csv-table {
         width: 100%;
@@ -422,6 +458,23 @@
         font-size: 11.5px;
         color: var(--ink-3);
         line-height: 1.45;
+    }
+    .tt-roster-quick-add {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+    }
+    @media (max-width: 480px) {
+        .tt-roster-quick-add input {
+            width: 100% !important;
+            flex: 1 1 100% !important;
+            min-height: 44px;
+        }
+        .tt-roster-quick-add .admin-action {
+            width: 100% !important;
+            min-height: 44px !important;
+            justify-content: center;
+        }
     }
 
     /* ── Filter & Cards ──────────────────────────────────── */
@@ -502,10 +555,17 @@
         grid-template-columns: repeat(2, minmax(0, 1fr));
         background: #ffffff;
     }
+    @media (max-width: 400px) {
+        .tt-card-stats { grid-template-columns: 1fr; }
+        .tt-card-stat { border-right: 0 !important; }
+    }
     .tt-card-stat {
         padding: 11px 16px;
         border-right: 1px solid var(--line);
         border-bottom: 1px solid var(--line);
+        min-width: 0;
+        overflow-wrap: break-word;
+        word-break: break-word;
     }
     .tt-card-stat:nth-child(2n) {
         border-right: 0;
@@ -518,6 +578,8 @@
         letter-spacing: .08em;
         color: var(--ink-4);
         margin-bottom: 4px;
+        min-width: 0;
+        overflow-wrap: break-word;
     }
     .tt-card-stat b {
         display: block;
@@ -525,10 +587,14 @@
         font-weight: 700;
         color: var(--ink);
         line-height: 1.3;
+        min-width: 0;
+        overflow-wrap: break-word;
+        word-break: break-word;
     }
     .tt-card-stat b.mono {
         font-family: 'JetBrains Mono', monospace;
         color: var(--navy);
+        overflow-wrap: anywhere;
     }
     .tt-card-foot {
         display: flex;
@@ -549,6 +615,148 @@
         align-items: center;
         gap: 6px;
     }
+
+    @media (max-width: 600px) {
+        .tt-header-bar {
+            flex-direction: column;
+            gap: 12px;
+        }
+        .tt-toolbar {
+            width: 100%;
+        }
+        .tt-toolbar > * {
+            flex: 1 1 auto;
+            text-align: center;
+            justify-content: center;
+        }
+        .tt-card-head {
+            flex-direction: column;
+            gap: 10px;
+            padding: 12px 14px;
+        }
+        .tt-card-head > div:last-child {
+            width: 100%;
+        }
+        .tt-card-foot {
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 10px;
+            padding: 10px 14px;
+        }
+        .tt-card-actions {
+            width: 100%;
+            display: flex;
+        }
+        .tt-card-actions > * {
+            flex: 1 1 0;
+            text-align: center;
+        }
+        .tt-card-actions .admin-action {
+            width: 100%;
+            justify-content: center;
+        }
+    }
+    @media (max-width: 767px) {
+        .tt-roster-table-wrap {
+            display: none !important;
+        }
+        .tt-roster-cards {
+            display: flex !important;
+        }
+    }
+    @media (max-width: 600px) {
+        .tt-panel-body {
+            padding: 14px 12px;
+        }
+        .tt-form-group {
+            padding: 12px 10px;
+            margin-bottom: 12px;
+            border-radius: 10px;
+        }
+        .tt-form-group-head {
+            flex-wrap: wrap;
+            gap: 6px;
+            margin-bottom: 10px;
+        }
+        .tt-form-group-desc {
+            margin-left: 0;
+            width: 100%;
+            font-size: 11px;
+        }
+        .tt-mode-card {
+            padding: 10px 12px;
+        }
+    }
+
+    /* ── Centralised Regular Examination Workspace Styling ─ */
+    .tt-workspace-hero {
+        background: linear-gradient(135deg, rgba(45, 63, 85, 0.05) 0%, rgba(51, 71, 95, 0.02) 100%);
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        padding: 20px 22px;
+        margin-bottom: 22px;
+    }
+    .tt-workspace-metrics {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 12px;
+        margin-bottom: 22px;
+    }
+    @media (min-width: 540px) {
+        .tt-workspace-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+    @media (min-width: 980px) {
+        .tt-workspace-metrics { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    }
+    .tt-metric-card {
+        background: #ffffff;
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        padding: 16px;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        box-shadow: var(--shadow-sm);
+        min-width: 0;
+    }
+    .tt-metric-label {
+        font-size: 10.5px;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: .06em;
+        color: var(--ink-3);
+    }
+    .tt-metric-val {
+        font-size: 24px;
+        font-weight: 900;
+        color: var(--navy);
+        letter-spacing: -.02em;
+        line-height: 1.2;
+    }
+    .tt-metric-sub {
+        font-size: 11.5px;
+        color: var(--ink-3);
+        margin-top: 2px;
+    }
+
+    /* Candidate Roster Preview Styles */
+    .tt-roster-preview-box {
+        background: #ffffff;
+        border: 1.5px solid var(--navy);
+        border-radius: 14px;
+        padding: 16px 18px;
+        margin-bottom: 20px;
+        box-shadow: var(--shadow-sm);
+    }
+    .tt-preview-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 4px 10px;
+        border-radius: 20px;
+        font-size: 11.5px;
+        font-weight: 700;
+    }
 </style>
 
 @php
@@ -558,6 +766,7 @@
     $isExamView  = $typeFilter === 'exam';
     $isMakeupView = $typeFilter === 'makeup';
     $editIsTest  = isset($editEntry) && $editEntry && in_array($editEntry->assessment_type ?? 'exam', ['test', 'makeup']);
+    $editHasRoster = isset($editEntry) && $editEntry;
     $hasRosterTable = \Illuminate\Support\Facades\Schema::hasTable('timetable_students');
     $typeClass  = fn($t) => match($t ?? 'exam') { 'test' => 'tt-type-test', 'makeup' => 'tt-type-makeup', default => 'tt-type-exam' };
     $typeLabel  = fn($t) => match($t ?? 'exam') { 'test' => 'Test', 'makeup' => 'Make-up', default => 'Exam' };
@@ -577,7 +786,7 @@
             @elseif($isTestView)
                 Continuous assessment tests with dedicated rosters. Manage enrolled candidates and examiner assignments.
             @elseif($isExamView)
-                Comprehensive semester examination schedule. Candidate access is derived by department, level, and fee clearance.
+                Comprehensive semester examination schedule. Candidate access requires an explicitly confirmed assessment register.
             @else
                 Centralized assessment schedule management across all examination types, test halls, and examiners.
             @endif
@@ -616,9 +825,46 @@
 @if(session('status'))
     <div class="admin-notice success" style="margin-bottom:16px">{{ session('status') }}</div>
 @endif
+@if(($missingEndTimeCount ?? 0) > 0)
+    <div class="admin-notice warning" style="margin-bottom:16px;background:#fffbeb;border:1px solid #fcd34d;color:#92400e;padding:12px 16px;border-radius:8px">
+        <strong>Action Required:</strong> {{ $missingEndTimeCount }} timetable record(s) have no end time recorded. Scanning is blocked for these assessments until an end time is set. Please edit the affected entries below to set an end time.
+    </div>
+@endif
 @if($errors->any())
     <div class="admin-notice error" style="margin-bottom:16px">
         <strong>Error:</strong> {{ $errors->first() }}
+    </div>
+@endif
+
+{{-- ─── Examination Operations Summary Bar (Compact) ────────────────────── --}}
+@if($isExamView && !$editEntry && isset($examWorkspaceMetrics))
+    <div class="tt-ops-bar" style="background:#fff;border:1px solid var(--line);border-radius:12px;padding:12px 16px;margin-bottom:18px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;box-shadow:var(--shadow-sm)">
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+            <span class="admin-status green" style="font-size:11px;font-weight:800">Active Session</span>
+            <span style="font-size:12.5px;color:var(--ink);font-weight:600">{{ $activeSession->semester ?? 'Active Semester' }} &mdash; {{ $activeSession->academic_year ?? '' }}</span>
+            <span style="color:var(--line);font-size:14px">&bull;</span>
+            <span style="font-size:12px;color:var(--ink-3)">{{ $examWorkspaceMetrics['total_exams'] ?? 0 }} exam(s) scheduled ({{ $examWorkspaceMetrics['today_exams'] ?? 0 }} today)</span>
+            <span style="color:var(--line);font-size:14px">&bull;</span>
+            <span style="font-size:12px;color:var(--ink-3)">{{ $examWorkspaceMetrics['total_candidates'] ?? 0 }} candidates</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+            <div style="display:flex;align-items:center;gap:6px">
+                <span style="font-size:11.5px;color:var(--ink-3);font-weight:700">Register Readiness:</span>
+                <span class="admin-status {{ ($examWorkspaceMetrics['incomplete_registers'] ?? 0) === 0 ? 'green' : 'orange' }}" style="font-size:11px;font-weight:700">
+                    {{ $examWorkspaceMetrics['confirmed_registers'] ?? 0 }} / {{ $examWorkspaceMetrics['total_exams'] ?? 0 }} Confirmed
+                </span>
+                @if(($examWorkspaceMetrics['incomplete_registers'] ?? 0) > 0)
+                    <span style="font-size:11.5px;color:var(--amber)">({{ $examWorkspaceMetrics['incomplete_registers'] }} need review)</span>
+                @endif
+            </div>
+            @if(($examWorkspaceMetrics['live_checked_in'] ?? 0) > 0 || ($examWorkspaceMetrics['live_submitted'] ?? 0) > 0)
+                <div style="display:flex;align-items:center;gap:6px">
+                    <span style="font-size:11.5px;color:var(--ink-3);font-weight:700">Live Activity:</span>
+                    <span class="admin-status blue" style="font-size:11px;font-weight:700">{{ $examWorkspaceMetrics['live_checked_in'] ?? 0 }} In Hall</span>
+                    <span style="font-size:11.5px;color:var(--ink-3)">{{ $examWorkspaceMetrics['live_submitted'] ?? 0 }} submitted</span>
+                </div>
+            @endif
+        </div>
     </div>
 @endif
 
@@ -740,8 +986,8 @@
                     </div>
 
                     <div class="tt-field tt-col-3">
-                        <label>End Time</label>
-                        <input name="end_time" value="{{ old('end_time', $editEntry->end_time ?? '') }}" type="time">
+                        <label>End Time <span class="req">*</span></label>
+                        <input name="end_time" value="{{ old('end_time', $editEntry->end_time ?? '') }}" type="time" required>
                     </div>
 
                     <div class="tt-field tt-col-3">
@@ -822,8 +1068,8 @@
                         </select>
                     </div>
 
-                    {{-- Enrollment mode — only on test/makeup creation --}}
-                    @if($isTestView && !$editEntry)
+                    {{-- Student Roster Assignment Mode — Available on creation for all assessment types --}}
+                    @if(!$editEntry)
                         <div class="tt-field tt-col-12" style="border-top:1px solid var(--line);padding-top:16px;margin-top:6px">
                             <label style="margin-bottom:10px">Student Roster Assignment Mode</label>
                             <div class="tt-mode-grid">
@@ -848,7 +1094,7 @@
                                         <input type="radio" name="enrollment_mode" value="csv" id="modeCsvRadio">
                                         <span class="tt-mode-title">Upload CSV Roster</span>
                                     </div>
-                                    <p class="tt-mode-desc">Upload a CSV containing student matric numbers to enrol them immediately.</p>
+                                    <p class="tt-mode-desc">Upload candidate CSV and preview resolved registry records before committing.</p>
                                 </label>
                             </div>
 
@@ -883,8 +1129,8 @@
     </div>
 </section>
 
-{{-- ─── Student Roster Management (Edit Test/Makeup View) ──────────────── --}}
-@if($editEntry && $editIsTest && $hasRosterTable)
+{{-- ─── Student Roster Management (All Assessment Types) ──────────────── --}}
+@if($editEntry && $hasRosterTable)
 <section class="tt-panel" id="rosterSection">
     <div class="tt-panel-head" style="cursor:default">
         <div class="tt-panel-head-left">
@@ -897,22 +1143,203 @@
                 </svg>
             </div>
             <div>
-                <h2>Student Enrolment Roster</h2>
+                <h2>Assessment Candidate Register</h2>
                 <p>{{ $rosterCount ?? 0 }} eligible candidate(s) currently enrolled for this assessment</p>
             </div>
         </div>
-        <span class="admin-status green">{{ $rosterCount ?? 0 }} Enrolled</span>
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+            @if(isset($examAttendanceStats))
+                <a class="tt-btn-secondary" href="{{ route('admin.attendance', ['timetable_id' => $editEntry->{$timetableKey}]) }}" style="font-size:12px;padding:6px 12px;text-decoration:none">
+                    Attendance Log &rarr;
+                </a>
+            @endif
+            @if(($editEntry->register_status ?? 'incomplete') === 'confirmed')
+                <span class="admin-status green" style="font-weight:700">Register Confirmed ({{ $rosterCount ?? 0 }} Enrolled)</span>
+                <form method="POST" action="{{ route('admin.timetable.roster.unconfirm', $editEntry->{$timetableKey}) }}" style="display:inline">
+                    @csrf
+                    <button class="admin-action ghost" type="submit" style="font-size:12px;min-height:34px;color:var(--amber)">Reopen for Review</button>
+                </form>
+            @else
+                <span class="admin-status orange" style="font-weight:700">Register Incomplete (Requires Review)</span>
+                @if(($rosterCount ?? 0) > 0)
+                    <form method="POST" action="{{ route('admin.timetable.roster.confirm', $editEntry->{$timetableKey}) }}" style="display:inline">
+                        @csrf
+                        <button class="admin-action" type="submit" style="font-size:12px;min-height:34px;background:var(--emerald)">Confirm Register</button>
+                    </form>
+                @endif
+                <form method="POST" action="{{ route('admin.timetable.roster.populate-cohort', $editEntry->{$timetableKey}) }}" style="display:inline">
+                    @csrf
+                    <button class="admin-action ghost" type="submit" style="font-size:12px;min-height:34px">Load Cohort Candidates</button>
+                </form>
+            @endif
+        </div>
     </div>
     <div class="tt-panel-body">
+        {{-- ─── Live Hall Attendance & Verification Summary (Consolidated) ────── --}}
+        @if(isset($examAttendanceStats) && ($examAttendanceStats['checked_in'] > 0 || $examAttendanceStats['submitted'] > 0 || $examAttendanceStats['flagged'] > 0))
+            <div style="background:rgba(45,63,85,.04);border:1px solid var(--line);border-radius:12px;padding:12px 16px;margin-bottom:18px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+                <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+                    <span style="font-weight:800;font-size:12.5px;color:var(--navy);display:flex;align-items:center;gap:6px">
+                        <span style="width:7px;height:7px;border-radius:50%;background:var(--emerald);display:inline-block"></span>
+                        Live Hall Status:
+                    </span>
+                    <span class="admin-status green" style="font-size:11px;font-weight:700">
+                        {{ $examAttendanceStats['checked_in'] }} Checked In ({{ $examAttendanceStats['checkin_rate'] }}%)
+                    </span>
+                    <span class="admin-status blue" style="font-size:11px;font-weight:700">
+                        {{ $examAttendanceStats['submitted'] }} Submitted
+                    </span>
+                    @if($examAttendanceStats['flagged'] > 0)
+                        <span class="admin-status red" style="font-size:11px;font-weight:700">
+                            {{ $examAttendanceStats['flagged'] }} Flagged
+                        </span>
+                    @endif
+                </div>
+                <a class="tt-btn-secondary" href="{{ route('admin.attendance', ['timetable_id' => $editEntry->{$timetableKey}]) }}" style="font-size:11.5px;padding:5px 10px;text-decoration:none">
+                    Full Attendance Log &rarr;
+                </a>
+            </div>
+        @endif
+
+        {{-- ─── Recent Verification Check-Ins (Consolidated Stream) ───────────── --}}
+        @if(isset($recentExamScans) && $recentExamScans->count() > 0)
+            <div style="margin-bottom:18px;border:1px solid var(--line);border-radius:10px;overflow:hidden">
+                <div style="background:var(--bg);padding:8px 14px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center">
+                    <span style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-3)">Recent Live Check-Ins</span>
+                    <a href="{{ route('admin.attendance', ['timetable_id' => $editEntry->{$timetableKey}]) }}" style="font-size:11px;color:var(--navy);text-decoration:none;font-weight:600">Full Attendance Log &rarr;</a>
+                </div>
+                <div style="max-height:160px;overflow-y:auto">
+                    <table class="cx-table" style="margin:0;font-size:11.5px">
+                        <thead>
+                            <tr style="background:#fff">
+                                <th>Matric No</th>
+                                <th>Student Name</th>
+                                <th>Status</th>
+                                <th>Checked-In At</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach($recentExamScans as $scan)
+                            <tr>
+                                <td style="font-family:'JetBrains Mono',monospace;font-weight:700;color:var(--navy)">{{ $scan->matric_no }}</td>
+                                <td style="font-weight:600">{{ $scan->full_name ?? 'Official Student' }}</td>
+                                <td>
+                                    <span class="admin-status {{ $scan->status === 'checked_in' ? 'green' : ($scan->status === 'submitted' ? 'blue' : 'red') }}" style="font-size:10px">
+                                        {{ ucfirst($scan->status) }}
+                                    </span>
+                                </td>
+                                <td style="color:var(--ink-3)">{{ $scan->checked_in_at ? \Carbon\Carbon::parse($scan->checked_in_at)->format('H:i:s') : '—' }}</td>
+                            </tr>
+                            @endforeach
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        @endif
+        {{-- ─── Candidate Resolution Preview (When Available in Session) ──────── --}}
+        @if(session('roster_preview'))
+            @php $preview = session('roster_preview'); @endphp
+            <div class="tt-roster-preview-box">
+                <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;margin-bottom:14px">
+                    <div>
+                        <h3 style="margin:0;font-size:14px;font-weight:800;color:var(--navy)">Candidate Roster Resolution Preview</h3>
+                        <p style="margin:4px 0 0;font-size:12px;color:var(--ink-3)">Validated through Matriculation Engine &middot; Authoritative metadata retrieved from Official Student Registry</p>
+                    </div>
+                    <div style="display:flex;gap:6px;flex-wrap:wrap">
+                        <span class="tt-preview-pill" style="background:rgba(5,150,105,.1);color:var(--emerald)">
+                            {{ count($preview['matched'] ?? []) }} Matched in Registry
+                        </span>
+                        @if(count($preview['unmatched'] ?? []) > 0)
+                            <span class="tt-preview-pill" style="background:rgba(217,119,6,.1);color:var(--amber)">
+                                {{ count($preview['unmatched']) }} Unmatched
+                            </span>
+                        @endif
+                        @if(count($preview['duplicates'] ?? []) > 0)
+                            <span class="tt-preview-pill" style="background:rgba(107,114,128,.1);color:#4b5563">
+                                {{ count($preview['duplicates']) }} Duplicate(s)
+                            </span>
+                        @endif
+                        @if(count($preview['invalid'] ?? []) > 0)
+                            <span class="tt-preview-pill" style="background:rgba(220,38,38,.1);color:var(--red)">
+                                {{ count($preview['invalid']) }} Malformed
+                            </span>
+                        @endif
+                    </div>
+                </div>
+
+                @if(count($preview['matched'] ?? []) > 0)
+                    <div style="border:1px solid var(--line);border-radius:10px;overflow:hidden;margin-bottom:14px">
+                        <div style="max-height:220px;overflow-y:auto">
+                            <table class="cx-table" style="margin:0;font-size:11.5px">
+                                <thead>
+                                    <tr style="background:var(--bg)">
+                                        <th>Matriculation Number</th>
+                                        <th>Official Name</th>
+                                        <th>Department</th>
+                                        <th>Level</th>
+                                        <th>Registry Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach($preview['matched'] as $m)
+                                    <tr>
+                                        <td style="font-family:'JetBrains Mono',monospace;font-weight:700;color:var(--navy)">{{ $m['matric'] }}</td>
+                                        <td style="font-weight:600">{{ $m['full_name'] }}</td>
+                                        <td style="color:var(--ink-3)">{{ $m['department'] }}</td>
+                                        <td style="color:var(--ink-3)">{{ $m['level'] }} Level</td>
+                                        <td><span class="admin-status green" style="font-size:10px">Active in Registry</span></td>
+                                    </tr>
+                                    @endforeach
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <form method="POST" action="{{ route('admin.timetable.roster.import', $editEntry->{$timetableKey}) }}" style="display:flex;justify-content:flex-end;gap:10px;flex-wrap:wrap">
+                        @csrf
+                        @foreach($preview['eligible_matrics'] ?? [] as $em)
+                            <input type="hidden" name="confirmed_candidates[]" value="{{ $em }}">
+                        @endforeach
+                        <a class="admin-action ghost" href="{{ route('admin.timetable', ['type' => $typeFilter ?: 'exam', 'edit' => $editEntry->{$timetableKey}]) }}">Discard Preview</a>
+                        <button class="admin-action" type="submit" style="background:var(--emerald);color:#fff">Confirm &amp; Enrol {{ count($preview['eligible_matrics'] ?? []) }} Candidates</button>
+                    </form>
+                @else
+                    <p style="font-size:12.5px;color:var(--red);margin:0">No valid candidates could be matched in the Official Student Registry from this CSV.</p>
+                @endif
+            </div>
+        @endif
+
+        {{-- ─── Import Resolution Summary (When Flashed in Session) ───────────── --}}
+        @if(session('roster_import_resolution'))
+            @php $res = session('roster_import_resolution'); @endphp
+            <div style="background:rgba(5,150,105,.05);border:1px solid rgba(5,150,105,.2);border-radius:12px;padding:12px 16px;margin-bottom:18px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+                <div style="display:flex;align-items:center;gap:10px">
+                    <span style="font-weight:800;font-size:13px;color:var(--emerald)">Resolution Complete:</span>
+                    <span style="font-size:12.5px;color:var(--ink)">{{ count($res['matched'] ?? []) }} verified candidates enrolled</span>
+                </div>
+                <div style="display:flex;gap:6px;flex-wrap:wrap">
+                    @if(count($res['unmatched'] ?? []) > 0)
+                        <span class="tt-preview-pill" style="background:rgba(217,119,6,.1);color:var(--amber)">{{ count($res['unmatched']) }} Unmatched</span>
+                    @endif
+                    @if(count($res['duplicates'] ?? []) > 0)
+                        <span class="tt-preview-pill" style="background:rgba(107,114,128,.1);color:#4b5563">{{ count($res['duplicates']) }} Duplicates Skipped</span>
+                    @endif
+                    @if(count($res['invalid'] ?? []) > 0)
+                        <span class="tt-preview-pill" style="background:rgba(220,38,38,.1);color:var(--red)">{{ count($res['invalid']) }} Malformed Skipped</span>
+                    @endif
+                </div>
+            </div>
+        @endif
+
         <div class="tt-roster-split">
             {{-- Quick Add Single Student --}}
             <div class="tt-roster-box">
                 <h4>Add Candidate by Matric</h4>
-                <p>Enrol an individual student to this assessment roster immediately.</p>
+                <p>Enrol an individual student to this assessment roster immediately via Matriculation Engine validation.</p>
                 <form method="POST" action="{{ route('admin.timetable.roster.add', $editEntry->{$timetableKey}) }}">
                     @csrf
-                    <div style="display:flex;gap:8px">
-                        <input name="matric_no" placeholder="Enter matric number (e.g. 220404001)" required style="flex:1;height:40px;padding:0 12px;border:1px solid var(--line);border-radius:10px;font-family:'JetBrains Mono',monospace;text-transform:uppercase;font-size:12.5px">
+                    <div class="tt-roster-quick-add">
+                        <input name="matric_no" placeholder="Enter matric number (e.g. 220404001)" required style="flex:1 1 180px;min-width:0;height:40px;padding:0 12px;border:1px solid var(--line);border-radius:10px;font-family:'JetBrains Mono',monospace;text-transform:uppercase;font-size:12.5px;box-sizing:border-box">
                         <button class="admin-action" type="submit" style="white-space:nowrap;min-height:40px">Add</button>
                     </div>
                 </form>
@@ -921,7 +1348,7 @@
             {{-- Bulk CSV Roster Upload --}}
             <div class="tt-roster-box">
                 <h4>Bulk CSV Roster Import</h4>
-                <p>Upload a CSV file containing multiple matric numbers to enrol students in batch.</p>
+                <p>Upload a CSV file containing candidate matric numbers. All authoritative student records are resolved from the Official Student Registry.</p>
                 <form method="POST" action="{{ route('admin.timetable.roster.import', $editEntry->{$timetableKey}) }}" enctype="multipart/form-data">
                     @csrf
                     <x-file-uploader
@@ -931,12 +1358,17 @@
                         maxSizeMb="5"
                         label="Drop Roster CSV"
                         help="Upload CSV with student matric numbers"
-                        subHelp="Format: One matric number per row. Header: <code>matric_no</code>"
+                        subHelp="Only <code>matric_number</code> (or <code>matric_no</code>) column required. Official metadata is retrieved from registry."
                         compact="true"
                         :required="true"
                     />
-                    <div style="display:flex;align-items:center;justify-content:flex-end;gap:10px;margin-top:10px">
-                        <button class="admin-action" type="submit" style="min-height:36px;font-size:12px">Import Candidates</button>
+                    <div style="display:flex;align-items:center;justify-content:flex-end;gap:8px;margin-top:10px;flex-wrap:wrap">
+                        <button class="admin-action ghost" type="submit" formaction="{{ route('admin.timetable.roster.preview', $editEntry->{$timetableKey}) }}" style="min-height:36px;font-size:12px">
+                            Preview Resolution
+                        </button>
+                        <button class="admin-action" type="submit" style="min-height:36px;font-size:12px">
+                            Direct Import &amp; Enrol
+                        </button>
                         <x-loading-state preset="import" inline="true" />
                     </div>
                 </form>
@@ -946,14 +1378,15 @@
         {{-- Enrolled Students Table --}}
         @if(isset($roster) && $roster->count())
             <div style="border:1px solid var(--line);border-radius:12px;overflow:hidden">
-                <div style="overflow-x:auto;max-height:380px">
+                <div style="overflow-x:auto;max-height:380px" class="tt-roster-table-wrap">
                     <table class="cx-table" style="margin:0">
                         <thead>
                             <tr style="background:var(--bg)">
                                 <th>Matric Number</th>
-                                <th>Student Full Name</th>
+                                <th>Official Student Name</th>
                                 <th>Department</th>
                                 <th>Level</th>
+                                <th>Candidate Type</th>
                                 <th style="text-align:right">Action</th>
                             </tr>
                         </thead>
@@ -961,9 +1394,19 @@
                             @foreach($roster as $row)
                             <tr>
                                 <td style="font-family:'JetBrains Mono',monospace;color:var(--navy);font-weight:700;font-size:12px">{{ $row->matric_no }}</td>
-                                <td style="font-weight:600">{{ $row->full_name ?? '—' }}</td>
+                                <td style="font-weight:600">
+                                    {{ $row->full_name ?? '—' }}
+                                    @if($row->is_registry_verified ?? false)
+                                        <span class="admin-status green" style="font-size:9.5px;padding:1px 5px;margin-left:4px">Verified</span>
+                                    @endif
+                                </td>
                                 <td style="color:var(--ink-3)">{{ $row->dept_name ?? '—' }}</td>
                                 <td style="color:var(--ink-3)">{{ $row->level ? $row->level.' Level' : '—' }}</td>
+                                <td>
+                                    <span class="admin-status {{ ($row->candidate_type ?? 'regular') === 'carryover' ? 'orange' : 'gray' }}" style="font-size:10px">
+                                        {{ ucfirst($row->candidate_type ?? 'regular') }}
+                                    </span>
+                                </td>
                                 <td style="text-align:right">
                                     <form method="POST" action="{{ route('admin.timetable.roster.remove', [$editEntry->{$timetableKey}, urlencode($row->matric_no)]) }}" style="display:inline">
                                         @csrf @method('DELETE')
@@ -975,6 +1418,36 @@
                             @endforeach
                         </tbody>
                     </table>
+                </div>
+
+                {{-- Enrolled Students Mobile Cards (< 768px) --}}
+                <div class="tt-roster-cards" style="display:none;flex-direction:column;gap:8px;padding:10px">
+                    @foreach($roster as $row)
+                    <div style="background:#fff;border:1px solid var(--line);border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:6px">
+                        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
+                            <div style="min-width:0">
+                                <div style="font-weight:700;font-size:13px;color:var(--ink);overflow-wrap:anywhere">
+                                    {{ $row->full_name ?? '—' }}
+                                    @if($row->is_registry_verified ?? false)
+                                        <span class="admin-status green" style="font-size:9.5px;padding:1px 5px;margin-left:4px">Verified</span>
+                                    @endif
+                                </div>
+                                <span style="font-family:'JetBrains Mono',monospace;color:var(--navy);font-weight:700;font-size:12px">{{ $row->matric_no }}</span>
+                            </div>
+                            <form method="POST" action="{{ route('admin.timetable.roster.remove', [$editEntry->{$timetableKey}, urlencode($row->matric_no)]) }}" style="display:inline;flex-shrink:0">
+                                @csrf @method('DELETE')
+                                <button class="admin-action ghost" type="button" data-confirm-action="Remove"
+                                        style="font-size:11px;min-height:28px;padding:0 8px;color:var(--red);border-color:rgba(220,38,38,.2)">Remove</button>
+                            </form>
+                        </div>
+                        <div style="display:flex;justify-content:space-between;align-items:center;font-size:11.5px;color:var(--ink-3);flex-wrap:wrap;gap:4px">
+                            <span>{{ $row->dept_name ?? '—' }} &bull; {{ $row->level ? $row->level.' Level' : '—' }}</span>
+                            <span class="admin-status {{ ($row->candidate_type ?? 'regular') === 'carryover' ? 'orange' : 'gray' }}" style="font-size:10px">
+                                {{ ucfirst($row->candidate_type ?? 'regular') }}
+                            </span>
+                        </div>
+                    </div>
+                    @endforeach
                 </div>
             </div>
         @else
@@ -1206,9 +1679,10 @@
                     $formattedDate = $entry->exam_date
                         ? \Illuminate\Support\Carbon::parse($entry->exam_date)->format('D, d M Y')
                         : '—';
-                    $timeRange = substr($entry->start_time, 0, 5) . ($entry->end_time ? ' – ' . substr($entry->end_time, 0, 5) : '');
+                    $hasMissingEndTime = empty($entry->end_time);
+                    $timeRange = substr($entry->start_time, 0, 5) . ($hasMissingEndTime ? ' (Missing End Time)' : ' – ' . substr($entry->end_time, 0, 5));
                 @endphp
-                <article class="tt-card">
+                <article class="tt-card" @if($hasMissingEndTime) style="border-color:#fcd34d;background:#fffdfa" @endif>
                     <div class="tt-card-head">
                         <div style="display:flex;gap:10px;align-items:flex-start;min-width:0">
                             <span class="tt-card-type-dot {{ $entry->assessment_type ?? 'exam' }}" aria-hidden="true"></span>
@@ -1221,7 +1695,17 @@
                                 </p>
                             </div>
                         </div>
-                        <span class="admin-status {{ $statusColour }}">{{ ucfirst($entry->status) }}</span>
+                        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+                            @if(($entry->register_status ?? 'incomplete') === 'confirmed')
+                                <span class="admin-status green" style="font-weight:700">Register Confirmed</span>
+                            @else
+                                <span class="admin-status orange" style="font-weight:700">Register Incomplete</span>
+                            @endif
+                            @if($hasMissingEndTime)
+                                <span class="admin-status red" style="font-weight:700">Missing End Time</span>
+                            @endif
+                            <span class="admin-status {{ $statusColour }}">{{ ucfirst($entry->status) }}</span>
+                        </div>
                     </div>
 
                     <div class="tt-card-stats">
@@ -1261,7 +1745,14 @@
                 </article>
             @empty
                 <div class="admin-empty" style="grid-column:1 / -1;text-align:center;padding:42px 20px">
-                    <div style="font-size:28px;margin-bottom:8px">📅</div>
+                    <div style="margin-bottom:8px;color:var(--ink-4)">
+                        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                            <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+                            <line x1="16" y1="2" x2="16" y2="6"/>
+                            <line x1="8" y1="2" x2="8" y2="6"/>
+                            <line x1="3" y1="10" x2="21" y2="10"/>
+                        </svg>
+                    </div>
                     <strong style="display:block;font-size:15px;color:var(--ink-2);margin-bottom:4px">No {{ strtolower($typeHeading) }} scheduled</strong>
                     <p style="margin:0;font-size:12.5px;color:var(--ink-3)">Use the "+ Schedule" button above or import entries in bulk from a CSV spreadsheet.</p>
                 </div>

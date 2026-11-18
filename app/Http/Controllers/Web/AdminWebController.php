@@ -3,8 +3,11 @@
 namespace App\Http\Controllers\Web;
 
 use App\Http\Controllers\Controller;
+use App\Models\OfficialStudent;
 use App\Services\AuditService;
+use App\Services\MatriculationNumberService;
 use App\Services\MediaService;
+use App\Services\OfficialStudentProtectionService;
 use App\Services\QrTokenService;
 use App\Services\RiskIntelligenceService;
 use App\Services\StudentRegistryImportService;
@@ -12,6 +15,7 @@ use App\Support\Branding;
 use App\Support\DepartmentFees;
 use App\Support\Roles;
 use Illuminate\Database\UniqueConstraintViolationException;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Http\Request;
@@ -124,6 +128,16 @@ class AdminWebController extends Controller
 
         $registryReady = Schema::hasTable('official_students') && Schema::hasTable('student_registry_imports');
 
+        $activeSessionYear = '2025/2026';
+        if (Schema::hasTable('exam_sessions')) {
+            $activeSession = DB::table('exam_sessions')->where('is_active', true)->orderByDesc('session_id')->first()
+                ?: DB::table('exam_sessions')->orderByDesc('session_id')->first();
+            if ($activeSession && ! empty($activeSession->academic_year)) {
+                $activeSessionYear = (string) $activeSession->academic_year;
+            }
+        }
+        $currentSessionStartYear = preg_match('/^(\d{4})/i', $activeSessionYear, $m) ? (int) $m[1] : (int) config('academic.current_session_start_year', 2025);
+
         if (! $registryReady) {
             $students = $this->emptyPaginator($request, 25);
             $imports = collect();
@@ -131,10 +145,19 @@ class AdminWebController extends Controller
                 'official_students' => 0,
                 'active_students' => 0,
                 'inactive_students' => 0,
+                'registry_only' => 0,
+                'portal_created' => 0,
+                'portal_active' => 0,
+                'portal_inactive' => 0,
                 'imports' => 0,
+                'registered' => 0,
+                'identity_approved' => 0,
             ];
+            $departments = collect();
+            $admissionYears = collect();
+            $isSuperAdmin = Roles::isSuperAdmin($request->session()->get('examiner_role'));
 
-            return view('admin.student-registry.index', compact('students', 'imports', 'metrics', 'registryReady'));
+            return view('admin.student-registry.index', compact('students', 'imports', 'metrics', 'registryReady', 'departments', 'admissionYears', 'isSuperAdmin', 'activeSessionYear', 'currentSessionStartYear'));
         }
 
         $hasStudents  = Schema::hasTable('students');
@@ -173,9 +196,31 @@ class AdminWebController extends Controller
                     ->orWhere('os.department', 'like', $q));
             })
             ->when($request->filled('status'), fn ($q2) => $q2->where('os.status', $request->input('status')))
+            ->when($request->filled('department'), fn ($q2) => $q2->where('os.department', $request->input('department')))
+            ->when($request->filled('admission_year'), fn ($q2) => $q2->where('os.admission_year', (int) $request->input('admission_year')))
             ->when($request->filled('photo_status'), fn ($q2) => $hasStudents
                 ? $q2->where('st.photo_status', $request->input('photo_status'))
                 : $q2)
+            ->when($request->filled('portal_status') && $hasStudents, function ($q2) use ($request) {
+                $pStatus = $request->input('portal_status');
+                if ($pStatus === 'registry_only') {
+                    $q2->whereNull('st.matric_no');
+                } elseif ($pStatus === 'has_account') {
+                    $q2->whereNotNull('st.matric_no');
+                } elseif ($pStatus === 'portal_active') {
+                    $q2->whereNotNull('st.matric_no')
+                       ->whereRaw('LOWER(st.account_status) = ?', ['active']);
+                } elseif ($pStatus === 'portal_inactive') {
+                    $q2->whereNotNull('st.matric_no')
+                       ->whereRaw('LOWER(st.account_status) IN (?, ?)', ['inactive', 'suspended']);
+                } elseif ($pStatus === 'portal_created') {
+                    $q2->whereNotNull('st.matric_no')
+                       ->where(function ($sub) {
+                           $sub->whereNull('st.account_status')
+                               ->orWhereRaw('LOWER(st.account_status) NOT IN (?, ?, ?)', ['active', 'inactive', 'suspended']);
+                       });
+                }
+            })
             ->orderBy('os.department')
             ->orderBy('os.level')
             ->orderBy('os.full_name')
@@ -187,17 +232,52 @@ class AdminWebController extends Controller
             ->limit(10)
             ->get();
 
+        $departments = DB::table('official_students')
+            ->whereNotNull('department')
+            ->where('department', '!=', '')
+            ->distinct()
+            ->orderBy('department')
+            ->pluck('department');
+
+        $admissionYears = DB::table('official_students')
+            ->whereNotNull('admission_year')
+            ->distinct()
+            ->orderByDesc('admission_year')
+            ->pluck('admission_year');
+
+        $totalOfficial = DB::table('official_students')->count();
+        $registeredCount = $hasStudents ? DB::table('students')->count() : 0;
+        $registryOnlyCount = $hasStudents
+            ? DB::table('official_students as os')
+                ->whereNotExists(fn ($sub) => $sub->select(DB::raw(1))->from('students as st')->whereColumn('st.matric_no', 'os.matric_number'))
+                ->count()
+            : $totalOfficial;
+
+        $portalActiveCount = $hasStudents && Schema::hasColumn('students', 'account_status')
+            ? DB::table('students')->whereRaw('LOWER(account_status) = ?', ['active'])->count()
+            : 0;
+
+        $portalInactiveCount = $hasStudents && Schema::hasColumn('students', 'account_status')
+            ? DB::table('students')->whereRaw('LOWER(account_status) IN (?, ?)', ['inactive', 'suspended'])->count()
+            : 0;
+
         $metrics = [
-            'official_students' => DB::table('official_students')->count(),
+            'official_students' => $totalOfficial,
             'active_students'   => DB::table('official_students')->where('status', 'active')->count(),
             'inactive_students' => DB::table('official_students')->where('status', 'inactive')->count(),
+            'registry_only'     => $registryOnlyCount,
+            'portal_created'    => $registeredCount,
+            'portal_active'     => $portalActiveCount,
+            'portal_inactive'   => $portalInactiveCount,
             'imports'           => DB::table('student_registry_imports')->count(),
-            'registered'        => $hasStudents ? DB::table('students')->count() : 0,
+            'registered'        => $registeredCount,
             'identity_approved' => $hasStudents && Schema::hasColumn('students', 'photo_status')
                 ? DB::table('students')->where('photo_status', 'approved')->count() : 0,
         ];
 
-        return view('admin.student-registry.index', compact('students', 'imports', 'metrics', 'registryReady'));
+        $isSuperAdmin = Roles::isSuperAdmin($request->session()->get('examiner_role'));
+
+        return view('admin.student-registry.index', compact('students', 'imports', 'metrics', 'registryReady', 'departments', 'admissionYears', 'isSuperAdmin', 'activeSessionYear', 'currentSessionStartYear'));
     }
 
     public function studentRegistryImport(Request $request, StudentRegistryImportService $importService): RedirectResponse
@@ -205,10 +285,6 @@ class AdminWebController extends Controller
         if ($response = $this->guardAdmin($request)) {
             return $response;
         }
-
-        $data = $request->validate([
-            'registry_csv' => ['required', 'file', 'mimes:csv,txt', 'max:5120'],
-        ]);
 
         if (! Schema::hasTable('official_students') || ! Schema::hasTable('student_registry_imports')) {
             return back()->withErrors(['registry_csv' => 'Student registry storage is not ready. Run the pending migrations first.']);
@@ -218,9 +294,21 @@ class AdminWebController extends Controller
             return back()->withErrors(['registry_csv' => 'CSV student registry import is currently disabled by Super Admin settings.']);
         }
 
+        $files = $request->file('registry_files') ?? $request->file('registry_csv');
+        if (! $files) {
+            return back()->withErrors(['registry_csv' => 'Please select at least one CSV file to import.']);
+        }
+
+        $fileList = is_array($files) ? $files : [$files];
+        foreach ($fileList as $f) {
+            if (! $f instanceof \Illuminate\Http\UploadedFile || ! $f->isValid()) {
+                return back()->withErrors(['registry_csv' => 'One or more selected files are invalid or failed to upload.']);
+            }
+        }
+
         try {
             $import = $importService->import(
-                $data['registry_csv'],
+                $fileList,
                 (string) $request->session()->get('examiner_id', 'admin-web')
             );
 
@@ -240,6 +328,77 @@ class AdminWebController extends Controller
                 ->with('last_import_id', $import->id);
         } catch (\Throwable $exception) {
             return back()->withErrors(['registry_csv' => $exception->getMessage()]);
+        }
+    }
+
+    public function studentRegistryPreview(Request $request, StudentRegistryImportService $importService): JsonResponse
+    {
+        if ($response = $this->guardAdmin($request)) {
+            return response()->json(['error' => 'Unauthorized'], 403);
+        }
+
+        $files = $request->file('registry_files') ?? $request->file('registry_csv');
+        if (! $files) {
+            return response()->json(['success' => false, 'message' => 'Please select at least one CSV file for preview.'], 422);
+        }
+
+        $fileList = is_array($files) ? $files : [$files];
+        foreach ($fileList as $f) {
+            if (! $f instanceof \Illuminate\Http\UploadedFile || ! $f->isValid()) {
+                return response()->json(['success' => false, 'message' => 'One or more selected files are invalid or failed to upload.'], 422);
+            }
+        }
+
+        try {
+            $analysis = $importService->preview($fileList);
+
+            return response()->json([
+                'success' => true,
+                'data'    => $analysis,
+            ]);
+        } catch (\Throwable $exception) {
+            return response()->json([
+                'success' => false,
+                'message' => $exception->getMessage(),
+            ], 422);
+        }
+    }
+
+    public function studentRegistryResolveConflict(Request $request, StudentRegistryImportService $importService): JsonResponse
+    {
+        if ($response = $this->guardAdmin($request)) {
+            return response()->json(['error' => 'Unauthorized'], 403);
+        }
+
+        $data = $request->validate([
+            'matric_number'   => ['required', 'string'],
+            'action'          => ['required', 'string', 'in:keep_existing,apply_incoming,manual_correct,exclude'],
+            'incoming_record' => ['nullable', 'array'],
+            'corrections'     => ['nullable', 'array'],
+            'import_id'       => ['nullable', 'integer'],
+        ]);
+
+        try {
+            $result = $importService->resolveConflict(
+                matricNumber: $data['matric_number'],
+                action: $data['action'],
+                data: [
+                    'incoming_record' => $data['incoming_record'] ?? [],
+                    'corrections'     => $data['corrections'] ?? [],
+                ],
+                resolvedBy: (string) $request->session()->get('examiner_id', 'admin-web'),
+                importId: isset($data['import_id']) ? (int) $data['import_id'] : null
+            );
+
+            return response()->json([
+                'success' => true,
+                'data'    => $result,
+            ]);
+        } catch (\Throwable $e) {
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage(),
+            ], 422);
         }
     }
 
@@ -279,6 +438,236 @@ class AdminWebController extends Controller
             }
             fclose($handle);
         }, $filename, ['Content-Type' => 'text/csv']);
+    }
+
+    public function studentRegistryManualRegister(
+        Request $request,
+        MatriculationNumberService $matricService,
+        StudentRegistryImportService $importService
+    ): RedirectResponse
+    {
+        if ($response = $this->guardAdmin($request)) {
+            return $response;
+        }
+
+        $request->validate([
+            'matric_number' => 'required|string|max:50',
+            'full_name'     => 'required|string|max:255',
+            'level'         => 'nullable|string|max:20',
+        ]);
+
+        $normalized = $matricService->normalize($request->input('matric_number'));
+        if ($normalized === '' || ! $matricService->validateFormat($normalized)) {
+            return back()->withInput()->withErrors([
+                'matric_number' => 'Invalid matriculation number format. Must conform to 9-digit AAUA syntax or recognized historical format.',
+            ]);
+        }
+
+        $fullName = trim($request->input('full_name'));
+        if ($fullName === '') {
+            return back()->withInput()->withErrors([
+                'full_name' => 'Full name cannot be empty.',
+            ]);
+        }
+
+        // Check if student already exists in official registry
+        $existing = DB::table('official_students')
+            ->where('matric_number', $normalized)
+            ->orWhere(function ($q) use ($normalized) {
+                if (Schema::hasColumn('official_students', 'normalized_matric_number')) {
+                    $q->where('normalized_matric_number', $normalized);
+                }
+            })
+            ->first();
+
+        if ($existing) {
+            $existingName = trim((string) $existing->full_name);
+            if (strcasecmp($existingName, $fullName) === 0) {
+                return back()->withInput()->with('status', "Student {$normalized} ({$fullName}) is already present in the official registry.");
+            }
+
+            // Category F: Identity Conflict - Different names for the same matriculation number
+            return back()->withInput()->withErrors([
+                'matric_number' => "Category F Identity Conflict: Matriculation number {$normalized} belongs to '{$existingName}' in the official registry. Conflicting student identities cannot be overwritten.",
+            ]);
+        }
+
+        $parsed = $matricService->parse($normalized, verifyRegistry: false);
+
+        // Resolve academic level:
+        // - "unassigned" -> null
+        // - Explicit string (e.g. "100", "200", "300", "400", "500") -> user choice
+        // - Empty / omitted -> auto-compute suggested level from admission year & active session
+        $inputLevel = trim((string) $request->input('level', ''));
+        if (strtolower($inputLevel) === 'unassigned') {
+            $finalLevel = null;
+        } elseif ($inputLevel !== '') {
+            $finalLevel = $inputLevel;
+        } else {
+            $finalLevel = $importService->computeSuggestedLevel($parsed->admission_year);
+        }
+
+        $created = OfficialStudent::create([
+            'matric_number'            => $normalized,
+            'normalized_matric_number' => $normalized,
+            'full_name'                => $fullName,
+            'admission_year'           => $parsed->admission_year,
+            'faculty_code'             => $parsed->faculty_code,
+            'department_code'          => $parsed->department_code,
+            'department'               => $parsed->department_name,
+            'faculty'                  => $parsed->faculty_name,
+            'level'                    => $finalLevel,
+            'status'                   => 'active',
+        ]);
+
+        $this->audit('official_student.manually_registered', [
+            'matric_number'  => $normalized,
+            'full_name'      => $fullName,
+            'admission_year' => $parsed->admission_year,
+            'level'          => $finalLevel,
+            'department'     => $parsed->department_name,
+            'faculty'        => $parsed->faculty_name,
+        ], $request);
+
+        return back()->with('status', "Official student '{$created->full_name}' ({$normalized}) registered successfully in the registry.");
+    }
+
+    public function studentRegistryToggleStatus(Request $request, int $id): RedirectResponse
+    {
+        if ($response = $this->guardAdmin($request)) {
+            return $response;
+        }
+
+        $student = OfficialStudent::findOrFail($id);
+        $oldStatus = $student->status;
+        $newStatus = ($oldStatus === 'active') ? 'inactive' : 'active';
+        $student->status = $newStatus;
+        $student->save();
+
+        $this->audit('official_student.status_toggled', [
+            'id'            => $id,
+            'matric_number' => $student->matric_number,
+            'from_status'   => $oldStatus,
+            'to_status'     => $newStatus,
+        ], $request);
+
+        return back()->with('status', "Student {$student->matric_number} status updated to {$newStatus}.");
+    }
+
+    public function studentRegistryDestroy(Request $request, int $id, OfficialStudentProtectionService $protectionService): RedirectResponse
+    {
+        if ($response = $this->guardAdmin($request)) {
+            return $response;
+        }
+
+        if (! Roles::isSuperAdmin($request->session()->get('examiner_role'))) {
+            abort(403, 'Super Admin authorization required to delete registry records.');
+        }
+
+        $student = OfficialStudent::findOrFail($id);
+        $reasons = $protectionService->getRecordProtectionReasons($student);
+
+        if (! empty($reasons)) {
+            $reasonList = implode(', ', array_values($reasons));
+            return back()->withErrors([
+                'error' => "Cannot delete official student {$student->matric_number}: record is protected due to existing {$reasonList}. To restrict student access, deactivate the record instead.",
+            ]);
+        }
+
+        $matric = $student->matric_number;
+        $name   = $student->full_name;
+        $student->delete();
+
+        $this->audit('official_student.deleted', [
+            'id'            => $id,
+            'matric_number' => $matric,
+            'full_name'     => $name,
+        ], $request);
+
+        return back()->with('status', "Official student {$matric} ({$name}) successfully removed from the registry.");
+    }
+
+    public function studentRegistryClearReview(Request $request, OfficialStudentProtectionService $protectionService): JsonResponse
+    {
+        if ($response = $this->guardAdmin($request)) {
+            return response()->json(['error' => 'Unauthorized'], 403);
+        }
+
+        if (! Roles::isSuperAdmin($request->session()->get('examiner_role'))) {
+            return response()->json(['error' => 'Super Admin authorization required.'], 403);
+        }
+
+        return response()->json([
+            'success' => true,
+            'data'    => $protectionService->getProtectionReview(),
+        ]);
+    }
+
+    public function studentRegistryClearUnlinked(Request $request, OfficialStudentProtectionService $protectionService): RedirectResponse
+    {
+        if ($response = $this->guardAdmin($request)) {
+            return $response;
+        }
+
+        if (! Roles::isSuperAdmin($request->session()->get('examiner_role'))) {
+            abort(403, 'Super Admin authorization required to clear unlinked records.');
+        }
+
+        if (! $request->filled('confirm_clear_unlinked')) {
+            return back()->withErrors([
+                'clear_unlinked' => 'Explicit confirmation is required to clear unlinked registry records.',
+            ]);
+        }
+
+        $review  = $protectionService->getProtectionReview();
+        $deleted = $protectionService->deleteUnlinkedStudents();
+
+        $this->audit('student_registry.cleared_unlinked', [
+            'deleted_count'       => $deleted,
+            'protected_preserved' => $review['protected_count'],
+            'total_prior'         => $review['total'],
+        ], $request);
+
+        return back()->with('status', "Successfully cleared {$deleted} unlinked registry records. {$review['protected_count']} protected records were safely preserved.");
+    }
+
+    public function studentRegistryFullReviewAction(Request $request, OfficialStudentProtectionService $protectionService): RedirectResponse
+    {
+        if ($response = $this->guardAdmin($request)) {
+            return $response;
+        }
+
+        if (! Roles::isSuperAdmin($request->session()->get('examiner_role'))) {
+            abort(403, 'Super Admin authorization required for full registry review.');
+        }
+
+        $action = $request->input('review_action');
+        if (! in_array($action, ['prune_and_deactivate', 'deactivate_only'], true)) {
+            return back()->withErrors([
+                'review_action' => 'Invalid full review action selected.',
+            ]);
+        }
+
+        if ($action === 'prune_and_deactivate') {
+            $unlinkedDeleted      = $protectionService->deleteUnlinkedStudents();
+            $protectedDeactivated = $protectionService->deactivateProtectedStudents();
+
+            $this->audit('student_registry.full_review_prune_deactivate', [
+                'unlinked_deleted'      => $unlinkedDeleted,
+                'protected_deactivated' => $protectedDeactivated,
+            ], $request);
+
+            return back()->with('status', "Full registry review executed: {$unlinkedDeleted} unlinked records removed; {$protectedDeactivated} protected records deactivated and safely preserved.");
+        }
+
+        // deactivate_only
+        $deactivated = $protectionService->deactivateAllStudents();
+
+        $this->audit('student_registry.full_review_deactivate_all', [
+            'deactivated_count' => $deactivated,
+        ], $request);
+
+        return back()->with('status', "Full registry review executed: {$deactivated} active official student records safely deactivated.");
     }
 
     public function photoApprovals(Request $request)
@@ -1007,22 +1396,140 @@ class AdminWebController extends Controller
             : null;
         $defaultExamPaymentRequired = $this->settingBoolean('default_exam_payment_required', true);
 
-        // Roster data for test/makeup edit
+        // Roster data for edit entry (all assessment types: exam, test, makeup)
         $roster = collect();
         $rosterCount = 0;
-        if ($editEntry && in_array($editEntry->assessment_type ?? 'exam', ['test', 'makeup'])
-            && Schema::hasTable('timetable_students')) {
+        if ($editEntry && Schema::hasTable('timetable_students')) {
             $roster = DB::table('timetable_students')
                 ->where('timetable_id', $editEntry->{$timetableKey})
+                ->leftJoin('official_students', function ($join) {
+                    $join->on('timetable_students.matric_no', '=', 'official_students.matric_number');
+                    if (Schema::hasColumn('official_students', 'normalized_matric_number')) {
+                        $join->orOn('timetable_students.matric_no', '=', 'official_students.normalized_matric_number');
+                    }
+                })
                 ->leftJoin('students', 'timetable_students.matric_no', '=', 'students.matric_no')
-                ->leftJoin('departments', 'students.department_id', '=', 'departments.dept_id')
-                ->select('timetable_students.matric_no', 'students.full_name', 'students.level', 'departments.dept_name')
+                ->leftJoin('departments', function ($join) {
+                    $join->on('students.department_id', '=', 'departments.dept_id');
+                })
+                ->select(
+                    'timetable_students.matric_no',
+                    'timetable_students.candidate_type',
+                    DB::raw('COALESCE(official_students.full_name, students.full_name) as full_name'),
+                    DB::raw('COALESCE(official_students.level, students.level) as level'),
+                    DB::raw('official_students.admission_year'),
+                    DB::raw('COALESCE(official_students.department, departments.dept_name) as dept_name'),
+                    DB::raw('official_students.faculty as faculty_name'),
+                    DB::raw('official_students.status as registry_status'),
+                    DB::raw('CASE WHEN official_students.id IS NOT NULL THEN 1 ELSE 0 END as is_registry_verified')
+                )
                 ->orderBy('timetable_students.matric_no')
-                ->get();
+                ->get()
+                ->map(function ($row) {
+                    if (empty($row->level) && !empty($row->admission_year)) {
+                        $row->level = app(StudentRegistryImportService::class)->computeSuggestedLevel($row->admission_year);
+                    }
+                    return $row;
+                });
             $rosterCount = $roster->count();
         }
 
-        return view('admin.timetable.index', compact('entries', 'sessions', 'departments', 'examiners', 'editEntry', 'timetableKey', 'defaultExamPaymentRequired', 'typeFilter', 'roster', 'rosterCount', 'hasExaminerId'));
+        $missingEndTimeCount = DB::table('timetables')
+            ->where(function ($q) {
+                $q->whereNull('end_time')
+                  ->orWhere('end_time', '');
+            })
+            ->count();
+
+        $registerIncompleteCount = DB::table('timetables')
+            ->where(function ($q) {
+                $q->whereNull('register_status')
+                  ->orWhere('register_status', '!=', 'confirmed');
+            })
+            ->count();
+
+        $activeSession = DB::table('exam_sessions')->where('is_active', true)->first();
+
+        // Centralised Regular Examination Workspace Operational Metrics
+        $examWorkspaceMetrics = [
+            'total_exams' => DB::table('timetables')->where('assessment_type', 'exam')->count(),
+            'total_candidates' => Schema::hasTable('timetable_students')
+                ? DB::table('timetable_students')->join('timetables', 'timetable_students.timetable_id', '=', 'timetables.id')->where('timetables.assessment_type', 'exam')->count()
+                : 0,
+            'confirmed_registers' => DB::table('timetables')->where('assessment_type', 'exam')->where('register_status', 'confirmed')->count(),
+            'incomplete_registers' => DB::table('timetables')->where('assessment_type', 'exam')->where(function ($q) {
+                $q->whereNull('register_status')->orWhere('register_status', '!=', 'confirmed');
+            })->count(),
+            'today_exams' => DB::table('timetables')->where('assessment_type', 'exam')->whereDate('exam_date', now()->toDateString())->count(),
+            'live_checked_in' => Schema::hasTable('attendance_records')
+                ? DB::table('attendance_records')->join('timetables', 'attendance_records.timetable_id', '=', 'timetables.id')->where('timetables.assessment_type', 'exam')->where('attendance_records.status', 'checked_in')->count()
+                : 0,
+            'live_submitted' => Schema::hasTable('attendance_records')
+                ? DB::table('attendance_records')->join('timetables', 'attendance_records.timetable_id', '=', 'timetables.id')->where('timetables.assessment_type', 'exam')->where('attendance_records.status', 'submitted')->count()
+                : 0,
+            'live_flagged' => Schema::hasTable('attendance_records')
+                ? DB::table('attendance_records')->join('timetables', 'attendance_records.timetable_id', '=', 'timetables.id')->where('timetables.assessment_type', 'exam')->where('attendance_records.status', 'flagged')->count()
+                : 0,
+        ];
+
+        // Specific assessment live verification & attendance metrics when editing
+        $examAttendanceStats = null;
+        $recentExamScans = collect();
+        if ($editEntry && Schema::hasTable('attendance_records')) {
+            $checkedIn = DB::table('attendance_records')->where('timetable_id', $editEntry->{$timetableKey})->where('status', 'checked_in')->count();
+            $submitted = DB::table('attendance_records')->where('timetable_id', $editEntry->{$timetableKey})->where('status', 'submitted')->count();
+            $flagged = DB::table('attendance_records')->where('timetable_id', $editEntry->{$timetableKey})->where('status', 'flagged')->count();
+            $present = $checkedIn + $submitted + $flagged;
+
+            $examAttendanceStats = [
+                'enrolled'      => $rosterCount,
+                'checked_in'    => $checkedIn,
+                'submitted'     => $submitted,
+                'flagged'       => $flagged,
+                'total_present' => $present,
+                'checkin_rate'  => $rosterCount > 0 ? round(($present / $rosterCount) * 100) : 0,
+            ];
+
+            $recentExamScans = DB::table('attendance_records')
+                ->where('attendance_records.timetable_id', $editEntry->{$timetableKey})
+                ->leftJoin('official_students', function ($join) {
+                    $join->on('attendance_records.matric_no', '=', 'official_students.matric_number');
+                    if (Schema::hasColumn('official_students', 'normalized_matric_number')) {
+                        $join->orOn('attendance_records.matric_no', '=', 'official_students.normalized_matric_number');
+                    }
+                })
+                ->leftJoin('students', 'attendance_records.matric_no', '=', 'students.matric_no')
+                ->select(
+                    'attendance_records.matric_no',
+                    'attendance_records.status',
+                    'attendance_records.checked_in_at',
+                    'attendance_records.submitted_at',
+                    DB::raw('COALESCE(official_students.full_name, students.full_name) as full_name')
+                )
+                ->orderByDesc('attendance_records.checked_in_at')
+                ->limit(6)
+                ->get();
+        }
+
+        return view('admin.timetable.index', compact(
+            'entries',
+            'sessions',
+            'departments',
+            'examiners',
+            'editEntry',
+            'timetableKey',
+            'defaultExamPaymentRequired',
+            'typeFilter',
+            'roster',
+            'rosterCount',
+            'hasExaminerId',
+            'missingEndTimeCount',
+            'registerIncompleteCount',
+            'activeSession',
+            'examWorkspaceMetrics',
+            'examAttendanceStats',
+            'recentExamScans'
+        ));
     }
 
     public function timetableStore(Request $request): RedirectResponse
@@ -1033,6 +1540,13 @@ class AdminWebController extends Controller
 
         $data = $this->validateTimetable($request);
         $timetableKey = $this->timetableKey();
+        $enrollmentMode = $request->input('enrollment_mode', 'manual');
+
+        if ($enrollmentMode === 'csv' && !$request->hasFile('roster_csv')) {
+            return back()->withInput()->withErrors([
+                'roster_csv' => 'A CSV file containing candidate matric numbers is required when selecting Upload CSV Roster.',
+            ]);
+        }
 
         try {
             $id = DB::table('timetables')->insertGetId($data + ['created_at' => now(), 'updated_at' => now()]);
@@ -1045,40 +1559,41 @@ class AdminWebController extends Controller
         $this->audit('timetable.created', ['course_code' => $data['course_code'], 'exam_date' => $data['exam_date']], $request);
 
         $rosterAdded = 0;
-        $enrollmentMode = $request->input('enrollment_mode', 'manual');
-        $isTestType = in_array($data['assessment_type'] ?? 'exam', ['test', 'makeup']);
 
-        if ($isTestType && Schema::hasTable('timetable_students')) {
+        if (Schema::hasTable('timetable_students')) {
             if ($enrollmentMode === 'all') {
-                $students = DB::table('students')
-                    ->where('department_id', $data['department_id'])
-                    ->where('level', $data['level'])
-                    ->pluck('matric_no');
+                $candidateMatrics = $this->resolveCohortMatrics((int) $data['department_id'], $data['level']);
 
-                $rows = $students->map(fn ($m) => [
-                    'timetable_id' => $id,
-                    'matric_no'    => $m,
-                    'created_at'   => now(),
-                ])->all();
+                $rows = $candidateMatrics->map(fn ($m) => [
+                    'timetable_id'   => $id,
+                    'matric_no'      => strtoupper(trim((string) $m)),
+                    'candidate_type' => 'regular',
+                    'enrolled_by'    => (string) $request->session()->get('examiner_name', 'Admin'),
+                    'created_at'     => now(),
+                ])->filter(fn ($r) => $r['matric_no'] !== '')->all();
 
                 if ($rows) {
                     DB::table('timetable_students')->insertOrIgnore($rows);
                     $rosterAdded = count($rows);
                 }
             } elseif ($enrollmentMode === 'csv' && $request->hasFile('roster_csv')) {
-                $rosterAdded = $this->importRosterFromCsv($id, $request->file('roster_csv')->getRealPath());
+                $request->validate(['roster_csv' => 'file|mimes:csv,txt|max:4096']);
+                $resolution = $this->resolveRosterCandidatesFromCsv($id, $request->file('roster_csv')->getRealPath());
+                $matchedCount = count($resolution['matched'] ?? []);
+                $typeParam = match($data['assessment_type'] ?? 'exam') { 'makeup' => 'makeup', 'test' => 'test', default => 'exam' };
+                $msg = "Assessment timetable entry created (Register Incomplete). Candidate CSV resolved against Official Student Registry ({$matchedCount} candidate(s) matched). Please review the preview below and confirm to enrol.";
+
+                return redirect()->route('admin.timetable', ['type' => $typeParam, 'edit' => $id])
+                    ->with('roster_preview', $resolution)
+                    ->with('status', $msg);
             }
         }
 
-        $typeParam = $isTestType ? ($data['assessment_type'] === 'makeup' ? 'makeup' : 'test') : 'exam';
-        $msg = 'Timetable entry created.' . ($rosterAdded ? " {$rosterAdded} students enrolled." : '');
+        $typeParam = match($data['assessment_type'] ?? 'exam') { 'makeup' => 'makeup', 'test' => 'test', default => 'exam' };
+        $msg = 'Timetable entry created (Register Incomplete).' . ($rosterAdded ? " {$rosterAdded} candidate(s) loaded. Please review the roster below and click 'Confirm Register' when verified." : ' Please add candidate students and confirm the register before scanning can begin.');
 
-        if ($isTestType) {
-            return redirect()->route('admin.timetable', ['type' => $typeParam, 'edit' => $id])
-                ->with('status', $msg . ' You can manage the roster below.');
-        }
-
-        return redirect()->route('admin.timetable', ['type' => $typeParam])->with('status', $msg);
+        return redirect()->route('admin.timetable', ['type' => $typeParam])
+            ->with('status', $msg);
     }
 
     public function timetableUpdate(Request $request, int $entry): RedirectResponse
@@ -1114,8 +1629,14 @@ class AdminWebController extends Controller
         $key = $this->timetableKey();
         $record = DB::table('timetables')->where($key, $entry)->first();
         abort_unless($record, 404);
-        DB::table('timetables')->where($key, $entry)->delete();
-        $this->audit('timetable.deleted', ['timetable_id' => $entry, 'course_code' => $record->course_code ?? null], $request);
+
+        DB::transaction(function () use ($key, $entry, $record, $request) {
+            if (Schema::hasTable('timetable_students')) {
+                DB::table('timetable_students')->where('timetable_id', $entry)->delete();
+            }
+            DB::table('timetables')->where($key, $entry)->delete();
+            $this->audit('timetable.deleted', ['timetable_id' => $entry, 'course_code' => $record->course_code ?? null], $request);
+        });
 
         return redirect()->route('admin.timetable')->with('status', 'Timetable entry deleted.');
     }
@@ -1128,25 +1649,49 @@ class AdminWebController extends Controller
 
         $key    = $this->timetableKey();
         $record = DB::table('timetables')->where($key, $entry)->first();
-        abort_unless($record && in_array($record->assessment_type ?? 'exam', ['test', 'makeup']), 404);
+        abort_unless($record, 404);
 
-        $matric = strtoupper(trim($request->input('matric_no', '')));
+        $matricService = app(MatriculationNumberService::class);
+        $rawMatric = (string) $request->input('matric_no', '');
+        $matric = $matricService->normalize($rawMatric);
         if (!$matric) {
-            return back()->withErrors(['matric_no' => 'Matric number is required.']);
+            return back()->withErrors(['matric_no' => 'Matriculation number is required.']);
         }
 
+        // Validate structure via MatriculationNumberService
+        $parseResult = $matricService->parse($matric, true);
+        if (!$parseResult->isValidStructure()) {
+            return back()->withErrors(['matric_no' => "Invalid matriculation format for '{$rawMatric}'. " . (!empty($parseResult->errors) ? implode(' ', $parseResult->errors) : 'Please check format.')]);
+        }
+
+        // Check if student already enrolled in this timetable roster
         if (Schema::hasTable('timetable_students')) {
+            $exists = DB::table('timetable_students')
+                ->where('timetable_id', $entry)
+                ->where('matric_no', $matric)
+                ->exists();
+            if ($exists) {
+                return back()->withErrors(['matric_no' => "Student {$matric} is already enrolled on this assessment roster."]);
+            }
+
             DB::table('timetable_students')->insertOrIgnore([
-                'timetable_id' => $entry,
-                'matric_no'    => $matric,
-                'created_at'   => now(),
+                'timetable_id'   => $entry,
+                'matric_no'      => $matric,
+                'candidate_type' => $request->input('candidate_type', 'regular'),
+                'enrolled_by'    => (string) $request->session()->get('examiner_name', 'Admin'),
+                'created_at'     => now(),
             ]);
         }
         $this->audit('roster.student_added', ['timetable_id' => $entry, 'matric_no' => $matric], $request);
 
-        $typeParam = match($record->assessment_type ?? 'test') { 'makeup' => 'makeup', default => 'test' };
+        $official = $parseResult->official_student;
+        $statusMsg = $official
+            ? "Student {$matric} ({$official->full_name}, {$official->department}, {$official->level} Level) added to roster from Official Student Registry."
+            : "Student {$matric} added to roster (Note: No official student registry record found).";
+
+        $typeParam = match($record->assessment_type ?? 'exam') { 'makeup' => 'makeup', 'test' => 'test', default => 'exam' };
         return redirect()->route('admin.timetable', ['type' => $typeParam, 'edit' => $entry])
-            ->with('status', "Student {$matric} added to roster.");
+            ->with('status', $statusMsg);
     }
 
     public function timetableRosterRemove(Request $request, int $entry, string $matric): RedirectResponse
@@ -1157,7 +1702,7 @@ class AdminWebController extends Controller
 
         $key    = $this->timetableKey();
         $record = DB::table('timetables')->where($key, $entry)->first();
-        abort_unless($record && in_array($record->assessment_type ?? 'exam', ['test', 'makeup']), 404);
+        abort_unless($record, 404);
 
         $matric = strtoupper($matric);
         if (Schema::hasTable('timetable_students')) {
@@ -1168,9 +1713,32 @@ class AdminWebController extends Controller
         }
         $this->audit('roster.student_removed', ['timetable_id' => $entry, 'matric_no' => $matric], $request);
 
-        $typeParam = match($record->assessment_type ?? 'test') { 'makeup' => 'makeup', default => 'test' };
+        $typeParam = match($record->assessment_type ?? 'exam') { 'makeup' => 'makeup', 'test' => 'test', default => 'exam' };
         return redirect()->route('admin.timetable', ['type' => $typeParam, 'edit' => $entry])
             ->with('status', "Student {$matric} removed from roster.");
+    }
+
+    public function timetableRosterPreview(Request $request, int $entry): JsonResponse|RedirectResponse
+    {
+        if ($response = $this->guardAdmin($request)) {
+            return $response;
+        }
+
+        $key    = $this->timetableKey();
+        $record = DB::table('timetables')->where($key, $entry)->first();
+        abort_unless($record, 404);
+
+        $request->validate(['roster_csv' => 'required|file|mimes:csv,txt|max:4096']);
+
+        $resolution = $this->resolveRosterCandidatesFromCsv($entry, $request->file('roster_csv')->getRealPath());
+
+        if ($request->expectsJson() || $request->wantsJson()) {
+            return response()->json($resolution);
+        }
+
+        $typeParam = match($record->assessment_type ?? 'exam') { 'makeup' => 'makeup', 'test' => 'test', default => 'exam' };
+        return redirect()->route('admin.timetable', ['type' => $typeParam, 'edit' => $entry])
+            ->with('roster_preview', $resolution);
     }
 
     public function timetableRosterImport(Request $request, int $entry): RedirectResponse
@@ -1181,48 +1749,487 @@ class AdminWebController extends Controller
 
         $key    = $this->timetableKey();
         $record = DB::table('timetables')->where($key, $entry)->first();
-        abort_unless($record && in_array($record->assessment_type ?? 'exam', ['test', 'makeup']), 404);
+        abort_unless($record, 404);
+
+        // Check if confirming candidates from a resolved preview
+        if ($request->has('confirmed_candidates') && is_array($request->input('confirmed_candidates'))) {
+            $confirmedMatrics = $request->input('confirmed_candidates');
+            $added = 0;
+            $adminUser = (string) $request->session()->get('examiner_name', 'Admin');
+
+            if (Schema::hasTable('timetable_students') && !empty($confirmedMatrics)) {
+                $matricService = app(MatriculationNumberService::class);
+                $rows = [];
+                foreach ($confirmedMatrics as $raw) {
+                    $norm = $matricService->normalize((string) $raw);
+                    if ($norm) {
+                        $rows[] = [
+                            'timetable_id'   => $entry,
+                            'matric_no'      => $norm,
+                            'candidate_type' => 'regular',
+                            'enrolled_by'    => $adminUser,
+                            'created_at'     => now(),
+                        ];
+                    }
+                }
+                if ($rows) {
+                    DB::table('timetable_students')->insertOrIgnore($rows);
+                    $added = count($rows);
+                }
+            }
+
+            $this->audit('roster.candidates_confirmed', ['timetable_id' => $entry, 'confirmed_count' => $added], $request);
+            $typeParam = match($record->assessment_type ?? 'exam') { 'makeup' => 'makeup', 'test' => 'test', default => 'exam' };
+            return redirect()->route('admin.timetable', ['type' => $typeParam, 'edit' => $entry])
+                ->with('status', "{$added} candidate(s) successfully confirmed and enrolled to assessment roster from Official Student Registry.");
+        }
 
         $request->validate(['roster_csv' => 'required|file|mimes:csv,txt|max:4096']);
 
+        $resolution = $this->resolveRosterCandidatesFromCsv($entry, $request->file('roster_csv')->getRealPath());
         $added = 0;
-        if (Schema::hasTable('timetable_students')) {
-            $added = $this->importRosterFromCsv($entry, $request->file('roster_csv')->getRealPath());
-        }
-        $this->audit('roster.csv_imported', ['timetable_id' => $entry, 'added' => $added], $request);
+        $adminUser = (string) $request->session()->get('examiner_name', 'Admin');
 
-        $typeParam = match($record->assessment_type ?? 'test') { 'makeup' => 'makeup', default => 'test' };
+        if (Schema::hasTable('timetable_students')) {
+            $rows = [];
+            foreach ($resolution['matched'] as $item) {
+                $rows[] = [
+                    'timetable_id'   => $entry,
+                    'matric_no'      => $item['matric'],
+                    'candidate_type' => 'regular',
+                    'enrolled_by'    => $adminUser,
+                    'created_at'     => now(),
+                ];
+            }
+            if ($rows) {
+                DB::table('timetable_students')->insertOrIgnore($rows);
+                $added = count($rows);
+            }
+        }
+
+        $this->audit('roster.csv_imported', [
+            'timetable_id'     => $entry,
+            'added'            => $added,
+            'matched_count'    => count($resolution['matched']),
+            'unmatched_count'  => count($resolution['unmatched']),
+            'duplicate_count'  => count($resolution['duplicates']),
+            'invalid_count'    => count($resolution['invalid']),
+        ], $request);
+
+        $summaryMsg = "Roster Import: {$added} candidate(s) verified against Official Student Registry and enrolled.";
+        if (count($resolution['unmatched']) > 0) {
+            $summaryMsg .= " " . count($resolution['unmatched']) . " candidate(s) not found in registry.";
+        }
+        if (count($resolution['duplicates']) > 0) {
+            $summaryMsg .= " " . count($resolution['duplicates']) . " duplicate(s) skipped.";
+        }
+        if (count($resolution['invalid']) > 0) {
+            $summaryMsg .= " " . count($resolution['invalid']) . " malformed syntax skipped.";
+        }
+
+        $typeParam = match($record->assessment_type ?? 'exam') { 'makeup' => 'makeup', 'test' => 'test', default => 'exam' };
         return redirect()->route('admin.timetable', ['type' => $typeParam, 'edit' => $entry])
-            ->with('status', "{$added} student(s) added from CSV.");
+            ->with('status', $summaryMsg)
+            ->with('roster_import_resolution', $resolution);
+    }
+
+    public function timetableRosterConfirm(Request $request, int $entry): RedirectResponse
+    {
+        if ($response = $this->guardAdmin($request)) {
+            return $response;
+        }
+
+        $key = $this->timetableKey();
+        $record = DB::table('timetables')->where($key, $entry)->first();
+        abort_unless($record, 404);
+
+        $rosterCount = Schema::hasTable('timetable_students')
+            ? DB::table('timetable_students')->where('timetable_id', $entry)->count()
+            : 0;
+
+        if ($rosterCount === 0) {
+            return back()->withErrors(['roster' => 'Cannot confirm an empty assessment register. Please add at least one candidate student first.']);
+        }
+
+        DB::transaction(function () use ($key, $entry, $request, $record, $rosterCount) {
+            $adminUser = (string) $request->session()->get('examiner_name', 'Admin');
+
+            DB::table('timetables')->where($key, $entry)->update([
+                'register_status'     => 'confirmed',
+                'roster_confirmed_at' => now(),
+                'roster_confirmed_by' => $adminUser,
+                'updated_at'          => now(),
+            ]);
+
+            $this->audit('roster.confirmed', [
+                'timetable_id' => $entry,
+                'course_code'  => $record->course_code ?? null,
+                'candidates'   => $rosterCount,
+                'confirmed_by' => $adminUser,
+            ], $request);
+        });
+
+        $typeParam = match($record->assessment_type ?? 'exam') { 'makeup' => 'makeup', 'test' => 'test', default => 'exam' };
+        return redirect()->route('admin.timetable', ['type' => $typeParam, 'edit' => $entry])
+            ->with('status', "Assessment register confirmed with {$rosterCount} enrolled candidate(s). Scanning and examination pass generation are now enabled.");
+    }
+
+    public function timetableRosterUnconfirm(Request $request, int $entry): RedirectResponse
+    {
+        if ($response = $this->guardAdmin($request)) {
+            return $response;
+        }
+
+        $key = $this->timetableKey();
+        $record = DB::table('timetables')->where($key, $entry)->first();
+        abort_unless($record, 404);
+
+        DB::transaction(function () use ($key, $entry, $request, $record) {
+            DB::table('timetables')->where($key, $entry)->update([
+                'register_status'     => 'incomplete',
+                'roster_confirmed_at' => null,
+                'roster_confirmed_by' => null,
+                'updated_at'          => now(),
+            ]);
+
+            $this->audit('roster.unconfirmed', [
+                'timetable_id' => $entry,
+                'course_code'  => $record->course_code ?? null,
+            ], $request);
+        });
+
+        $typeParam = match($record->assessment_type ?? 'exam') { 'makeup' => 'makeup', 'test' => 'test', default => 'exam' };
+        return redirect()->route('admin.timetable', ['type' => $typeParam, 'edit' => $entry])
+            ->with('status', 'Assessment register set to Incomplete / Requires Review. Scanning and pass generation are suspended until re-confirmed.');
+    }
+
+    public function timetableRosterPopulateCohort(Request $request, int $entry): RedirectResponse
+    {
+        if ($response = $this->guardAdmin($request)) {
+            return $response;
+        }
+
+        $key = $this->timetableKey();
+        $record = DB::table('timetables')->where($key, $entry)->first();
+        abort_unless($record, 404);
+
+        if (! Schema::hasTable('timetable_students')) {
+            return back()->withErrors(['roster' => 'Roster storage table is not available.']);
+        }
+
+        $candidateMatrics = $this->resolveCohortMatrics((int) $record->department_id, $record->level);
+
+        $added = 0;
+        DB::transaction(function () use ($entry, $candidateMatrics, &$added, $request, $record) {
+            foreach ($candidateMatrics as $m) {
+                $mUpper = strtoupper(trim((string) $m));
+                if ($mUpper === '') continue;
+
+                $inserted = DB::table('timetable_students')->insertOrIgnore([
+                    'timetable_id'   => $entry,
+                    'matric_no'      => $mUpper,
+                    'candidate_type' => 'regular',
+                    'enrolled_by'    => (string) $request->session()->get('examiner_name', 'Admin'),
+                    'created_at'     => now(),
+                ]);
+                if ($inserted) $added++;
+            }
+
+            // Keep register_status as 'incomplete' so admin reviews and confirms.
+            DB::table('timetables')->where('id', $entry)->update([
+                'register_status' => 'incomplete',
+                'updated_at'      => now(),
+            ]);
+
+            $this->audit('roster.cohort_populated', [
+                'timetable_id' => $entry,
+                'course_code'  => $record->course_code ?? null,
+                'candidates_added' => $added,
+            ], $request);
+        });
+
+        $typeParam = match($record->assessment_type ?? 'exam') { 'makeup' => 'makeup', 'test' => 'test', default => 'exam' };
+        return redirect()->route('admin.timetable', ['type' => $typeParam, 'edit' => $entry])
+            ->with('status', "{$added} candidate(s) loaded from department cohort. Please review the roster below and click 'Confirm Register' when ready.");
+    }
+
+    /**
+     * Resolve candidate matriculation numbers for an assessment cohort using matriculation intelligence.
+     * Maps students by department code/name and academic level/admission year.
+     *
+     * @return \Illuminate\Support\Collection<int, string>
+     */
+    private function resolveCohortMatrics(int $departmentId, string|int $level): \Illuminate\Support\Collection
+    {
+        $dept = DB::table('departments')->where('dept_id', $departmentId)->first();
+        $deptName = $dept->dept_name ?? null;
+        $deptCode = $dept->department_code ?? null;
+
+        $targetLevel = (string) $level;
+        $levelNum = is_numeric($targetLevel) ? (int) $targetLevel / 100 : null;
+
+        $importService = app(StudentRegistryImportService::class);
+        $sessionStartYear = $importService->getCurrentSessionStartYear();
+
+        $targetAdmissionYear = null;
+        $targetYearCode = null;
+        if ($levelNum && $levelNum >= 1 && $levelNum <= 6) {
+            $targetAdmissionYear = ($sessionStartYear - (int) $levelNum) + 1;
+            $targetYearCode = str_pad((string) ($targetAdmissionYear % 100), 2, '0', STR_PAD_LEFT);
+        }
+
+        $candidateMatrics = collect();
+        if (Schema::hasTable('official_students')) {
+            $query = DB::table('official_students')->where('status', 'active');
+
+            // Department mapping: match by department name, department_code, or matric digits
+            $query->where(function ($q) use ($deptName, $deptCode) {
+                if ($deptName) {
+                    $q->whereRaw('LOWER(department) = ?', [strtolower(trim($deptName))]);
+                }
+                if ($deptCode) {
+                    $q->orWhere('department_code', $deptCode);
+                    $q->orWhereRaw('SUBSTR(matric_number, 5, 2) = ?', [$deptCode]);
+                }
+            });
+
+            // Level / Admission year mapping via matriculation intelligence
+            $query->where(function ($q) use ($targetLevel, $targetAdmissionYear, $targetYearCode) {
+                $q->where('level', $targetLevel);
+                if ($targetAdmissionYear) {
+                    $q->orWhere(function ($sub) use ($targetAdmissionYear) {
+                        $sub->whereNull('level')->where('admission_year', $targetAdmissionYear);
+                    });
+                    $q->orWhere(function ($sub) use ($targetYearCode) {
+                        $sub->whereNull('level')->whereRaw('SUBSTR(matric_number, 1, 2) = ?', [$targetYearCode]);
+                    });
+                }
+            });
+
+            $candidateMatrics = $query->pluck('matric_number');
+        }
+
+        if ($candidateMatrics->isEmpty() && Schema::hasTable('students')) {
+            $candidateMatrics = DB::table('students')
+                ->where('department_id', $departmentId)
+                ->where(function ($q) use ($targetLevel) {
+                    $q->where('level', $targetLevel)->orWhereNull('level');
+                })
+                ->pluck('matric_no');
+        }
+
+        return $candidateMatrics->unique()->values();
+    }
+
+    /**
+     * Parse and resolve candidates from CSV using MatriculationNumberService.
+     * Only matric_number (or matric_no / matric / student_id) is required.
+     * All authoritative student records (full_name, department, level, faculty)
+     * are retrieved from the Official Student Registry (official_students).
+     *
+     * @return array{
+     *     matched: array<int, array<string, mixed>>,
+     *     unmatched: array<int, array<string, mixed>>,
+     *     duplicates: array<int, array<string, mixed>>,
+     *     invalid: array<int, array<string, mixed>>,
+     *     already_enrolled: array<int, array<string, mixed>>,
+     *     total_rows: int,
+     *     eligible_matrics: array<int, string>
+     * }
+     */
+    private function resolveRosterCandidatesFromCsv(int $timetableId, string $filePath): array
+    {
+        $handle = fopen($filePath, 'r');
+        if (!$handle) {
+            return [
+                'matched' => [],
+                'unmatched' => [],
+                'duplicates' => [],
+                'invalid' => [],
+                'already_enrolled' => [],
+                'total_rows' => 0,
+                'eligible_matrics' => [],
+            ];
+        }
+
+        // Already enrolled matrics in this timetable
+        $alreadyEnrolledSet = [];
+        if (Schema::hasTable('timetable_students')) {
+            $existing = DB::table('timetable_students')
+                ->where('timetable_id', $timetableId)
+                ->pluck('matric_no')
+                ->all();
+            foreach ($existing as $m) {
+                $alreadyEnrolledSet[strtoupper(trim((string) $m))] = true;
+            }
+        }
+
+        $matricService = app(MatriculationNumberService::class);
+        $matricColIdx = 0;
+        $firstRow = true;
+        $rawRows = [];
+
+        while (($row = fgetcsv($handle)) !== false) {
+            // Skip totally empty rows
+            $hasContent = false;
+            foreach ($row as $cell) {
+                if (trim((string) $cell) !== '') {
+                    $hasContent = true;
+                    break;
+                }
+            }
+            if (!$hasContent) {
+                continue;
+            }
+
+            if ($firstRow) {
+                $firstRow = false;
+                // Check if this row is a header
+                $matchedCol = null;
+                foreach ($row as $idx => $colName) {
+                    $cleaned = strtolower(trim(preg_replace('/[^a-zA-Z0-9_]/', '', (string) $colName)));
+                    if (in_array($cleaned, ['matric_number', 'matric_no', 'matricno', 'matric', 'student_id', 'studentid', 'matric_num'], true)) {
+                        $matchedCol = $idx;
+                        break;
+                    }
+                }
+
+                if ($matchedCol !== null) {
+                    $matricColIdx = $matchedCol;
+                    continue; // Skip header row
+                }
+
+                // If first row cell 0 looks like a header label
+                $firstCell = strtolower(trim((string) ($row[0] ?? '')));
+                if (preg_match('/^(matric|id|student|no\.?|number|candidate)$/i', $firstCell)) {
+                    $matricColIdx = 0;
+                    continue;
+                }
+            }
+
+            $rawMatric = (string) ($row[$matricColIdx] ?? '');
+            if (trim($rawMatric) !== '') {
+                $rawRows[] = [
+                    'raw' => $rawMatric,
+                    'row' => $row,
+                ];
+            }
+        }
+        fclose($handle);
+
+        $totalRows = count($rawRows);
+        $rawMatrics = array_column($rawRows, 'raw');
+
+        // Batch parse and resolve with official registry pre-fetch
+        $batchResults = $matricService->batchParse($rawMatrics, true);
+
+        $matched = [];
+        $unmatched = [];
+        $duplicates = [];
+        $invalid = [];
+        $alreadyEnrolled = [];
+        $eligibleMatrics = [];
+        $seenInFile = [];
+
+        foreach ($rawRows as $i => $rowItem) {
+            $raw = $rowItem['raw'];
+            /** @var \App\Services\MatricParseResult $parseResult */
+            $parseResult = $batchResults[$i] ?? $matricService->parse($raw, true);
+            $normalized = $parseResult->normalized;
+
+            // Check if duplicate within the same file
+            if ($normalized !== '' && isset($seenInFile[$normalized])) {
+                $duplicates[] = [
+                    'matric' => $normalized ?: $raw,
+                    'raw'    => $raw,
+                    'reason' => 'Duplicate entry in CSV file',
+                ];
+                continue;
+            }
+            if ($normalized !== '') {
+                $seenInFile[$normalized] = true;
+            }
+
+            // Check if structurally invalid
+            if (!$parseResult->isValidStructure()) {
+                $invalid[] = [
+                    'matric' => $normalized ?: $raw,
+                    'raw'    => $raw,
+                    'reason' => !empty($parseResult->errors) ? implode('; ', $parseResult->errors) : 'Invalid format syntax',
+                ];
+                continue;
+            }
+
+            // Check if already enrolled in this assessment
+            if (isset($alreadyEnrolledSet[$normalized])) {
+                $alreadyEnrolled[] = [
+                    'matric' => $normalized,
+                    'raw'    => $raw,
+                    'reason' => 'Already enrolled on this assessment roster',
+                ];
+                continue;
+            }
+
+            // Check official registry match
+            $official = $parseResult->official_student;
+            if ($parseResult->isRegistryVerified() && $official) {
+                $level = $official->level ?: app(StudentRegistryImportService::class)->computeSuggestedLevel($parseResult->admission_year);
+                $matched[] = [
+                    'matric'     => $normalized,
+                    'raw'        => $raw,
+                    'full_name'  => $official->full_name ?? '—',
+                    'department' => $official->department ?? ($parseResult->department_name ?? '—'),
+                    'level'      => $level ?? '—',
+                    'faculty'    => $official->faculty ?? ($parseResult->faculty_name ?? '—'),
+                    'status'     => $official->status ?? 'active',
+                    'photo_url'  => $official->photo_url ?? null,
+                ];
+                $eligibleMatrics[] = $normalized;
+            } else {
+                $unmatched[] = [
+                    'matric'       => $normalized,
+                    'raw'          => $raw,
+                    'format'       => $parseResult->format,
+                    'derived_dept' => $parseResult->department_name,
+                    'reason'       => 'Matriculation number not found in Official Student Registry',
+                ];
+            }
+        }
+
+        return [
+            'matched'          => $matched,
+            'unmatched'        => $unmatched,
+            'duplicates'       => $duplicates,
+            'invalid'          => $invalid,
+            'already_enrolled' => $alreadyEnrolled,
+            'total_rows'       => $totalRows,
+            'eligible_matrics' => $eligibleMatrics,
+        ];
     }
 
     private function importRosterFromCsv(int $timetableId, string $filePath): int
     {
-        $handle = fopen($filePath, 'r');
-        if (!$handle) return 0;
-
+        $resolution = $this->resolveRosterCandidatesFromCsv($timetableId, $filePath);
+        $adminUser = (string) request()->session()->get('examiner_name', 'Admin');
         $added = 0;
-        $firstRow = true;
 
-        while (($line = fgetcsv($handle)) !== false) {
-            $raw = strtoupper(trim((string) ($line[0] ?? '')));
-            if (!$raw) continue;
-
-            // Skip header row (looks like column label not a matric number)
-            if ($firstRow) {
-                $firstRow = false;
-                if (preg_match('/^(matric|id|student|no\.?|number)$/i', $raw)) continue;
+        if (Schema::hasTable('timetable_students') && !empty($resolution['matched'])) {
+            $rows = [];
+            foreach ($resolution['matched'] as $item) {
+                $rows[] = [
+                    'timetable_id'   => $timetableId,
+                    'matric_no'      => $item['matric'],
+                    'candidate_type' => 'regular',
+                    'enrolled_by'    => $adminUser,
+                    'created_at'     => now(),
+                ];
             }
-
-            DB::table('timetable_students')->insertOrIgnore([
-                'timetable_id' => $timetableId,
-                'matric_no'    => $raw,
-                'created_at'   => now(),
-            ]);
-            $added++;
+            if ($rows) {
+                DB::table('timetable_students')->insertOrIgnore($rows);
+                $added = count($rows);
+            }
         }
 
-        fclose($handle);
         return $added;
     }
 
@@ -1293,6 +2300,7 @@ class AdminWebController extends Controller
             $level = $overrideLevel ?? $get('level');
             $examDate = $get('exam_date', 'date');
             $startTime = $get('start_time', 'time');
+            $endTime = $get('end_time', 'end');
             $venue = $get('venue', 'hall');
 
             $rowErrors = [];
@@ -1301,6 +2309,11 @@ class AdminWebController extends Controller
             if (!in_array($level, ['100', '200', '300', '400', '500'], true)) $rowErrors[] = "invalid level ({$level})";
             if (!$examDate) $rowErrors[] = 'exam_date missing';
             if (!$startTime) $rowErrors[] = 'start_time missing';
+            if (!$endTime) {
+                $rowErrors[] = 'end_time missing';
+            } elseif (strtotime($endTime) !== false && strtotime($startTime) !== false && strtotime($endTime) <= strtotime($startTime)) {
+                $rowErrors[] = "end_time ({$endTime}) must be later than start_time ({$startTime})";
+            }
             if (!$venue) $rowErrors[] = 'venue missing';
 
             if ($rowErrors) {
@@ -1323,7 +2336,7 @@ class AdminWebController extends Controller
                 'course_title' => $get('course_title', 'title') ?: null,
                 'exam_date' => $parsedDate,
                 'start_time' => $startTime,
-                'end_time' => $get('end_time') ?: null,
+                'end_time' => $endTime,
                 'venue' => $venue,
                 'status' => in_array($statusRaw, ['scheduled', 'active', 'completed', 'cancelled'], true) ? $statusRaw : 'scheduled',
                 'created_at' => now(),
@@ -2538,21 +3551,33 @@ class AdminWebController extends Controller
             'departments' => $this->safeCount('departments'),
             'audit_events' => $this->safeCount('audit_log'),
             'pending_course_passes' => $activeSession && Schema::hasColumn('qr_tokens', 'timetable_id')
-                ? DB::table('students')
-                    ->join('timetables', function ($join) {
-                        $join->on('students.session_id', '=', 'timetables.exam_session_id')
-                            ->on('students.department_id', '=', 'timetables.department_id')
-                            ->on('students.level', '=', 'timetables.level');
-                    })
-                    ->leftJoin('qr_tokens', function ($join) {
-                        $join->on('students.matric_no', '=', 'qr_tokens.student_id')
-                            ->on('timetables.id', '=', 'qr_tokens.timetable_id')
-                            ->whereIn('qr_tokens.status', ['UNUSED', 'USED']);
-                    })
-                    ->where('timetables.exam_session_id', $activeSession->session_id)
-                    ->where('timetables.status', '!=', 'cancelled')
-                    ->whereNull('qr_tokens.token_id')
-                    ->count()
+                ? (Schema::hasTable('timetable_students') && DB::table('timetable_students')->exists()
+                    ? DB::table('timetable_students')
+                        ->join('timetables', 'timetable_students.timetable_id', '=', 'timetables.id')
+                        ->leftJoin('qr_tokens', function ($join) {
+                            $join->on('timetable_students.matric_no', '=', 'qr_tokens.student_id')
+                                ->on('timetables.id', '=', 'qr_tokens.timetable_id')
+                                ->whereIn('qr_tokens.status', ['UNUSED', 'USED']);
+                        })
+                        ->where('timetables.exam_session_id', $activeSession->session_id)
+                        ->where('timetables.status', '!=', 'cancelled')
+                        ->whereNull('qr_tokens.token_id')
+                        ->count()
+                    : DB::table('students')
+                        ->join('timetables', function ($join) {
+                            $join->on('students.session_id', '=', 'timetables.exam_session_id')
+                                ->on('students.department_id', '=', 'timetables.department_id')
+                                ->on('students.level', '=', 'timetables.level');
+                        })
+                        ->leftJoin('qr_tokens', function ($join) {
+                            $join->on('students.matric_no', '=', 'qr_tokens.student_id')
+                                ->on('timetables.id', '=', 'qr_tokens.timetable_id')
+                                ->whereIn('qr_tokens.status', ['UNUSED', 'USED']);
+                        })
+                        ->where('timetables.exam_session_id', $activeSession->session_id)
+                        ->where('timetables.status', '!=', 'cancelled')
+                        ->whereNull('qr_tokens.token_id')
+                        ->count())
                 : 0,
         ];
 
@@ -2809,7 +3834,7 @@ class AdminWebController extends Controller
             'course_title' => 'nullable|string|max:255',
             'exam_date' => 'required|date',
             'start_time' => 'required',
-            'end_time' => 'nullable|after:start_time',
+            'end_time' => 'required|after:start_time',
             'venue' => 'required|string|max:255',
             'assessment_type' => ['nullable', Rule::in(['exam', 'test', 'makeup'])],
             'status' => 'required|string|in:scheduled,active,completed,cancelled',

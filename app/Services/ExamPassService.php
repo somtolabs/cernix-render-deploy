@@ -39,13 +39,49 @@ class ExamPassService
         $exam = DB::table('timetables')
             ->where('id', $timetableId)
             ->where('exam_session_id', $sessionId)
-            ->where('department_id', $student->department_id)
-            ->where('level', (string) $student->level)
             ->where('status', '!=', 'cancelled')
             ->first();
 
         if (! $exam) {
             throw new RuntimeException('Select a valid assigned course before generating its QR pass.');
+        }
+
+        // Verify Assessment Register Status:
+        // Must be confirmed and have at least one enrolled candidate.
+        $hasRegisterStatusCol = Schema::hasColumn('timetables', 'register_status');
+        $isRegisterConfirmed = $hasRegisterStatusCol
+            ? ($exam->register_status === 'confirmed')
+            : false;
+
+        $hasRosterTable = Schema::hasTable('timetable_students');
+        $rosterCount = $hasRosterTable
+            ? DB::table('timetable_students')->where('timetable_id', $timetableId)->count()
+            : 0;
+
+        if (! $isRegisterConfirmed || $rosterCount === 0) {
+            throw new RuntimeException('Assessment register is incomplete and requires administrative review. Examination pass cannot be generated.');
+        }
+
+        // Verify student in official student registry
+        if (Schema::hasTable('official_students')) {
+            $official = DB::table('official_students')
+                ->where('matric_number', $student->matric_no)
+                ->first();
+            if (! $official || strtolower((string) $official->status) !== 'active') {
+                throw new RuntimeException('This matric number is not active on the official student registry.');
+            }
+        }
+
+        // Exact candidate roster enforcement:
+        // Student MUST be explicitly present in the assessment's confirmed register.
+        $isEnrolled = $hasRosterTable
+            && DB::table('timetable_students')
+                ->where('timetable_id', $timetableId)
+                ->where('matric_no', $student->matric_no)
+                ->exists();
+
+        if (! $isEnrolled) {
+            throw new RuntimeException('You are not registered on the confirmed student register for this assessment.');
         }
 
         if (! $this->examRequiresPayment($exam)) {

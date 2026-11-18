@@ -51,13 +51,25 @@ class QrTokenService
             $exam = DB::table('timetables')
                 ->where('id', $timetableId)
                 ->where('exam_session_id', $sessionId)
-                ->where('department_id', $student->department_id)
-                ->where('level', (string) ($student->level ?? ''))
                 ->where('status', '!=', 'cancelled')
                 ->first();
 
             if (! $exam) {
                 throw new RuntimeException('The selected course is not assigned to this student.');
+            }
+
+            if (Schema::hasTable('timetable_students')) {
+                $hasRoster = DB::table('timetable_students')->where('timetable_id', $timetableId)->exists();
+                if ($hasRoster) {
+                    $isEnrolled = DB::table('timetable_students')
+                        ->where('timetable_id', $timetableId)
+                        ->where('matric_no', $student->matric_no)
+                        ->exists();
+
+                    if (! $isEnrolled) {
+                        throw new RuntimeException('The selected course is not assigned to this student.');
+                    }
+                }
             }
         }
 
@@ -220,15 +232,23 @@ class QrTokenService
 
         if ($tokenTimetableId !== null) {
             $exam = DB::table('timetables')
-                ->join('students', 'timetables.department_id', '=', 'students.department_id')
-                ->where('timetables.id', $tokenTimetableId)
-                ->where('timetables.exam_session_id', $token->session_id)
-                ->where('students.matric_no', $token->student_id)
-                ->whereColumn('timetables.level', 'students.level')
-                ->where('timetables.status', '!=', 'cancelled')
-                ->exists();
+                ->where('id', $tokenTimetableId)
+                ->where('exam_session_id', $token->session_id)
+                ->where('status', '!=', 'cancelled')
+                ->first();
 
-            if ((int) ($payload['timetable_id'] ?? 0) !== $tokenTimetableId || ! $exam) {
+            $isEnrolled = true;
+            if (Schema::hasTable('timetable_students')) {
+                $hasRoster = DB::table('timetable_students')->where('timetable_id', $tokenTimetableId)->exists();
+                if ($hasRoster) {
+                    $isEnrolled = DB::table('timetable_students')
+                        ->where('timetable_id', $tokenTimetableId)
+                        ->where('matric_no', $token->student_id)
+                        ->exists();
+                }
+            }
+
+            if ((int) ($payload['timetable_id'] ?? 0) !== $tokenTimetableId || ! $exam || ! $isEnrolled) {
                 throw new RuntimeException('QR token course does not match the assigned timetable.');
             }
         }

@@ -6,6 +6,7 @@ use App\Services\CryptoService;
 use App\Services\VerificationService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use Tests\TestCase;
 
@@ -30,6 +31,8 @@ class VerificationServiceTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+
+        \Carbon\Carbon::setTestNow(\Carbon\Carbon::parse(\Carbon\Carbon::today('Africa/Lagos')->toDateString() . ' 09:30:00', 'Africa/Lagos'));
 
         $this->crypto = new CryptoService;
         $this->service = new VerificationService($this->crypto);
@@ -57,6 +60,19 @@ class VerificationServiceTest extends TestCase
         ]);
 
         // Student
+        if (Schema::hasTable('official_students')) {
+            DB::table('official_students')->insert([
+                'matric_number' => $this->matricNo,
+                'full_name' => 'Adebayo Oluwaseun Emmanuel',
+                'department' => 'Computer Science',
+                'faculty' => 'Faculty of Computing',
+                'level' => '400',
+                'status' => 'active',
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+        }
+
         DB::table('students')->insert([
             'matric_no' => $this->matricNo,
             'full_name' => 'Adebayo Oluwaseun Emmanuel',
@@ -86,6 +102,12 @@ class VerificationServiceTest extends TestCase
             'is_active' => true,
             'created_at' => now(),
         ]);
+    }
+
+    protected function tearDown(): void
+    {
+        \Carbon\Carbon::setTestNow();
+        parent::tearDown();
     }
 
     // -------------------------------------------------------------------------
@@ -538,19 +560,30 @@ class VerificationServiceTest extends TestCase
             ->where('matric_no', $this->matricNo)
             ->value('department_id');
 
-        return (int) DB::table('timetables')->insertGetId([
+        $id = (int) DB::table('timetables')->insertGetId([
             'exam_session_id' => $this->sessionId,
             'department_id' => $departmentId,
             'level' => '400',
             'course_code' => $courseCode,
             'course_title' => $courseTitle,
-            'exam_date' => today()->addDay(),
-            'start_time' => $courseCode === 'CSC401' ? '09:00' : '13:00',
-            'end_time' => $courseCode === 'CSC401' ? '12:00' : '16:00',
+            'exam_date' => today('Africa/Lagos')->toDateString(),
+            'start_time' => '09:00',
+            'end_time' => '12:00',
             'venue' => $courseCode === 'CSC401' ? 'CBT Hall A' : 'CBT Hall B',
             'status' => 'scheduled',
+            'register_status' => 'confirmed',
             'created_at' => now(),
             'updated_at' => now(),
         ]);
+
+        if (Schema::hasTable('timetable_students')) {
+            DB::table('timetable_students')->insertOrIgnore([
+                'timetable_id' => $id,
+                'matric_no'    => $this->matricNo,
+                'created_at'   => now(),
+            ]);
+        }
+
+        return $id;
     }
 }

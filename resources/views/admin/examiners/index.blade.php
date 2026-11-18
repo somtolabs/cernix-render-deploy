@@ -71,8 +71,43 @@
     .ei-chip.dup { background:rgba(132,113,79,.08); color:var(--amber); }
 
     @media (max-width:600px) {
-        .ei-row { grid-template-columns: auto minmax(0,1fr); }
-        .ei-actions { grid-column: 1 / -1; flex-direction:row; padding-top:10px; border-top:1px solid var(--line); width:100%; }
+        .ei-row {
+            grid-template-columns: auto minmax(0,1fr);
+            padding: 12px 14px;
+            gap: 10px;
+        }
+        .ei-actions {
+            grid-column: 1 / -1;
+            flex-direction: row;
+            padding-top: 10px;
+            border-top: 1px solid var(--line);
+            width: 100%;
+            gap: 8px;
+        }
+        .ei-actions > * {
+            flex: 1 1 0;
+        }
+        .ei-actions .admin-action {
+            width: 100%;
+            text-align: center;
+            justify-content: center;
+            min-height: 36px;
+            font-size: 12px;
+            font-weight: 700;
+        }
+        .ei-filter {
+            display: grid;
+            grid-template-columns: 1fr;
+        }
+        .ei-filter input {
+            min-width: 0;
+            width: 100%;
+        }
+        .ei-filter button, .ei-filter a {
+            width: 100%;
+            text-align: center;
+            justify-content: center;
+        }
     }
 
     .ei-empty { padding:32px 18px; text-align:center; color:var(--ink-3); font-size:13px; }

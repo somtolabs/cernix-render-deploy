@@ -38,6 +38,14 @@ class ExaminerApiTest extends TestCase
             TimetableSeeder::class,
         ]);
 
+        $today = \Carbon\Carbon::today('Africa/Lagos')->toDateString();
+        DB::table('timetables')->update([
+            'exam_date'  => $today,
+            'start_time' => '09:00',
+            'end_time'   => '12:00',
+        ]);
+        \Carbon\Carbon::setTestNow(\Carbon\Carbon::parse("{$today} 10:00:00", 'Africa/Lagos'));
+
         // Create a JWT user with examiner role whose email matches an examiners.username
         $this->examinerUser = User::factory()->create([
             'email' => 'examiner1',  // matches ExaminersSeeder username
@@ -47,6 +55,12 @@ class ExaminerApiTest extends TestCase
 
         $examiner = DB::table('examiners')->where('username', 'admin1')->first();
         $this->examinerId = (int) $examiner->examiner_id;
+    }
+
+    protected function tearDown(): void
+    {
+        \Carbon\Carbon::setTestNow();
+        parent::tearDown();
     }
 
     private function issueToken(): array
@@ -77,6 +91,15 @@ class ExaminerApiTest extends TestCase
             ->where('department_id', $student->department_id)
             ->where('level', (string) $student->level)
             ->value('id');
+
+        if ($timetableId) {
+            DB::table('timetable_students')->insertOrIgnore([
+                'timetable_id' => (int) $timetableId,
+                'matric_no' => 'CSC/2021/001',
+                'candidate_type' => 'regular',
+                'created_at' => now(),
+            ]);
+        }
         DB::table('payment_records')->insert([
             'student_id' => 'CSC/2021/001',
             'session_id' => $session->session_id,

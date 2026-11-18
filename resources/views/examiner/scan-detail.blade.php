@@ -99,6 +99,17 @@
                 <div class="scan-row"><span class="scan-label">Timestamp</span><span class="scan-value mono">{{ \Illuminate\Support\Carbon::parse($scan->timestamp)->format('d M Y, H:i') }}</span></div>
                 <div class="scan-row"><span class="scan-label">Examiner</span><span class="scan-value">{{ $scan->examiner_name ?? 'Not available' }}</span></div>
                 <div class="scan-row"><span class="scan-label">Decision</span><span class="scan-value"><span class="ex-badge {{ $decisionClass }}">{{ $scan->decision === 'DUPLICATE' ? 'ALREADY USED' : ($scan->decision === 'APPROVED' ? 'VERIFIED' : $scan->decision) }}</span></span></div>
+                <div class="scan-row"><span class="scan-label">Classification</span><span class="scan-value">
+                    @if(($scan->scan_classification ?? null) === 'early_scan')
+                        <span class="ex-badge" style="background:#e0e7ff;color:#3730a3">Early Scan</span>
+                    @elseif(($scan->scan_classification ?? null) === 'regular_scan')
+                        <span class="ex-badge" style="background:#dcfce7;color:#15803d">Regular Scan</span>
+                    @elseif(($scan->scan_classification ?? null) === 'late_scan')
+                        <span class="ex-badge" style="background:#fef3c7;color:#b45309">Late Scan</span>
+                    @else
+                        <span class="ex-badge" style="background:rgba(100,116,139,.12);color:#475569">Standard</span>
+                    @endif
+                </span></div>
                 <div class="scan-row"><span class="scan-label">Review Status</span><span class="scan-value">{{ $scan->decision === 'DUPLICATE' ? 'QR already scanned' : 'Recorded' }}</span></div>
             </div>
         </section>
@@ -136,7 +147,16 @@
                     @forelse($studentScans as $row)
                         <article class="scan-history-row">
                             <div class="scan-history-top">
-                                <span class="ex-badge {{ $row->decision === 'APPROVED' ? 'APPROVED' : ($row->decision === 'DUPLICATE' ? 'DUPLICATE' : 'REJECTED') }}">{{ $row->decision === 'DUPLICATE' ? 'ALREADY USED' : ($row->decision === 'APPROVED' ? 'VERIFIED' : $row->decision) }}</span>
+                                <div style="display:flex;align-items:center;gap:6px">
+                                    <span class="ex-badge {{ $row->decision === 'APPROVED' ? 'APPROVED' : ($row->decision === 'DUPLICATE' ? 'DUPLICATE' : 'REJECTED') }}">{{ $row->decision === 'DUPLICATE' ? 'ALREADY USED' : ($row->decision === 'APPROVED' ? 'VERIFIED' : $row->decision) }}</span>
+                                    @if(($row->scan_classification ?? null) === 'early_scan')
+                                        <span class="ex-badge" style="background:#e0e7ff;color:#3730a3;font-size:10px">Early</span>
+                                    @elseif(($row->scan_classification ?? null) === 'regular_scan')
+                                        <span class="ex-badge" style="background:#dcfce7;color:#15803d;font-size:10px">Regular</span>
+                                    @elseif(($row->scan_classification ?? null) === 'late_scan')
+                                        <span class="ex-badge" style="background:#fef3c7;color:#b45309;font-size:10px">Late</span>
+                                    @endif
+                                </div>
                                 <a class="ex-action secondary" href="{{ route('examiner.scans.show', $row->log_id) }}">View</a>
                             </div>
                             <span class="muted">{{ \Illuminate\Support\Carbon::parse($row->timestamp)->format('d M Y, H:i') }} · {{ $row->examiner_name ?? 'Examiner unavailable' }}</span>

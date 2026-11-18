@@ -41,15 +41,19 @@
     .tt-card-chips .chip { font-size: 10px; padding: 3px 8px; }
 
     .tt-card-meta {
-        display: flex; flex-wrap: wrap; gap: 10px 18px; margin-top: 16px;
-        font-size: 12px; line-height: 1.5;
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+        gap: 10px 14px;
+        margin-top: 16px;
+        padding-top: 14px;
+        border-top: 1px solid var(--line);
     }
     .tt-card-meta-item { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
     .tt-card-meta-item span:first-child {
         font-size: 10px; font-weight: 800; color: var(--ink-4);
         letter-spacing: .1em; text-transform: uppercase;
     }
-    .tt-card-meta-item span:last-child { color: var(--ink); font-weight: 600; font-size: 13px; }
+    .tt-card-meta-item span:last-child { color: var(--ink); font-weight: 700; font-size: 13px; overflow-wrap: break-word; }
 
     .tt-card-reason {
         margin-top: 14px; padding: 11px 13px;
@@ -58,31 +62,37 @@
         border-left: 3px solid var(--amber);
         border-radius: var(--stu-r-sm);
         font-size: 12.5px; color: var(--ink-2); line-height: 1.55;
+        overflow-wrap: break-word;
     }
 
     .tt-card-actions {
         margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line);
         display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap;
     }
-    .tt-card-actions .btn { min-height: 36px; padding: 0 16px; font-size: 12.5px; border-radius: var(--stu-r-sm); }
+    .tt-card-actions .btn { min-height: 38px; padding: 0 16px; font-size: 13px; border-radius: var(--stu-r-sm); }
 
-    @media (max-width: 480px) {
-        .tt-card { padding: 18px 16px; }
+    @media (max-width: 560px) {
+        .tt-card { padding: 16px 14px; }
         .tt-card-head { flex-direction: column; gap: 10px; }
         .tt-card-chips { flex-direction: row; align-items: center; flex-wrap: wrap; }
         .tt-card-title { font-size: 16px; }
-        .tt-card-meta { gap: 12px 20px; }
-        .tt-card-actions .btn { flex: 1 1 auto; }
+        .tt-card-meta { grid-template-columns: 1fr; gap: 8px; }
+        .tt-card-actions .btn, .tt-card-actions form, .tt-card-actions form .btn { width: 100%; min-height: 42px; }
+    }
+    @media (max-width: 360px) {
+        .tt-card { padding: 14px 10px; }
+        .tt-card-title { font-size: 15px; }
+        .tt-card-code { font-size: 11.5px; }
     }
 </style>
 @if($visibleTimetable->count())
     <div class="tt-stack" role="list">
         @foreach($visibleTimetable as $exam)
             @php
-                $type       = $exam->assessment_type ?? 'exam';
-                $typeLabel  = match($type) { 'test' => 'Test', 'makeup' => 'Make-up', default => 'Exam' };
-                $typeChip   = match($type) { 'test' => 'amber', 'makeup' => 'red', default => 'navy' };
-                $statusLabel = $exam->display_status ?? 'Upcoming';
+                $canonicalType = \App\Services\AssessmentTimeService::normalizeType($exam->assessment_type ?? null);
+                $typeLabel     = match($canonicalType) { 'test' => 'Test', 'makeup' => 'Make-up', default => 'Exam' };
+                $typeChip      = match($canonicalType) { 'test' => 'amber', 'makeup' => 'red', default => 'navy' };
+                $statusLabel   = $exam->display_status ?? 'Upcoming';
                 $statusChip  = match($statusLabel) { 'Cancelled' => 'red', 'Today' => 'emerald', 'Missed' => 'amber', default => '' };
 
                 $pass       = $passLookup->get($exam->id);

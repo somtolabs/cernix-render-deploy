@@ -40,6 +40,9 @@
         .att-stat:last-child { border-bottom:0; }
         .att-stat:nth-last-child(2):nth-child(2n+1) { border-bottom:0; }
     }
+    @media (max-width:360px) {
+        .att-stat { min-width:100% !important; border-right:0 !important; }
+    }
     @media (max-width:520px) {
         .att-filter { display:grid; grid-template-columns:1fr; }
         .att-select { min-width:0; width:100%; }
@@ -58,15 +61,18 @@
     .att-row-avatar { width:38px; height:38px; border-radius:50%; flex:0 0 38px; display:grid; place-items:center; background:rgba(15,32,80,.09); color:var(--navy); font-size:13px; font-weight:950; }
     .att-row-info { flex:1; min-width:0; }
     .att-row-name { font-weight:900; color:var(--ink); line-height:1.2; overflow-wrap:break-word; }
-    .att-row-sub { margin-top:3px; color:var(--ink-3); font-size:12px; }
+    .att-row-sub { margin-top:3px; color:var(--ink-3); font-size:12px; overflow-wrap:anywhere; }
     .att-row-right { display:flex; flex-direction:column; align-items:flex-end; gap:6px; flex-shrink:0; }
     .att-row-times { font-size:11px; color:var(--ink-3); font-family:'JetBrains Mono',monospace; text-align:right; line-height:1.6; }
-    .att-row-examiners { font-size:11px; color:var(--ink-4); text-align:right; line-height:1.5; max-width:160px; }
+    .att-row-examiners { font-size:11px; color:var(--ink-4); text-align:right; line-height:1.5; max-width:160px; overflow-wrap:break-word; }
     @media (max-width:600px) {
-        .att-row { flex-wrap:wrap; }
-        .att-row-right { flex-direction:row; flex-wrap:wrap; width:100%; padding-top:8px; border-top:1px solid var(--line); align-items:center; gap:8px; }
+        .att-row { flex-wrap:wrap; padding:12px 14px; gap:10px; }
+        .att-row-right {
+            flex-direction:row; justify-content:space-between; flex-wrap:wrap; width:100%;
+            padding-top:10px; border-top:1px solid var(--line); align-items:center; gap:8px;
+        }
         .att-row-times { text-align:left; }
-        .att-row-examiners { text-align:left; }
+        .att-row-examiners { text-align:left; max-width:100%; width:100%; }
     }
 </style>
 

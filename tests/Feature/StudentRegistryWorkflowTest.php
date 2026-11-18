@@ -19,7 +19,7 @@ class StudentRegistryWorkflowTest extends TestCase
     {
         DB::table('official_students')->insert($this->officialStudent([
             'matric_number' => '220404008',
-            'full_name' => 'Old Name',
+            'full_name' => 'Adebayo Oluwaseun Emmanuel',
             'level' => '300',
         ]));
 
@@ -211,9 +211,20 @@ class StudentRegistryWorkflowTest extends TestCase
             'end_time' => '12:00',
             'venue' => 'CBT Hall A',
             'status' => 'scheduled',
+            'register_status' => 'confirmed',
+            'roster_confirmed_at' => now(),
             'created_at' => now(),
             'updated_at' => now(),
         ]);
+
+        if (\Illuminate\Support\Facades\Schema::hasTable('timetable_students')) {
+            DB::table('timetable_students')->insert([
+                'timetable_id' => $exam,
+                'matric_no' => $student,
+                'candidate_type' => 'regular',
+                'created_at' => now(),
+            ]);
+        }
 
         return [$student, $session, $exam];
     }

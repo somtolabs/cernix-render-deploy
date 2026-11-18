@@ -22,6 +22,15 @@ class ExaminerPortalWebTest extends TestCase
     {
         parent::setUp();
         $this->seed();
+
+        $today = \Carbon\Carbon::today('Africa/Lagos')->toDateString();
+        DB::table('timetables')->where('course_code', 'CSC401')->update([
+            'exam_date' => $today,
+            'start_time' => '00:00',
+            'end_time' => '23:59',
+            'register_status' => 'confirmed',
+            'roster_confirmed_at' => now(),
+        ]);
     }
 
     public function test_examiner_json_routes_require_examiner_session(): void

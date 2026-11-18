@@ -24,8 +24,8 @@
         ? substr($assignedExam->start_time, 0, 5)
             . ($assignedExam?->end_time ? ' – ' . substr($assignedExam->end_time, 0, 5) : '')
         : 'Time not assigned';
-    $assessmentType  = $assignedExam?->assessment_type ?? 'exam';
-    $assessmentLabel = match($assessmentType) { 'test' => 'Test', 'makeup' => 'Make-up Test', default => 'Examination' };
+    $assessmentType  = \App\Services\AssessmentTimeService::normalizeType($assignedExam?->assessment_type ?? null);
+    $assessmentLabel = match($assessmentType) { 'test' => 'Test', 'makeup' => 'Make-up Examination', default => 'Examination' };
 @endphp
 
 <style>
@@ -140,16 +140,20 @@
     .qp-course-title { display: block; margin-top: 4px; font-size: 13px; color: var(--ink-2); line-height: 1.4; }
 
     /* Block 3: QR — the visual anchor. Generous size, calm border. */
-    .qp-block-qr { display: grid; place-items: center; padding: 26px 20px; }
+    .qp-block-qr { display: grid; place-items: center; padding: clamp(18px, 4vw, 26px) 16px; box-sizing: border-box; }
     .qp-qr-box {
-        width: 260px; height: 260px;
-        padding: 14px;
-        border: 1px solid var(--line);
+        width: min(260px, 100%);
+        max-width: 100%;
+        aspect-ratio: 1 / 1;
+        height: auto;
+        padding: clamp(10px, 3vw, 16px);
+        border: 1.5px solid var(--line);
         border-radius: 14px;
         background: #fff;
         display: grid; place-items: center;
+        box-sizing: border-box;
     }
-    .qp-qr-box svg { width: 100%; height: 100%; display: block; }
+    .qp-qr-box svg { width: 100%; height: 100%; max-width: 100%; max-height: 100%; display: block; }
     .qp-qr-missing { font-size: 12px; color: var(--ink-3); font-weight: 700; }
     .qp-scan-hint { margin: 12px 0 0; font-size: 11.5px; color: var(--ink-3); letter-spacing: 0.02em; }
 
@@ -175,12 +179,24 @@
 
     /* Mobile */
     @media (max-width: 420px) {
-        .qp-block { padding: 18px; }
+        .qp-card { border-radius: 14px; }
+        .qp-block { padding: 16px 14px; }
         .qp-block-student { gap: 12px; }
-        .qp-qr-box { width: 220px; height: 220px; }
-        .qp-course-code { font-size: 20px; }
-        .qp-id-name { font-size: 16px; }
-        .qp-block-exam .qp-exam-section { grid-template-columns: 1fr; gap: 12px; }
+        .qp-course-code { font-size: 19px; }
+        .qp-id-name { font-size: 15px; }
+        .qp-block-exam .qp-exam-section { grid-template-columns: 1fr; gap: 10px; }
+        .qp-foot { padding: 10px 14px; font-size: 9.5px; }
+    }
+    @media (max-width: 360px) {
+        .qp-block-student .cernix-passport-photo { width: 64px; height: 64px; font-size: 18px; }
+        .qp-id-name { font-size: 14px; }
+        .qp-id-matric { font-size: 11px; }
+        .qp-course-code { font-size: 17px; }
+    }
+    @media (max-width: 350px) {
+        .qp-block { padding: 12px 10px; }
+        .qp-mast { padding: 10px 12px; }
+        .qp-titlestrip { padding: 8px 12px; }
     }
 </style>
 

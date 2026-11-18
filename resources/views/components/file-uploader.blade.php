@@ -10,6 +10,7 @@
     'required' => false,
     'currentPreview' => null,
     'compact' => false,
+    'multiple' => false,
 ])
 
 @php
@@ -17,13 +18,14 @@
     $wrapperId = 'wrap_' . $inputId;
 @endphp
 
-<div id="{{ $wrapperId }}" class="cx-uploader {{ $compact ? 'compact' : '' }}" data-cx-uploader data-max-size="{{ (float) $maxSizeMb }}" data-is-image="{{ $isImage ? '1' : '0' }}">
+<div id="{{ $wrapperId }}" class="cx-uploader {{ $compact ? 'compact' : '' }}" data-cx-uploader data-max-size="{{ (float) $maxSizeMb }}" data-is-image="{{ $isImage ? '1' : '0' }}" data-multiple="{{ $multiple ? '1' : '0' }}">
     <input type="file"
            name="{{ $name }}"
            id="{{ $inputId }}"
            accept="{{ $accept }}"
            class="cx-uploader-input"
            style="position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0;"
+           @if($multiple) multiple @endif
            @if($required) required @endif>
 
     {{-- Drop Target --}}
@@ -346,6 +348,7 @@
 
         var maxMb = parseFloat(wrap.getAttribute('data-max-size') || '5');
         var isImage = wrap.getAttribute('data-is-image') === '1';
+        var isMultiple = wrap.getAttribute('data-multiple') === '1';
 
         function showError(msg) {
             if (!errView) return;
@@ -365,33 +368,45 @@
             return (bytes / 1048576).toFixed(2) + ' MB';
         }
 
-        function updateUI(file) {
+        function updateUI(files) {
             clearError();
-            if (!file) {
+            if (!files || (files.length !== undefined && files.length === 0)) {
                 idleView.style.display = '';
                 selectedView.style.display = 'none';
                 if (imgPreview) imgPreview.src = '';
                 return;
             }
 
-            // Size check
-            if (file.size > maxMb * 1024 * 1024) {
-                showError('File exceeds the maximum allowed size of ' + maxMb + ' MB (' + formatSize(file.size) + ').');
-                input.value = '';
-                idleView.style.display = '';
-                selectedView.style.display = 'none';
-                return;
+            var fileList = files.length !== undefined ? Array.prototype.slice.call(files) : [files];
+            var primaryFile = fileList[0];
+            var totalBytes = 0;
+
+            // Size check on all files
+            for (var i = 0; i < fileList.length; i++) {
+                totalBytes += fileList[i].size;
+                if (fileList[i].size > maxMb * 1024 * 1024) {
+                    showError('File "' + fileList[i].name + '" exceeds the maximum allowed size of ' + maxMb + ' MB (' + formatSize(fileList[i].size) + ').');
+                    input.value = '';
+                    idleView.style.display = '';
+                    selectedView.style.display = 'none';
+                    return;
+                }
             }
 
-            filenameEl.textContent = file.name;
-            filesizeEl.textContent = formatSize(file.size);
+            if (fileList.length > 1) {
+                filenameEl.textContent = fileList.length + ' files selected (' + primaryFile.name + ', …)';
+                filesizeEl.textContent = formatSize(totalBytes);
+            } else {
+                filenameEl.textContent = primaryFile.name;
+                filesizeEl.textContent = formatSize(primaryFile.size);
+            }
 
-            if (isImage && imgPreview) {
+            if (isImage && imgPreview && primaryFile) {
                 var reader = new FileReader();
                 reader.onload = function (e) {
                     imgPreview.src = e.target.result;
                 };
-                reader.readAsDataURL(file);
+                reader.readAsDataURL(primaryFile);
             }
 
             idleView.style.display = 'none';
@@ -429,8 +444,7 @@
 
         // Native input change
         input.addEventListener('change', function () {
-            var file = this.files && this.files[0];
-            updateUI(file);
+            updateUI(this.files);
         });
 
         // Drag & Drop
@@ -452,11 +466,16 @@
             dropzone.classList.remove('drag-active');
 
             if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length) {
-                var file = e.dataTransfer.files[0];
                 var dt = new DataTransfer();
-                dt.items.add(file);
+                if (isMultiple) {
+                    for (var i = 0; i < e.dataTransfer.files.length; i++) {
+                        dt.items.add(e.dataTransfer.files[i]);
+                    }
+                } else {
+                    dt.items.add(e.dataTransfer.files[0]);
+                }
                 input.files = dt.files;
-                updateUI(file);
+                updateUI(input.files);
                 input.dispatchEvent(new Event('change', { bubbles: true }));
             }
         });

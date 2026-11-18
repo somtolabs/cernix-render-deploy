@@ -17,6 +17,9 @@ npm-debug.log
 yarn-error.log
 /screenshots
 /test-results
+tests/screenshots/
+.playwright-artifacts/
+.playwright-results/
 __pycache__/
 *.pyc
 /auth.json

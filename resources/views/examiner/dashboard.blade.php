@@ -81,6 +81,17 @@
     .verify-section { display:grid; gap:8px; padding:12px 0; border-bottom:1px solid rgba(0,0,0,.055); }
     .verify-section h4 { margin:0; color:#4c2f1d; font-size:12px; text-transform:uppercase; letter-spacing:.08em; }
     .verify-details { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:7px; }
+    @media (max-width: 580px) {
+        .verify-details { grid-template-columns:repeat(2,minmax(0,1fr)); }
+    }
+    @media (max-width: 360px) {
+        .verify-details { grid-template-columns:1fr; }
+        .verify-actions { grid-template-columns:1fr; }
+    }
+    @media (max-width: 480px) {
+        .verify-brand-head { flex-direction: column; text-align: center; }
+        .verify-brand-copy { text-align: center; }
+    }
     .verify-detail { padding:9px 4px; border-bottom:1px solid rgba(0,0,0,.045); min-width:0; }
     .verify-detail.is-primary { border-left:3px solid var(--result-accent); background:rgba(255,255,255,.5); padding-left:10px; }
     .verify-detail.is-primary b { font-size:15px; }
@@ -114,17 +125,48 @@
     </div>
 </div>
 
+@if(session('status'))
+    <div style="background:#f0fdf4;border:1px solid #bbf7d0;color:#166534;padding:12px 16px;border-radius:8px;margin-bottom:16px;font-size:13px;font-weight:600">
+        {{ session('status') }}
+    </div>
+@endif
+
 @if($activeTimetable)
-<div id="activeSessBanner" class="sess-banner active">
+@php
+    $activeState = $activeTimetable['operational_state'] ?? null;
+    $activeClassification = $activeTimetable['scan_classification'] ?? null;
+@endphp
+<div id="activeSessBanner" class="sess-banner active" style="border-left: 5px solid @if($activeState === 'early_scanning') #0284c7 @elseif($activeState === 'late_scanning') #d97706 @elseif($activeState === 'in_progress') #16a34a @else #dc2626 @endif">
     <div>
-        <div class="sess-banner-label">Session Active &mdash; <span id="sessionElapsed">computing elapsed time&hellip;</span></div>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;flex-wrap:wrap">
+            <div class="sess-banner-label">Session Active &mdash; <span id="sessionElapsed">computing elapsed time&hellip;</span></div>
+            @if($activeState === 'early_scanning')
+                <span class="ex-badge" style="background:#e0f2fe;color:#0369a1;font-size:11px;font-weight:700">Early Scanning Mode: Student Entry / Check-in</span>
+            @elseif($activeState === 'in_progress')
+                <span class="ex-badge" style="background:#dcfce7;color:#15803d;font-size:11px;font-weight:700">In Progress: Regular Entry &amp; Departure</span>
+            @elseif($activeState === 'late_scanning')
+                <span class="ex-badge" style="background:#fef3c7;color:#b45309;font-size:11px;font-weight:700">Late Scanning Mode: Departure &amp; Submission Only</span>
+            @elseif($activeState === 'ended')
+                <span class="ex-badge" style="background:#fee2e2;color:#991b1b;font-size:11px;font-weight:700">Scanning Window Closed</span>
+            @endif
+        </div>
         <div class="sess-banner-course">{{ $activeTimetable['course_code'] }} &mdash; {{ $activeTimetable['course_title'] }}</div>
         <div class="sess-banner-meta">
             {{ $activeTimetable['dept_name'] ?? '' }}
             @if(!empty($activeTimetable['level'])) &middot; Level {{ $activeTimetable['level'] }}@endif
             @if(!empty($activeTimetable['venue'])) &middot; {{ $activeTimetable['venue'] }}@endif
             @if(!empty($activeTimetable['start_time'])) &middot; {{ \Carbon\Carbon::parse($activeTimetable['start_time'])->format('g:i A') }}@endif
+            @if(!empty($activeTimetable['end_time'])) &ndash; {{ \Carbon\Carbon::parse($activeTimetable['end_time'])->format('g:i A') }}@endif
         </div>
+        @if($activeState === 'late_scanning')
+            <div style="margin-top:6px;font-size:12px;font-weight:700;color:#b45309;background:#fffbeb;padding:6px 10px;border-radius:6px;border:1px solid #fde68a">
+                Notice: Regular entry is closed. Only departure scans for students who checked in earlier are permitted. New student entry is disabled.
+            </div>
+        @elseif($activeState === 'early_scanning')
+            <div style="margin-top:6px;font-size:12px;font-weight:600;color:#0369a1;background:#f0f9ff;padding:6px 10px;border-radius:6px;border:1px solid #bae6fd">
+                Notice: Early check-in window open. Scanning student QR passes records their check-in.
+            </div>
+        @endif
     </div>
     <div style="display:flex;gap:8px;flex-shrink:0;flex-wrap:wrap">
         <a class="ex-action secondary" href="{{ route('examiner.today-exams') }}">Attendance</a>
@@ -210,14 +252,40 @@
                 <a class="ex-action secondary" href="{{ route('examiner.scan-history') }}">View all</a>
             </div>
             @forelse(($recentRows ?? []) as $row)
+                @php
+                    $photoPath = $row['profile_photo_path'] ?? $row['photo_path'] ?? null;
+                    $photoUrl = $photoPath ? '/photo-thumb/' . ltrim($photoPath, '/') : null;
+                    $initials = strtoupper(substr($row['student'] ?? 'ST', 0, 2));
+                @endphp
                 <article class="recent-scan-item">
-                    <div class="recent-scan-top">
-                        <strong>{{ $row['student'] ?? 'Student unavailable' }}</strong>
-                        <span class="ex-badge {{ $row['decision'] ?? 'REJECTED' }}">{{ ($row['decision'] ?? '') === 'DUPLICATE' ? 'ALREADY USED' : (($row['decision'] ?? '') === 'APPROVED' ? 'VERIFIED' : ($row['decision'] ?? 'RECORDED')) }}</span>
+                    <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+                        <div style="width:30px;height:30px;border-radius:9999px;background:var(--bg-2, #f1f5f9);border:1px solid var(--line, #e2e8f0);overflow:hidden;display:grid;place-items:center;font-size:10px;font-weight:800;color:var(--ink-2, #475569);flex-shrink:0">
+                            @if($photoUrl)
+                                <img src="{{ $photoUrl }}" alt="{{ $row['student'] }}" style="width:100%;height:100%;object-fit:cover" onerror="this.style.display='none'">
+                            @else
+                                <span>{{ $initials }}</span>
+                            @endif
+                        </div>
+                        <div style="min-width:0;flex:1">
+                            <strong style="display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:13px">{{ $row['student'] ?? 'Student unavailable' }}</strong>
+                            <div class="recent-scan-meta mono" style="font-size:11px">{{ $row['matric_no'] ?? 'No matric' }}</div>
+                        </div>
                     </div>
-                    <div class="recent-scan-meta mono">{{ $row['matric_no'] ?? 'No matric' }} · {{ $row['time'] ?? 'No time' }}</div>
+                    <div class="recent-scan-top" style="margin-top:2px;display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+                        <span class="ex-badge {{ $row['decision'] ?? 'REJECTED' }}">{{ ($row['decision'] ?? '') === 'DUPLICATE' ? 'ALREADY USED' : (($row['decision'] ?? '') === 'APPROVED' ? 'VERIFIED' : ($row['decision'] ?? 'RECORDED')) }}</span>
+                        @if(!empty($row['scan_classification']))
+                            <span class="ex-badge" style="font-size:9px;font-weight:700;
+                                @if($row['scan_classification'] === 'early_scan') background:#e0f2fe;color:#0369a1;
+                                @elseif($row['scan_classification'] === 'regular_scan') background:#dcfce7;color:#15803d;
+                                @elseif($row['scan_classification'] === 'late_scan') background:#fef3c7;color:#b45309;
+                                @else background:#f1f5f9;color:#475569; @endif">
+                                {{ ucwords(str_replace('_', ' ', $row['scan_classification'])) }}
+                            </span>
+                        @endif
+                    </div>
+                    <div class="recent-scan-meta mono" style="margin-top:4px">{{ $row['time'] ?? 'No time' }}</div>
                     @if(! empty($row['detail_url']))
-                        <a class="ex-action secondary" href="{{ $row['detail_url'] }}" style="justify-self:start">View</a>
+                        <a class="ex-action secondary" href="{{ $row['detail_url'] }}" style="justify-self:start;margin-top:6px;min-height:26px;padding:0 8px;font-size:11px">View</a>
                     @endif
                 </article>
             @empty
@@ -1012,6 +1080,13 @@
     setScannerControls('idle');
     scannerStage.dataset.state = 'idle';
     updateConnectionStatus();
+
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('autostart') === '1' && startBtn) {
+        setTimeout(function() {
+            startScanner().catch(function() {});
+        }, 300);
+    }
 
     // Session stop button — two-step inline confirm (no browser confirm())
     const stopSessBtn = document.getElementById('stopSessBtn');

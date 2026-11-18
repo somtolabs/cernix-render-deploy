@@ -9,7 +9,14 @@ use Throwable;
 
 class VerificationService
 {
-    public function __construct(private readonly CryptoService $crypto) {}
+    private readonly AssessmentTimeService $assessmentTimeService;
+
+    public function __construct(
+        private readonly CryptoService $crypto,
+        ?AssessmentTimeService $assessmentTimeService = null
+    ) {
+        $this->assessmentTimeService = $assessmentTimeService ?? app(AssessmentTimeService::class);
+    }
 
     /**
      * Verify a decoded QR payload and return an entry decision.
@@ -66,6 +73,7 @@ class VerificationService
                 deviceFp: $deviceFp,
                 ip: $ip,
                 now: $now,
+                timetableId: $expectedTimetableId ?? $token->timetable_id,
             );
         }
 
@@ -84,6 +92,7 @@ class VerificationService
                 deviceFp: $deviceFp,
                 ip: $ip,
                 now: $now,
+                timetableId: $expectedTimetableId ?? $token->timetable_id,
             );
         }
 
@@ -104,6 +113,7 @@ class VerificationService
                 deviceFp: $deviceFp,
                 ip: $ip,
                 now: $now,
+                timetableId: $expectedTimetableId ?? $token->timetable_id,
             );
         }
 
@@ -139,6 +149,7 @@ class VerificationService
                 deviceFp: $deviceFp,
                 ip: $ip,
                 now: $now,
+                timetableId: $expectedTimetableId ?? $tokenTimetableId,
             );
         }
 
@@ -157,6 +168,7 @@ class VerificationService
                 deviceFp: $deviceFp,
                 ip: $ip,
                 now: $now,
+                timetableId: $expectedTimetableId ?? $tokenTimetableId,
             );
         }
 
@@ -171,6 +183,7 @@ class VerificationService
                 deviceFp: $deviceFp,
                 ip: $ip,
                 now: $now,
+                timetableId: $expectedTimetableId ?? $tokenTimetableId,
             );
         }
 
@@ -187,14 +200,34 @@ class VerificationService
                 deviceFp: $deviceFp,
                 ip: $ip,
                 now: $now,
+                timetableId: $expectedTimetableId,
             );
+        }
+
+        // Verify student exists and is active in official registry
+        if (Schema::hasTable('official_students')) {
+            $official = DB::table('official_students')
+                ->where('matric_number', $student->matric_no)
+                ->first();
+            if (! $official || strtolower((string) $official->status) !== 'active') {
+                return $this->rejected(
+                    reason: 'student_not_in_registry',
+                    timestamp: $timestamp,
+                    qrData: $qrData,
+                    token: $token,
+                    payload: $payload,
+                    examinerId: $examinerId,
+                    deviceFp: $deviceFp,
+                    ip: $ip,
+                    now: $now,
+                    timetableId: $expectedTimetableId ?? $tokenTimetableId,
+                );
+            }
         }
 
         $exam = DB::table('timetables')
             ->where('id', $tokenTimetableId)
             ->where('exam_session_id', $qrSessionId)
-            ->where('department_id', $student->department_id)
-            ->where('level', (string) ($student->level ?? ''))
             ->where('status', '!=', 'cancelled')
             ->first();
 
@@ -209,33 +242,58 @@ class VerificationService
                 deviceFp: $deviceFp,
                 ip: $ip,
                 now: $now,
+                timetableId: $expectedTimetableId ?? $tokenTimetableId,
             );
         }
 
-        // Custom roster enforcement if applicable (tests/makeups)
-        if (Schema::hasTable('timetable_students')) {
-            $hasCustomRoster = DB::table('timetable_students')
+        // Verify Assessment Register Status:
+        // Must be confirmed and have at least one enrolled candidate.
+        $hasRegisterStatusCol = Schema::hasColumn('timetables', 'register_status');
+        $isRegisterConfirmed = $hasRegisterStatusCol
+            ? ($exam->register_status === 'confirmed')
+            : false;
+
+        $hasRosterTable = Schema::hasTable('timetable_students');
+        $rosterCount = $hasRosterTable
+            ? DB::table('timetable_students')->where('timetable_id', $tokenTimetableId)->count()
+            : 0;
+
+        if (! $isRegisterConfirmed || $rosterCount === 0) {
+            return $this->rejected(
+                reason: 'register_incomplete',
+                timestamp: $timestamp,
+                qrData: $qrData,
+                token: $token,
+                payload: $payload,
+                examinerId: $examinerId,
+                deviceFp: $deviceFp,
+                ip: $ip,
+                now: $now,
+                timetableId: $expectedTimetableId ?? $tokenTimetableId,
+            );
+        }
+
+        // Exact candidate roster enforcement:
+        // Student MUST be explicitly present in the assessment's confirmed register.
+        $isEnrolled = $hasRosterTable
+            && DB::table('timetable_students')
                 ->where('timetable_id', $tokenTimetableId)
+                ->where('matric_no', $student->matric_no)
                 ->exists();
-            if ($hasCustomRoster) {
-                $isInRoster = DB::table('timetable_students')
-                    ->where('timetable_id', $tokenTimetableId)
-                    ->where('matric_no', $student->matric_no)
-                    ->exists();
-                if (! $isInRoster) {
-                    return $this->rejected(
-                        reason: 'course_not_assigned',
-                        timestamp: $timestamp,
-                        qrData: $qrData,
-                        token: $token,
-                        payload: $payload,
-                        examinerId: $examinerId,
-                        deviceFp: $deviceFp,
-                        ip: $ip,
-                        now: $now,
-                    );
-                }
-            }
+
+        if (! $isEnrolled) {
+            return $this->rejected(
+                reason: 'student_not_on_register',
+                timestamp: $timestamp,
+                qrData: $qrData,
+                token: $token,
+                payload: $payload,
+                examinerId: $examinerId,
+                deviceFp: $deviceFp,
+                ip: $ip,
+                now: $now,
+                timetableId: $expectedTimetableId ?? $tokenTimetableId,
+            );
         }
 
         // Examiner assignment enforcement
@@ -251,17 +309,99 @@ class VerificationService
                     deviceFp: $deviceFp,
                     ip: $ip,
                     now: $now,
+                    timetableId: $expectedTimetableId ?? $tokenTimetableId,
                 );
             }
         }
 
-        // Time window enforcement
-        if (! empty($options['enforce_time_window']) && ! empty($exam->start_time) && ! empty($exam->end_time)) {
-            $earliest = \Carbon\Carbon::parse($exam->start_time)->subMinutes(60);
-            $latest   = \Carbon\Carbon::parse($exam->end_time)->addMinutes(60);
-            if ($now->lt($earliest) || $now->gt($latest)) {
+        // Time window and assessment operational state enforcement via AssessmentTimeService
+        $timeStatus = null;
+        if (! empty($exam)) {
+            $timeStatus = $this->assessmentTimeService->getStatus($exam, $now);
+            $enforceTimeWindow = $options['enforce_time_window'] ?? true;
+
+            if ($enforceTimeWindow) {
+                if ($timeStatus->isInvalidSchedule()) {
+                    return $this->rejected(
+                        reason: 'invalid_schedule',
+                        timestamp: $timestamp,
+                        qrData: $qrData,
+                        token: $token,
+                        payload: $payload,
+                        examinerId: $examinerId,
+                        deviceFp: $deviceFp,
+                        ip: $ip,
+                        now: $now,
+                        timetableId: $expectedTimetableId ?? $tokenTimetableId,
+                        customMessage: $timeStatus->explanation,
+                    );
+                }
+
+                if ($timeStatus->isCancelled()) {
+                    return $this->rejected(
+                        reason: 'assessment_cancelled',
+                        timestamp: $timestamp,
+                        qrData: $qrData,
+                        token: $token,
+                        payload: $payload,
+                        examinerId: $examinerId,
+                        deviceFp: $deviceFp,
+                        ip: $ip,
+                        now: $now,
+                        timetableId: $expectedTimetableId ?? $tokenTimetableId,
+                        customMessage: $timeStatus->explanation,
+                    );
+                }
+
+                if ($timeStatus->isCompleted()) {
+                    return $this->rejected(
+                        reason: 'assessment_completed',
+                        timestamp: $timestamp,
+                        qrData: $qrData,
+                        token: $token,
+                        payload: $payload,
+                        examinerId: $examinerId,
+                        deviceFp: $deviceFp,
+                        ip: $ip,
+                        now: $now,
+                        timetableId: $expectedTimetableId ?? $tokenTimetableId,
+                        customMessage: $timeStatus->explanation,
+                    );
+                }
+
+                if ($timeStatus->isUpcoming() || $timeStatus->isEnded()) {
+                    return $this->rejected(
+                        reason: 'outside_time_window',
+                        timestamp: $timestamp,
+                        qrData: $qrData,
+                        token: $token,
+                        payload: $payload,
+                        examinerId: $examinerId,
+                        deviceFp: $deviceFp,
+                        ip: $ip,
+                        now: $now,
+                        timetableId: $expectedTimetableId ?? $tokenTimetableId,
+                        customMessage: $timeStatus->explanation,
+                    );
+                }
+            }
+        }
+
+        $scanClassification = $timeStatus?->scan_classification ?? AssessmentTimeService::SCAN_REGULAR;
+
+        // Late scanning window: departure only for existing checked-in students
+        if ($timeStatus && $timeStatus->isLateScanning() && ($options['enforce_time_window'] ?? true)) {
+            $effectiveTimetableId = (int) ($expectedTimetableId ?? $tokenTimetableId);
+            $existingAtt = Schema::hasTable('attendance_records')
+                ? DB::table('attendance_records')
+                    ->where('matric_no', $student->matric_no)
+                    ->where('timetable_id', $effectiveTimetableId)
+                    ->first()
+                : null;
+
+            if (! $existingAtt) {
                 return $this->rejected(
-                    reason: 'outside_time_window',
+                    reason: 'late_entry_not_permitted',
                     timestamp: $timestamp,
                     qrData: $qrData,
                     token: $token,
@@ -270,8 +410,72 @@ class VerificationService
                     deviceFp: $deviceFp,
                     ip: $ip,
                     now: $now,
+                    timetableId: $effectiveTimetableId,
+                    scanClassification: AssessmentTimeService::SCAN_LATE,
+                    customMessage: 'Regular examination entry has concluded. Late check-in is not permitted. Only departure of already checked-in students is allowed.',
                 );
             }
+
+            $examAccess = [
+                'timetable_id' => $tokenTimetableId,
+                'course_code'  => $exam->course_code,
+                'course_title' => $exam->course_title,
+                'venue'        => $exam->venue,
+                'exam_date'    => $exam->exam_date,
+                'start_time'   => $exam->start_time,
+                'end_time'     => $exam->end_time,
+            ];
+
+            // Permitted late departure for an already checked-in student
+            $traceId = DB::transaction(function () use (
+                $existingAtt,
+                $examinerId,
+                $now,
+                $tokenId,
+                $deviceFp,
+                $ip,
+                $effectiveTimetableId
+            ) {
+                if ($existingAtt->status !== 'submitted') {
+                    DB::table('attendance_records')
+                        ->where('id', $existingAtt->id)
+                        ->update([
+                            'status'           => 'submitted',
+                            'submitted_at'     => $now,
+                            'exit_examiner_id' => $examinerId,
+                            'updated_at'       => $now,
+                        ]);
+                }
+
+                return $this->log(
+                    $tokenId,
+                    $examinerId,
+                    'APPROVED',
+                    $deviceFp,
+                    $ip,
+                    $now,
+                    '',
+                    $effectiveTimetableId,
+                    AssessmentTimeService::SCAN_LATE
+                );
+            });
+
+            return $this->response(
+                status: 'APPROVED',
+                student: $this->studentResponse($student),
+                tokenId: $tokenId,
+                timestamp: $timestamp,
+                session: [
+                    'semester'      => $session->semester ?? '',
+                    'academic_year' => $session->academic_year ?? '',
+                ],
+                traceId: $traceId,
+                examAccess: $examAccess,
+                attendanceId: $existingAtt->id,
+                scanClassification: AssessmentTimeService::SCAN_LATE,
+                customDisplayStatus: 'Departure Recorded',
+                customMessage: 'Student departure confirmed and marked as submitted.',
+            );
         }
 
         $examType = strtolower((string) ($exam->assessment_type ?? 'exam'));
@@ -292,6 +496,7 @@ class VerificationService
                 deviceFp: $deviceFp,
                 ip: $ip,
                 now: $now,
+                timetableId: $expectedTimetableId ?? $tokenTimetableId,
             );
         }
 
@@ -320,7 +525,9 @@ class VerificationService
             $recordAttendance,
             $student,
             $tokenTimetableId,
-            $qrSessionId
+            $qrSessionId,
+            $expectedTimetableId,
+            $scanClassification
         ): array {
             $locked = DB::table('qr_tokens')
                 ->where('token_id', $tokenId)
@@ -348,7 +555,10 @@ class VerificationService
                         'DUPLICATE',
                         $deviceFp,
                         $ip,
-                        $now
+                        $now,
+                        '',
+                        $expectedTimetableId ?? $tokenTimetableId,
+                        $scanClassification
                     ),
                     'attendance_id' => null,
                 ];
@@ -366,7 +576,9 @@ class VerificationService
                         $deviceFp,
                         $ip,
                         $now,
-                        'token_revoked'
+                        'token_revoked',
+                        $expectedTimetableId ?? $tokenTimetableId,
+                        $scanClassification
                     ),
                     'attendance_id' => null,
                 ];
@@ -384,7 +596,9 @@ class VerificationService
                         $deviceFp,
                         $ip,
                         $now,
-                        'invalid_status'
+                        'invalid_status',
+                        $expectedTimetableId ?? $tokenTimetableId,
+                        $scanClassification
                     ),
                     'attendance_id' => null,
                 ];
@@ -433,7 +647,10 @@ class VerificationService
                     'APPROVED',
                     $deviceFp,
                     $ip,
-                    $now
+                    $now,
+                    '',
+                    $expectedTimetableId ?? $tokenTimetableId,
+                    $scanClassification
                 ),
             ];
         });
@@ -448,6 +665,7 @@ class VerificationService
                 usedAt: $statusResult['used_at'],
                 traceId: $statusResult['trace_id'],
                 examAccess: $examAccess,
+                scanClassification: $scanClassification,
             );
         }
 
@@ -466,6 +684,7 @@ class VerificationService
                 timestamp: $timestamp,
                 reason: $statusResult['reason'],
                 traceId: $statusResult['trace_id'],
+                scanClassification: $scanClassification,
             );
         }
 
@@ -475,12 +694,13 @@ class VerificationService
             tokenId: $tokenId,
             timestamp: $timestamp,
             session: [
-                'semester' => $session->semester ?? '',
+                'semester'      => $session->semester ?? '',
                 'academic_year' => $session->academic_year ?? '',
             ],
             traceId: $statusResult['trace_id'],
             examAccess: $examAccess,
             attendanceId: $statusResult['attendance_id'] ?? null,
+            scanClassification: $scanClassification,
         );
     }
 
@@ -495,6 +715,9 @@ class VerificationService
         ?string $deviceFp = null,
         ?string $ip = null,
         mixed $now = null,
+        ?int $timetableId = null,
+        ?string $scanClassification = null,
+        ?string $customMessage = null,
     ): array {
         $resolvedTokenId = $token?->token_id ?? $tokenId;
         $traceId = null;
@@ -507,7 +730,9 @@ class VerificationService
                 $deviceFp,
                 $ip,
                 $now,
-                $reason
+                $reason,
+                $timetableId,
+                $scanClassification
             );
         }
 
@@ -520,6 +745,8 @@ class VerificationService
             timestamp: $timestamp,
             reason: $reason,
             traceId: $traceId,
+            scanClassification: $scanClassification,
+            customMessage: $customMessage,
         );
     }
 
@@ -534,21 +761,36 @@ class VerificationService
         ?int $traceId = null,
         ?array $examAccess = null,
         ?int $attendanceId = null,
+        ?string $scanClassification = null,
+        ?string $customDisplayStatus = null,
+        ?string $customMessage = null,
     ): array {
         [$displayStatus, $message] = $this->presentation($status, $reason);
 
+        if ($customDisplayStatus !== null) {
+            $displayStatus = $customDisplayStatus;
+        }
+
+        if ($customMessage !== null) {
+            $message = $customMessage;
+        }
+
         $response = [
-            'status' => $status,
+            'status'         => $status,
             'display_status' => $displayStatus,
-            'message' => $message,
-            'student' => $student,
-            'token_id' => $tokenId,
-            'timestamp' => $timestamp,
+            'message'        => $message,
+            'student'        => $student,
+            'token_id'       => $tokenId,
+            'timestamp'      => $timestamp,
         ];
 
         if ($attendanceId !== null) {
             $response['checked_in'] = true;
             $response['attendance_id'] = $attendanceId;
+        }
+
+        if ($scanClassification !== null) {
+            $response['scan_classification'] = $scanClassification;
         }
 
         if ($reason !== '') {
@@ -590,10 +832,17 @@ class VerificationService
             'course_mismatch'               => ['Wrong Course', 'This QR was issued for a different course.'],
             'payment_not_verified'          => ['Payment Not Verified', 'No verified session payment found. Student must pay school fees before entry.'],
             'course_not_assigned'           => ['Course Not Assigned', 'This course is not assigned to the student\'s department or level.'],
+            'register_incomplete'           => ['Register Incomplete', 'Assessment register is incomplete or unconfirmed. Administrator review required before scanning can start.'],
+            'student_not_on_register'       => ['Not on Assessment Register', 'Student is not registered on the confirmed student register for this assessment.'],
+            'student_not_in_registry'       => ['Not in Official Registry', 'Student was not found in the official university student registry or is inactive.'],
             'older_qr_format'               => ['Older QR Format', 'This QR was generated in an older format. Student must generate a new course QR pass.'],
             'wrong_session'                 => ['Wrong Exam Session', 'This QR was scanned outside the active exam session.'],
             'wrong_examiner'                => ['Not Your Assignment', 'This assessment is assigned to a different examiner.'],
             'outside_time_window'           => ['Outside Exam Hours', 'This assessment is outside the permitted scanning time window.'],
+            'late_entry_not_permitted'      => ['Late Entry Not Permitted', 'Regular examination entry has concluded. Late check-in is not permitted. Only departure of already checked-in students is allowed.'],
+            'invalid_schedule'              => ['Invalid Schedule', 'Assessment schedule is incomplete or invalid. Administrator correction required before scanning can start.'],
+            'assessment_cancelled'          => ['Assessment Cancelled', 'This assessment has been cancelled. Scanning is closed.'],
+            'assessment_completed'          => ['Assessment Completed', 'This assessment has been marked as completed. Scanning is closed.'],
             'attendance_persistence_failed' => ['Check-in Failed', 'Attendance could not be recorded. The pass has not been consumed. Please try again.'],
             'token_revoked'                 => ['QR Revoked', 'This exam pass has been revoked and is no longer valid.'],
             'invalid_status'                => ['Invalid Pass', 'This exam pass has an unrecognised status and cannot be accepted.'],
@@ -669,8 +918,10 @@ class VerificationService
         string $ip,
         mixed $now,
         string $reason = '',
+        ?int $timetableId = null,
+        ?string $scanClassification = null,
     ): int {
-        return (int) DB::table('verification_logs')->insertGetId([
+        $record = [
             'token_id' => $tokenId,
             'examiner_id' => $examinerId,
             'decision' => $decision,
@@ -678,6 +929,16 @@ class VerificationService
             'device_fp' => $deviceFp,
             'ip_address' => $ip,
             'rejection_reason' => $decision === 'REJECTED' && $reason !== '' ? $reason : null,
-        ], 'log_id');
+        ];
+
+        if ($timetableId !== null && Schema::hasColumn('verification_logs', 'timetable_id')) {
+            $record['timetable_id'] = $timetableId;
+        }
+
+        if ($scanClassification !== null && Schema::hasColumn('verification_logs', 'scan_classification')) {
+            $record['scan_classification'] = $scanClassification;
+        }
+
+        return (int) DB::table('verification_logs')->insertGetId($record, 'log_id');
     }
 }

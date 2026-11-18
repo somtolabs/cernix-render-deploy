@@ -65,6 +65,27 @@ class EndToEndSystemTest extends TestCase
         $examiner = DB::table('examiners')->where('username', 'admin1')->first();
         $this->examinerId = (int) $examiner->examiner_id;
 
+        $today = \Carbon\Carbon::today('Africa/Lagos')->toDateString();
+        DB::table('timetables')->where('course_code', 'CSC401')->update([
+            'exam_date' => $today,
+            'start_time' => '00:00',
+            'end_time' => '23:59',
+            'register_status' => 'confirmed',
+            'roster_confirmed_at' => now(),
+        ]);
+        $csc401Id = (int) DB::table('timetables')
+            ->where('exam_session_id', $this->sessionId)
+            ->where('course_code', 'CSC401')
+            ->value('id');
+        if ($csc401Id) {
+            DB::table('timetable_students')->insertOrIgnore([
+                'timetable_id' => $csc401Id,
+                'matric_no' => $this->matricNo,
+                'candidate_type' => 'regular',
+                'created_at' => now(),
+            ]);
+        }
+
         DB::table('official_students')->insert([
             'matric_number' => $this->matricNo,
             'full_name' => 'Adebayo Oluwaseun Emmanuel',

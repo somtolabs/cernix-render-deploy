@@ -61,15 +61,17 @@ class TimetableSeeder extends Seeder
             }
 
             foreach ($levels as $level => [$code, $title, $venue]) {
-                $exists = DB::table('timetables')
+                $timetable = DB::table('timetables')
                     ->where('exam_session_id', $session->session_id)
                     ->where('department_id', $department->dept_id)
                     ->where('level', $level)
                     ->where('course_code', $code)
-                    ->exists();
+                    ->first();
 
-                if (! $exists) {
-                    DB::table('timetables')->insert([
+                $timetableId = $timetable?->id;
+
+                if (! $timetable) {
+                    $timetableId = DB::table('timetables')->insertGetId([
                         'exam_session_id' => $session->session_id,
                         'department_id' => $department->dept_id,
                         'level' => $level,
@@ -80,9 +82,53 @@ class TimetableSeeder extends Seeder
                         'end_time' => $level === '400' ? '16:00' : '12:00',
                         'venue' => $venue,
                         'status' => 'scheduled',
+                        'register_status' => 'confirmed',
+                        'roster_confirmed_at' => now(),
                         'created_at' => now(),
                         'updated_at' => now(),
                     ]);
+                } else {
+                    DB::table('timetables')->where('id', $timetableId)->update([
+                        'register_status' => 'confirmed',
+                        'roster_confirmed_at' => now(),
+                    ]);
+                }
+
+                if ($timetableId && DB::getSchemaBuilder()->hasTable('timetable_students')) {
+                    $matrics = collect();
+                    if (DB::getSchemaBuilder()->hasTable('official_students')) {
+                        $matrics = $matrics->merge(
+                            DB::table('official_students')
+                                ->where('department', $departmentName)
+                                ->where('level', $level)
+                                ->pluck('matric_number')
+                        );
+                    }
+                    if (DB::getSchemaBuilder()->hasTable('mock_sis')) {
+                        $matrics = $matrics->merge(
+                            DB::table('mock_sis')
+                                ->where('department', $departmentName)
+                                ->where('level', $level)
+                                ->pluck('matric_no')
+                        );
+                    }
+                    if (DB::getSchemaBuilder()->hasTable('mock_sis_records')) {
+                        $matrics = $matrics->merge(
+                            DB::table('mock_sis_records')
+                                ->where('department', $departmentName)
+                                ->where('level', $level)
+                                ->pluck('matric_no')
+                        );
+                    }
+
+                    foreach ($matrics->unique() as $m) {
+                        DB::table('timetable_students')->insertOrIgnore([
+                            'timetable_id' => $timetableId,
+                            'matric_no' => $m,
+                            'candidate_type' => 'regular',
+                            'created_at' => now(),
+                        ]);
+                    }
                 }
 
                 $dayOffset++;

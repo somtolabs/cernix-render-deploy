@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Web;
 
 use App\Http\Controllers\Controller;
+use App\Services\AssessmentTimeService;
 use App\Services\AuditService;
 use App\Services\VerificationService;
 use App\Support\Roles;
@@ -18,10 +19,15 @@ use Throwable;
 
 class ExaminerWebController extends Controller
 {
+    private readonly AssessmentTimeService $assessmentTimeService;
+
     public function __construct(
         private readonly VerificationService $verificationService,
         private readonly AuditService $auditService,
-    ) {}
+        ?AssessmentTimeService $assessmentTimeService = null,
+    ) {
+        $this->assessmentTimeService = $assessmentTimeService ?? app(AssessmentTimeService::class);
+    }
 
     public function login(Request $request)
     {
@@ -176,13 +182,22 @@ class ExaminerWebController extends Controller
             method_exists($assignedAssessments, 'pluck') ? $assignedAssessments->pluck('id')->all() : []
         )));
 
+        $activeTimetable   = $request->session()->get('examiner_active_timetable');
+        $activeTimetableId = $request->session()->get('examiner_active_timetable_id');
+        if ($activeTimetableId && is_array($activeTimetable)) {
+            $refreshedStatus = $this->assessmentTimeService->getStatus($activeTimetableId);
+            $activeTimetable['operational_state'] = $refreshedStatus->state;
+            $activeTimetable['scan_classification'] = $refreshedStatus->scan_classification;
+            $request->session()->put('examiner_active_timetable', $activeTimetable);
+        }
+
         return view('examiner.dashboard', [
             'examiner'               => $examiner,
             'metrics'                => $this->metricsData((int) $examiner['id']),
             'recentRows'             => $this->scanRows((int) $examiner['id'], 3),
             'notificationUnreadCount' => $this->examinerUnreadNotes((int) $examiner['id']),
-            'activeTimetable'        => $request->session()->get('examiner_active_timetable'),
-            'activeTimetableId'      => $request->session()->get('examiner_active_timetable_id'),
+            'activeTimetable'        => $activeTimetable,
+            'activeTimetableId'      => $activeTimetableId,
             'todaysExams'            => $todaysExams,
             'assignedAssessments'    => $assignedAssessments,
             'scanCountsByTimetable'  => $this->scanCountsByTimetable($allTimetableIds),
@@ -423,6 +438,848 @@ class ExaminerWebController extends Controller
         ]);
     }
 
+    public function assessmentsPage(Request $request)
+    {
+        $examiner = $this->examiner($request);
+        if (! $examiner) {
+            return redirect('/examiner/login');
+        }
+
+        $isAdmin = Roles::isAdminLike($examiner['role']);
+        $tab = $request->query('tab', 'all');
+        $search = trim((string) $request->query('search', ''));
+        $today = Carbon::today(AssessmentTimeService::TIMEZONE)->toDateString();
+
+        $query = DB::table('timetables')
+            ->leftJoin('departments', 'timetables.department_id', '=', 'departments.dept_id')
+            ->leftJoin('examiners', 'timetables.examiner_id', '=', 'examiners.examiner_id')
+            ->leftJoin('exam_sessions', 'timetables.exam_session_id', '=', 'exam_sessions.session_id')
+            ->select(
+                'timetables.*',
+                'departments.dept_name',
+                'departments.faculty',
+                'examiners.full_name as examiner_name',
+                'exam_sessions.semester',
+                'exam_sessions.academic_year'
+            );
+
+        if (! $isAdmin) {
+            $query->where('timetables.examiner_id', (int) $examiner['id']);
+        }
+
+        if ($search !== '') {
+            $query->where(function ($q) use ($search) {
+                $q->where('timetables.course_code', 'like', "%{$search}%")
+                  ->orWhere('timetables.course_title', 'like', "%{$search}%")
+                  ->orWhere('timetables.venue', 'like', "%{$search}%");
+            });
+        }
+
+        if ($tab === 'today') {
+            $query->whereDate('timetables.exam_date', $today);
+        } elseif ($tab === 'upcoming') {
+            $query->whereDate('timetables.exam_date', '>', $today)
+                  ->where('timetables.status', '!=', 'completed');
+        } elseif ($tab === 'completed') {
+            $query->where(function ($q) use ($today) {
+                $q->where('timetables.status', 'completed')
+                  ->orWhereDate('timetables.exam_date', '<', $today);
+            });
+        }
+
+        $assessments = $query->orderBy('timetables.exam_date')
+            ->orderBy('timetables.start_time')
+            ->get();
+
+        $timetableIds = $assessments->pluck('id')->all();
+
+        // Enrolled count calculation
+        $enrolledCounts = [];
+        if (! empty($timetableIds)) {
+            $explicitCounts = [];
+            if (Schema::hasTable('timetable_students')) {
+                $explicitCounts = DB::table('timetable_students')
+                    ->whereIn('timetable_id', $timetableIds)
+                    ->select('timetable_id', DB::raw('COUNT(*) as total'))
+                    ->groupBy('timetable_id')
+                    ->pluck('total', 'timetable_id')
+                    ->all();
+            }
+
+            foreach ($assessments as $a) {
+                if (isset($explicitCounts[$a->id]) && (int) $explicitCounts[$a->id] > 0) {
+                    $enrolledCounts[$a->id] = (int) $explicitCounts[$a->id];
+                } else {
+                    $enrolledCounts[$a->id] = (int) DB::table('students')
+                        ->where('department_id', $a->department_id)
+                        ->where('level', $a->level)
+                        ->where('session_id', $a->exam_session_id)
+                        ->count();
+                }
+            }
+        }
+
+        // Attendance stats
+        $attendanceStats = [];
+        if (! empty($timetableIds) && Schema::hasTable('attendance_records')) {
+            $attRows = DB::table('attendance_records')
+                ->whereIn('timetable_id', $timetableIds)
+                ->select('timetable_id', 'status', DB::raw('COUNT(*) as count'))
+                ->groupBy('timetable_id', 'status')
+                ->get();
+
+            foreach ($attRows as $row) {
+                $tId = (int) $row->timetable_id;
+                if (! isset($attendanceStats[$tId])) {
+                    $attendanceStats[$tId] = [
+                        'checked_in' => 0,
+                        'submitted'  => 0,
+                        'flagged'    => 0,
+                    ];
+                }
+                if ($row->status === 'checked_in') {
+                    $attendanceStats[$tId]['checked_in'] += (int) $row->count;
+                } elseif ($row->status === 'submitted') {
+                    $attendanceStats[$tId]['submitted'] += (int) $row->count;
+                    $attendanceStats[$tId]['checked_in'] += (int) $row->count;
+                } elseif ($row->status === 'flagged') {
+                    $attendanceStats[$tId]['flagged'] += (int) $row->count;
+                }
+            }
+        }
+
+        $scanCounts = $this->scanCountsByTimetable($timetableIds);
+
+        $durations = [];
+        foreach ($assessments as $a) {
+            $a->time_status = $this->assessmentTimeService->getStatus($a);
+            $durations[$a->id] = $this->formatAssessmentDuration($a->start_time, $a->end_time);
+        }
+
+        return view('examiner.assessments.index', [
+            'examiner'                => $examiner,
+            'assessments'             => $assessments,
+            'tab'                     => $tab,
+            'search'                  => $search,
+            'enrolledCounts'          => $enrolledCounts,
+            'attendanceStats'         => $attendanceStats,
+            'scanCounts'              => $scanCounts,
+            'durations'               => $durations,
+            'activeTimetableId'       => $request->session()->get('examiner_active_timetable_id'),
+            'notificationUnreadCount' => $this->examinerUnreadNotes((int) $examiner['id']),
+        ]);
+    }
+
+    public function showAssessment(Request $request, int $id)
+    {
+        $examiner = $this->examiner($request);
+        if (! $examiner) {
+            return redirect('/examiner/login');
+        }
+
+        $assessment = DB::table('timetables')
+            ->leftJoin('departments', 'timetables.department_id', '=', 'departments.dept_id')
+            ->leftJoin('examiners', 'timetables.examiner_id', '=', 'examiners.examiner_id')
+            ->leftJoin('exam_sessions', 'timetables.exam_session_id', '=', 'exam_sessions.session_id')
+            ->where('timetables.id', $id)
+            ->select(
+                'timetables.*',
+                'departments.dept_name',
+                'departments.faculty',
+                'examiners.full_name as examiner_name',
+                'examiners.username as examiner_username',
+                'exam_sessions.semester',
+                'exam_sessions.academic_year'
+            )
+            ->first();
+
+        abort_unless($assessment, 404);
+        abort_unless(
+            (int) ($assessment->examiner_id ?? 0) === (int) $examiner['id']
+                || Roles::isAdminLike($examiner['role']),
+            403
+        );
+
+        $hasCustomRoster = Schema::hasTable('timetable_students')
+            && DB::table('timetable_students')->where('timetable_id', $id)->exists();
+
+        if ($hasCustomRoster) {
+            $students = DB::table('timetable_students')
+                ->leftJoin('students', 'timetable_students.matric_no', '=', 'students.matric_no')
+                ->leftJoin('official_students', 'timetable_students.matric_no', '=', 'official_students.matric_number')
+                ->leftJoin('departments', 'students.department_id', '=', 'departments.dept_id')
+                ->where('timetable_students.timetable_id', $id)
+                ->select(
+                    'timetable_students.matric_no',
+                    'timetable_students.candidate_type',
+                    DB::raw('COALESCE(students.full_name, official_students.full_name) as full_name'),
+                    DB::raw('COALESCE(students.level, official_students.level) as level'),
+                    DB::raw('COALESCE(departments.dept_name, official_students.department) as dept_name'),
+                    'students.photo_path',
+                    'students.profile_photo_path'
+                )
+                ->orderBy('timetable_students.matric_no')
+                ->get();
+        } else {
+            // Assessment register has NO candidates. Never fall back to whole cohort!
+            $students = collect();
+        }
+
+        $attendance = Schema::hasTable('attendance_records')
+            ? DB::table('attendance_records')
+                ->where('timetable_id', $id)
+                ->get()
+                ->keyBy('matric_no')
+            : collect();
+
+        $tokens = Schema::hasTable('qr_tokens')
+            ? DB::table('qr_tokens')
+                ->where('timetable_id', $id)
+                ->get()
+                ->keyBy('student_id')
+            : collect();
+
+        $roster = $students->map(function ($s) use ($attendance, $tokens) {
+            $att = $attendance->get($s->matric_no);
+            $tok = $tokens->get($s->matric_no);
+
+            $status = 'absent';
+            $isAssisted = false;
+            $assistedReason = null;
+            if ($att) {
+                if ($att->status === 'submitted') {
+                    $status = 'submitted';
+                } elseif ($att->status === 'flagged') {
+                    $status = 'flagged';
+                } elseif ($att->status === 'checked_in') {
+                    $status = 'writing';
+                }
+
+                if (property_exists($att, 'checkin_method') && $att->checkin_method === 'assisted') {
+                    $isAssisted = true;
+                    $assistedReason = $att->assisted_reason ?? 'Assisted Check-in';
+                }
+            }
+
+            return [
+                'matric_no'           => $s->matric_no,
+                'full_name'           => $s->full_name,
+                'level'               => $s->level,
+                'dept_name'           => $s->dept_name,
+                'photo_path'          => $s->photo_path,
+                'profile_photo_path'  => $s->profile_photo_path,
+                'status'              => $status,
+                'is_assisted'         => $isAssisted,
+                'assisted_reason'     => $assistedReason,
+                'checked_in_at'       => $att?->checked_in_at ? Carbon::parse($att->checked_in_at)->format('H:i:s') : null,
+                'submitted_at'        => $att?->submitted_at ? Carbon::parse($att->submitted_at)->format('H:i:s') : null,
+                'token_id'            => $tok?->token_id,
+                'token_status'        => $tok?->status,
+                'detail_url'          => route('examiner.students.show', ['matric' => $s->matric_no]),
+            ];
+        });
+
+        $scansQuery = DB::table('verification_logs')
+            ->join('qr_tokens', 'verification_logs.token_id', '=', 'qr_tokens.token_id')
+            ->leftJoin('students', 'qr_tokens.student_id', '=', 'students.matric_no')
+            ->leftJoin('examiners', 'verification_logs.examiner_id', '=', 'examiners.examiner_id')
+            ->where(function ($q) use ($id) {
+                if (Schema::hasColumn('verification_logs', 'timetable_id')) {
+                    $q->where('verification_logs.timetable_id', $id)
+                      ->orWhere(function ($sub) use ($id) {
+                          $sub->whereNull('verification_logs.timetable_id')
+                              ->where('qr_tokens.timetable_id', $id);
+                      });
+                } else {
+                    $q->where('qr_tokens.timetable_id', $id);
+                }
+            })
+            ->select(
+                'verification_logs.*',
+                'students.full_name',
+                'students.matric_no',
+                'students.photo_path',
+                'students.profile_photo_path',
+                'examiners.full_name as scan_examiner_name'
+            )
+            ->orderByDesc('verification_logs.timestamp');
+
+        $scans = $scansQuery->get()->map(fn ($row) => [
+            'log_id'              => $row->log_id,
+            'token_id'            => $row->token_id,
+            'decision'            => $row->decision,
+            'rejection_reason'    => $row->rejection_reason,
+            'scan_classification' => $row->scan_classification ?? null,
+            'time'                => Carbon::parse($row->timestamp)->format('d M Y, H:i:s'),
+            'timestamp'           => $row->timestamp,
+            'student'             => $row->full_name ?? $this->fallbackStudentLabel($row),
+            'matric_no'           => $row->matric_no ?? 'No matric on record',
+            'photo_path'          => $row->photo_path ?? null,
+            'profile_photo_path'  => $row->profile_photo_path ?? null,
+            'examiner_name'       => $row->scan_examiner_name ?? 'Examiner',
+            'ip_address'          => $row->ip_address,
+            'device_fp'           => $row->device_fp,
+            'detail_url'          => route('examiner.scans.show', $row->log_id),
+            'student_url'         => $row->matric_no ? route('examiner.students.show', ['matric' => $row->matric_no]) : null,
+        ]);
+
+        $totalEnrolled = $roster->count();
+        $totalSubmitted = $roster->where('status', 'submitted')->count();
+        $totalWriting = $roster->where('status', 'writing')->count();
+        $totalFlagged = $roster->where('status', 'flagged')->count();
+        $totalAbsent = $roster->where('status', 'absent')->count();
+        $totalCheckedIn = $totalSubmitted + $totalWriting + $totalFlagged;
+
+        $totalScans = $scans->count();
+        $approvedScans = $scans->where('decision', 'APPROVED')->count();
+        $rejectedScans = $scans->where('decision', 'REJECTED')->count();
+        $duplicateScans = $scans->where('decision', 'DUPLICATE')->count();
+
+        $duration = $this->formatAssessmentDuration($assessment->start_time, $assessment->end_time);
+        $isActiveSession = ((int) $request->session()->get('examiner_active_timetable_id') === (int) $id);
+        $timeStatus = $this->assessmentTimeService->getStatus($assessment);
+
+        return view('examiner.assessments.show', [
+            'examiner'             => $examiner,
+            'assessment'           => $assessment,
+            'roster'               => $roster,
+            'scans'                => $scans,
+            'metrics'              => [
+                'total_enrolled'   => $totalEnrolled,
+                'total_checked_in' => $totalCheckedIn,
+                'total_submitted'  => $totalSubmitted,
+                'total_writing'    => $totalWriting,
+                'total_flagged'    => $totalFlagged,
+                'total_absent'     => $totalAbsent,
+                'total_scans'      => $totalScans,
+                'approved_scans'   => $approvedScans,
+                'rejected_scans'   => $rejectedScans,
+                'duplicate_scans'  => $duplicateScans,
+            ],
+            'duration'             => $duration,
+            'isActiveSession'      => $isActiveSession,
+            'timeStatus'           => $timeStatus,
+            'enableSubmissionScan' => $this->settingBoolean('enable_submission_scan', true),
+            'notificationUnreadCount' => $this->examinerUnreadNotes((int) $examiner['id']),
+            'assistedCheckins'     => Schema::hasTable('assisted_checkin_logs')
+                ? DB::table('assisted_checkin_logs')->where('timetable_id', $id)->orderByDesc('created_at')->get()
+                : collect(),
+        ]);
+    }
+
+    public function assistedCheckinLookup(Request $request, int $id): JsonResponse
+    {
+        $examiner = $this->examiner($request);
+        if (! $examiner) {
+            return response()->json(['success' => false, 'message' => 'Unauthenticated.'], 401);
+        }
+
+        $assessment = DB::table('timetables')->where('id', $id)->first();
+        if (! $assessment) {
+            return response()->json(['success' => false, 'message' => 'Assessment not found.'], 404);
+        }
+
+        if ((int) ($assessment->examiner_id ?? 0) !== (int) $examiner['id'] && ! Roles::isAdminLike($examiner['role'])) {
+            return response()->json(['success' => false, 'message' => 'You are not authorised for this assessment.'], 403);
+        }
+
+        $matricNo = strtoupper(trim((string) $request->input('matric_no', '')));
+        if ($matricNo === '') {
+            return response()->json(['success' => false, 'eligible' => false, 'message' => 'Matriculation number is required.'], 422);
+        }
+
+        // Check if assessment register is confirmed
+        $hasRegisterStatusCol = Schema::hasColumn('timetables', 'register_status');
+        $isRegisterConfirmed = $hasRegisterStatusCol ? ($assessment->register_status === 'confirmed') : false;
+
+        $hasRosterTable = Schema::hasTable('timetable_students');
+        $rosterCount = $hasRosterTable ? DB::table('timetable_students')->where('timetable_id', $id)->count() : 0;
+
+        if (! $isRegisterConfirmed || $rosterCount === 0) {
+            return response()->json([
+                'success'  => false,
+                'eligible' => false,
+                'reason'   => 'register_incomplete',
+                'message'  => 'Assessment register is incomplete or unconfirmed. Assisted check-in is not permitted until the register is confirmed by administration.',
+            ], 422);
+        }
+
+        // 1. Verify student exists in official student registry
+        $official = null;
+        if (Schema::hasTable('official_students')) {
+            $official = DB::table('official_students')->where('matric_number', $matricNo)->first();
+            if (! $official || strtolower((string) $official->status) !== 'active') {
+                return response()->json([
+                    'success'  => false,
+                    'eligible' => false,
+                    'reason'   => 'student_not_in_registry',
+                    'message'  => 'Matriculation number not found in official student registry or student status is inactive.',
+                ], 422);
+            }
+        }
+
+        // 2. Verify student is explicitly on the confirmed register
+        $isEnrolled = $hasRosterTable
+            && DB::table('timetable_students')
+                ->where('timetable_id', $id)
+                ->where('matric_no', $matricNo)
+                ->exists();
+
+        if (! $isEnrolled) {
+            return response()->json([
+                'success'  => false,
+                'eligible' => false,
+                'reason'   => 'student_not_on_register',
+                'message'  => 'Student is not on the confirmed candidate register for this assessment.',
+            ], 422);
+        }
+
+        // 3. Check for existing attendance record
+        $attendance = Schema::hasTable('attendance_records')
+            ? DB::table('attendance_records')
+                ->where('timetable_id', $id)
+                ->where('matric_no', $matricNo)
+                ->where('session_id', $assessment->exam_session_id)
+                ->first()
+            : null;
+
+        if ($attendance) {
+            return response()->json([
+                'success'            => false,
+                'eligible'           => false,
+                'already_checked_in' => true,
+                'attendance_status'  => $attendance->status,
+                'checked_in_at'      => $attendance->checked_in_at,
+                'message'            => "Student is already checked in (status: {$attendance->status}).",
+            ], 422);
+        }
+
+        // 4. Resolve portal student record (if registered)
+        $student = DB::table('students')->where('matric_no', $matricNo)->first();
+
+        return response()->json([
+            'success'            => true,
+            'eligible'           => true,
+            'already_checked_in' => false,
+            'matric_no'          => $matricNo,
+            'full_name'          => $student->full_name ?? ($official->full_name ?? 'Student'),
+            'department'         => $official->department ?? ($student->dept_name ?? 'N/A'),
+            'level'              => $official->level ?? ($student->level ?? 'N/A'),
+            'has_portal_account' => (bool) $student,
+            'photo_status'       => $student->photo_status ?? 'no_portal_account',
+            'photo_url'          => $student ? $this->studentPhotoUrl($student) : null,
+            'message'            => 'Student confirmed on assessment register and cleared for assisted check-in.',
+        ]);
+    }
+
+    public function assistedCheckinProcess(Request $request, int $id): JsonResponse|RedirectResponse
+    {
+        $examiner = $this->examiner($request);
+        if (! $examiner) {
+            if ($request->expectsJson()) {
+                return response()->json(['success' => false, 'message' => 'Unauthenticated.'], 401);
+            }
+            return redirect('/examiner/login');
+        }
+
+        $assessment = DB::table('timetables')->where('id', $id)->first();
+        if (! $assessment) {
+            abort(404, 'Assessment not found.');
+        }
+
+        $examinerId = (int) $examiner['id'];
+        if ((int) ($assessment->examiner_id ?? 0) !== $examinerId && ! Roles::isAdminLike($examiner['role'])) {
+            abort(403, 'You are not authorised for this assessment.');
+        }
+
+        $matricNo = strtoupper(trim((string) $request->input('matric_no', '')));
+        $reason = trim((string) $request->input('reason', 'device_unavailable'));
+        $notes = trim((string) $request->input('notes', ''));
+
+        if ($matricNo === '') {
+            $err = 'Matriculation number is required.';
+            return $request->expectsJson()
+                ? response()->json(['success' => false, 'message' => $err], 422)
+                : back()->withErrors(['matric_no' => $err]);
+        }
+
+        if ($reason === '') {
+            $err = 'A valid assisted check-in reason is required.';
+            return $request->expectsJson()
+                ? response()->json(['success' => false, 'message' => $err], 422)
+                : back()->withErrors(['reason' => $err]);
+        }
+
+        // Time window enforcement using AssessmentTimeService
+        $timeStatus = $this->assessmentTimeService->getStatus($assessment);
+        if (! in_array($timeStatus->scan_classification, ['early_scan', 'regular_scan'], true)) {
+            $err = "Assisted check-in is not permitted at this time ({$timeStatus->badge_label}). Scanning is closed.";
+            return $request->expectsJson()
+                ? response()->json(['success' => false, 'reason' => 'scanning_closed', 'message' => $err], 422)
+                : back()->withErrors(['assisted' => $err]);
+        }
+
+        // Assessment register confirmation check
+        $hasRegisterStatusCol = Schema::hasColumn('timetables', 'register_status');
+        $isRegisterConfirmed = $hasRegisterStatusCol ? ($assessment->register_status === 'confirmed') : false;
+        $hasRosterTable = Schema::hasTable('timetable_students');
+        $rosterCount = $hasRosterTable ? DB::table('timetable_students')->where('timetable_id', $id)->count() : 0;
+
+        if (! $isRegisterConfirmed || $rosterCount === 0) {
+            $err = 'Assessment register is incomplete and requires administrative review. Assisted check-in is not permitted.';
+            return $request->expectsJson()
+                ? response()->json(['success' => false, 'reason' => 'register_incomplete', 'message' => $err], 422)
+                : back()->withErrors(['assisted' => $err]);
+        }
+
+        // 1. Verify student exists in official student registry
+        $official = null;
+        if (Schema::hasTable('official_students')) {
+            $official = DB::table('official_students')->where('matric_number', $matricNo)->first();
+            if (! $official || strtolower((string) $official->status) !== 'active') {
+                $err = 'Student was not found in official student registry or student status is inactive.';
+                return $request->expectsJson()
+                    ? response()->json(['success' => false, 'reason' => 'student_not_in_registry', 'message' => $err], 422)
+                    : back()->withErrors(['assisted' => $err]);
+            }
+        }
+
+        // 2. Verify student is on the confirmed assessment register
+        $isEnrolled = $hasRosterTable
+            && DB::table('timetable_students')
+                ->where('timetable_id', $id)
+                ->where('matric_no', $matricNo)
+                ->exists();
+
+        if (! $isEnrolled) {
+            $err = 'Student is not on the confirmed candidate register for this assessment.';
+            return $request->expectsJson()
+                ? response()->json(['success' => false, 'reason' => 'student_not_on_register', 'message' => $err], 422)
+                : back()->withErrors(['assisted' => $err]);
+        }
+
+        // 3. Check for existing attendance record (avoid duplicate check-ins)
+        $existing = Schema::hasTable('attendance_records')
+            ? DB::table('attendance_records')
+                ->where('timetable_id', $id)
+                ->where('matric_no', $matricNo)
+                ->where('session_id', $assessment->exam_session_id)
+                ->first()
+            : null;
+
+        if ($existing) {
+            $err = "Student is already checked in (status: {$existing->status}).";
+            return $request->expectsJson()
+                ? response()->json(['success' => false, 'message' => $err], 422)
+                : back()->withErrors(['assisted' => $err]);
+        }
+
+        $now = now();
+        $student = DB::table('students')->where('matric_no', $matricNo)->first();
+
+        DB::transaction(function () use ($id, $assessment, $matricNo, $examinerId, $reason, $notes, $now) {
+            // Write to attendance_records (token_id is explicitly NULL - never create fake QR scan!)
+            DB::table('attendance_records')->insert([
+                'matric_no'          => $matricNo,
+                'timetable_id'       => $id,
+                'session_id'         => $assessment->exam_session_id,
+                'token_id'           => null,
+                'checkin_method'     => 'assisted',
+                'assisted_reason'    => $reason,
+                'assisted_notes'     => $notes ?: null,
+                'status'             => 'checked_in',
+                'checked_in_at'      => $now,
+                'entry_examiner_id'  => $examinerId,
+                'created_at'         => $now,
+                'updated_at'         => $now,
+            ]);
+
+            // Write to dedicated assisted check-in audit log
+            if (Schema::hasTable('assisted_checkin_logs')) {
+                DB::table('assisted_checkin_logs')->insert([
+                    'timetable_id' => $id,
+                    'session_id'   => $assessment->exam_session_id,
+                    'matric_no'    => $matricNo,
+                    'examiner_id'  => $examinerId,
+                    'reason'       => $reason,
+                    'notes'        => $notes ?: null,
+                    'created_at'   => $now,
+                ]);
+            }
+
+            // System audit trail
+            app(AuditService::class)->logAction(
+                (string) $examinerId,
+                'examiner',
+                'examiner.assisted_checkin',
+                [
+                    'timetable_id' => $id,
+                    'course_code'  => $assessment->course_code,
+                    'matric_no'    => $matricNo,
+                    'reason'       => $reason,
+                    'notes'        => $notes,
+                ]
+            );
+        });
+
+        $msg = "Assisted check-in recorded for student {$matricNo}. Student is now marked as writing.";
+
+        if ($request->expectsJson()) {
+            return response()->json([
+                'success'       => true,
+                'message'       => $msg,
+                'matric_no'     => $matricNo,
+                'full_name'     => $student->full_name ?? ($official->full_name ?? 'Student'),
+                'checked_in_at' => $now->toIso8601String(),
+                'method'        => 'assisted',
+                'reason'        => $reason,
+            ]);
+        }
+
+        return redirect()->route('examiner.assessments.show', $id)->with('status', $msg);
+    }
+
+    private function studentPhotoUrl(object $student): ?string
+    {
+        $path = $student->profile_photo_path ?? $student->photo_path ?? null;
+        if (! $path) {
+            return null;
+        }
+
+        $path = ltrim(str_replace('\\', '/', trim((string) $path)), '/');
+        if ($path === '' || str_contains($path, '..') || preg_match('/^https?:/i', $path)) {
+            return null;
+        }
+
+        $encoded = collect(explode('/', $path))
+            ->filter()
+            ->map(fn ($segment) => rawurlencode($segment))
+            ->implode('/');
+
+        return url('/photo-thumb/' . $encoded);
+    }
+
+    public function showStudent(Request $request, string $matric)
+    {
+        $examiner = $this->examiner($request);
+        if (! $examiner) {
+            return redirect('/examiner/login');
+        }
+
+        $student = DB::table('students')
+            ->leftJoin('departments', 'students.department_id', '=', 'departments.dept_id')
+            ->where('students.matric_no', $matric)
+            ->select('students.*', 'departments.dept_name', 'departments.faculty')
+            ->first();
+
+        abort_unless($student, 404);
+
+        $isAdmin = Roles::isAdminLike($examiner['role']);
+
+        if (! $isAdmin) {
+            $hasScanned = DB::table('verification_logs')
+                ->join('qr_tokens', 'verification_logs.token_id', '=', 'qr_tokens.token_id')
+                ->where('verification_logs.examiner_id', (int) $examiner['id'])
+                ->where('qr_tokens.student_id', $matric)
+                ->exists();
+
+            $hasAssignedAssessment = DB::table('timetables')
+                ->where('timetables.examiner_id', (int) $examiner['id'])
+                ->where(function ($q) use ($student) {
+                    $q->whereExists(function ($sub) use ($student) {
+                        $sub->select(DB::raw(1))
+                            ->from('timetable_students')
+                            ->whereColumn('timetable_students.timetable_id', 'timetables.id')
+                            ->where('timetable_students.matric_no', $student->matric_no);
+                    })->orWhere(function ($sub) use ($student) {
+                        $sub->where('timetables.department_id', $student->department_id)
+                            ->where('timetables.level', $student->level)
+                            ->where('timetables.exam_session_id', $student->session_id);
+                    });
+                })
+                ->exists();
+
+            abort_unless($hasScanned || $hasAssignedAssessment, 403);
+        }
+
+        $associatedTimetableIds = collect();
+
+        if (Schema::hasTable('attendance_records')) {
+            $attTimetables = DB::table('attendance_records')
+                ->where('matric_no', $matric)
+                ->pluck('timetable_id');
+            $associatedTimetableIds = $associatedTimetableIds->merge($attTimetables);
+        }
+
+        if (Schema::hasTable('qr_tokens') && Schema::hasColumn('qr_tokens', 'timetable_id')) {
+            $qrTimetables = DB::table('qr_tokens')
+                ->where('student_id', $matric)
+                ->whereNotNull('timetable_id')
+                ->pluck('timetable_id');
+            $associatedTimetableIds = $associatedTimetableIds->merge($qrTimetables);
+        }
+
+        if (Schema::hasTable('timetable_students')) {
+            $rosterTimetables = DB::table('timetable_students')
+                ->where('matric_no', $matric)
+                ->pluck('timetable_id');
+            $associatedTimetableIds = $associatedTimetableIds->merge($rosterTimetables);
+        }
+
+        $deptTimetables = DB::table('timetables')
+            ->where('department_id', $student->department_id)
+            ->where('level', $student->level)
+            ->where('exam_session_id', $student->session_id)
+            ->pluck('id');
+        $associatedTimetableIds = $associatedTimetableIds->merge($deptTimetables);
+
+        $timetableIds = $associatedTimetableIds->filter()->unique()->values()->all();
+
+        $assessments = collect();
+        if (! empty($timetableIds)) {
+            $assessments = DB::table('timetables')
+                ->leftJoin('departments', 'timetables.department_id', '=', 'departments.dept_id')
+                ->leftJoin('examiners', 'timetables.examiner_id', '=', 'examiners.examiner_id')
+                ->leftJoin('exam_sessions', 'timetables.exam_session_id', '=', 'exam_sessions.session_id')
+                ->whereIn('timetables.id', $timetableIds)
+                ->select(
+                    'timetables.*',
+                    'departments.dept_name',
+                    'departments.faculty',
+                    'examiners.full_name as examiner_name',
+                    'exam_sessions.semester',
+                    'exam_sessions.academic_year'
+                )
+                ->orderByDesc('timetables.exam_date')
+                ->orderBy('timetables.start_time')
+                ->get();
+        }
+
+        $studentAttendance = Schema::hasTable('attendance_records')
+            ? DB::table('attendance_records')
+                ->leftJoin('examiners as entry_ex', 'attendance_records.entry_examiner_id', '=', 'entry_ex.examiner_id')
+                ->leftJoin('examiners as exit_ex', 'attendance_records.exit_examiner_id', '=', 'exit_ex.examiner_id')
+                ->where('attendance_records.matric_no', $matric)
+                ->select(
+                    'attendance_records.*',
+                    'entry_ex.full_name as entry_examiner_name',
+                    'exit_ex.full_name as exit_examiner_name'
+                )
+                ->get()
+                ->keyBy('timetable_id')
+            : collect();
+
+        $studentTokens = Schema::hasTable('qr_tokens')
+            ? DB::table('qr_tokens')
+                ->where('student_id', $matric)
+                ->get()
+                ->keyBy('timetable_id')
+            : collect();
+
+        $scansQuery = DB::table('verification_logs')
+            ->join('qr_tokens', 'verification_logs.token_id', '=', 'qr_tokens.token_id')
+            ->leftJoin('examiners', 'verification_logs.examiner_id', '=', 'examiners.examiner_id')
+            ->where('qr_tokens.student_id', $matric)
+            ->select(
+                'verification_logs.*',
+                'qr_tokens.timetable_id as token_timetable_id',
+                'examiners.full_name as scan_examiner_name'
+            )
+            ->orderByDesc('verification_logs.timestamp');
+
+        $allScans = $scansQuery->get();
+
+        $assessmentHistories = $assessments->map(function ($a) use ($studentAttendance, $studentTokens, $allScans) {
+            $tId = (int) $a->id;
+            $att = $studentAttendance->get($tId);
+            $token = $studentTokens->get($tId);
+
+            $scans = $allScans->filter(function ($scan) use ($tId) {
+                if (isset($scan->timetable_id) && $scan->timetable_id !== null) {
+                    return (int) $scan->timetable_id === $tId;
+                }
+                return (int) ($scan->token_timetable_id ?? 0) === $tId;
+            })->map(fn ($scan) => [
+                'log_id'              => $scan->log_id,
+                'decision'            => $scan->decision,
+                'rejection_reason'    => $scan->rejection_reason,
+                'scan_classification' => $scan->scan_classification ?? null,
+                'time'                => Carbon::parse($scan->timestamp)->format('d M Y, H:i:s'),
+                'examiner_name'       => $scan->scan_examiner_name ?? 'Examiner',
+                'device_fp'           => $scan->device_fp,
+                'ip_address'          => $scan->ip_address,
+                'token_id'            => $scan->token_id,
+                'detail_url'          => route('examiner.scans.show', $scan->log_id),
+            ])->values();
+
+            $status = 'absent';
+            if ($att) {
+                if ($att->status === 'submitted') {
+                    $status = 'submitted';
+                } elseif ($att->status === 'flagged') {
+                    $status = 'flagged';
+                } elseif ($att->status === 'checked_in') {
+                    $status = 'writing';
+                }
+            }
+
+            return [
+                'timetable'       => $a,
+                'time_status'     => $this->assessmentTimeService->getStatus($a),
+                'duration'        => $this->formatAssessmentDuration($a->start_time, $a->end_time),
+                'status'          => $status,
+                'attendance'      => $att,
+                'token'           => $token,
+                'scans'           => $scans,
+                'scans_count'     => $scans->count(),
+                'workspace_url'   => route('examiner.assessments.show', $tId),
+            ];
+        });
+
+        $totalAssessments = $assessmentHistories->count();
+        $totalAttended = $assessmentHistories->whereIn('status', ['submitted', 'writing', 'flagged'])->count();
+        $totalSubmitted = $assessmentHistories->where('status', 'submitted')->count();
+        $totalScans = $allScans->count();
+
+        return view('examiner.students.show', [
+            'examiner'            => $examiner,
+            'student'             => $student,
+            'assessmentHistories' => $assessmentHistories,
+            'stats'               => [
+                'total_assessments' => $totalAssessments,
+                'total_attended'    => $totalAttended,
+                'total_submitted'   => $totalSubmitted,
+                'total_scans'       => $totalScans,
+            ],
+            'notificationUnreadCount' => $this->examinerUnreadNotes((int) $examiner['id']),
+        ]);
+    }
+
+    private function formatAssessmentDuration(?string $start, ?string $end): string
+    {
+        if (! $start || ! $end) {
+            return 'Not specified';
+        }
+        try {
+            $startTime = Carbon::parse($start);
+            $endTime = Carbon::parse($end);
+            $diffMins = $startTime->diffInMinutes($endTime);
+            if ($diffMins <= 0) {
+                return 'Not specified';
+            }
+            $hours = intdiv($diffMins, 60);
+            $mins = $diffMins % 60;
+            if ($hours > 0 && $mins > 0) {
+                return "{$hours}h {$mins}m ({$diffMins} mins)";
+            } elseif ($hours > 0) {
+                return "{$hours} " . ($hours === 1 ? 'hour' : 'hours') . " ({$diffMins} mins)";
+            }
+            return "{$mins} mins";
+        } catch (Throwable) {
+            return 'Not specified';
+        }
+    }
+
     public function notificationsPage(Request $request)
     {
         $examiner = $this->examiner($request);
@@ -519,6 +1376,35 @@ class ExaminerWebController extends Controller
                 'display_status' => 'No Active Session',
                 'reason'         => 'no_active_session',
                 'message'        => 'You must start an exam session before scanning. Go to Today\'s Assessments to select and start your session.',
+                'student'        => null,
+                'timestamp'      => now()->toIso8601String(),
+            ]);
+        }
+
+        // Live assessment time check for active session
+        $activeExam = DB::table('timetables')->where('id', (int) $activeTimetableId)->first();
+        $timeStatus = $activeExam ? $this->assessmentTimeService->getStatus($activeExam) : null;
+        if (! $timeStatus || ! $timeStatus->can_scan) {
+            $explanation = $timeStatus?->explanation ?? 'Scanning is not permitted for this assessment at this time.';
+            $reason = match ($timeStatus?->state) {
+                'completed'        => 'assessment_completed',
+                'cancelled'        => 'assessment_cancelled',
+                'invalid_schedule' => 'invalid_schedule',
+                default            => 'outside_time_window',
+            };
+            $displayStatus = match ($timeStatus?->state) {
+                'ended'            => 'Scanning Closed',
+                'completed'        => 'Assessment Completed',
+                'cancelled'        => 'Assessment Cancelled',
+                'invalid_schedule' => 'Invalid Schedule',
+                default            => 'Scanning Closed',
+            };
+
+            return response()->json([
+                'status'         => 'REJECTED',
+                'display_status' => $displayStatus,
+                'reason'         => $reason,
+                'message'        => $explanation,
                 'student'        => null,
                 'timestamp'      => now()->toIso8601String(),
             ]);
@@ -626,14 +1512,26 @@ class ExaminerWebController extends Controller
                     $assignedExaminerName ?? 'another examiner'
                 );
             } elseif ($result['reason'] === 'outside_time_window') {
-                $startTime = $activeTt['start_time'] ?? null;
-                $endTime   = $activeTt['end_time'] ?? null;
-                $result['display_status'] = 'Outside Exam Hours';
-                $result['message'] = sprintf(
-                    'This exam runs from %s to %s. Scanning is only permitted within 60 minutes of the exam window.',
-                    $startTime ? \Carbon\Carbon::parse($startTime)->format('g:i A') : 'start time',
-                    $endTime ? \Carbon\Carbon::parse($endTime)->format('g:i A') : 'end time'
-                );
+                $result['display_status'] = match ($timeStatus?->state) {
+                    'ended'            => 'Scanning Closed',
+                    'completed'        => 'Assessment Completed',
+                    'cancelled'        => 'Assessment Cancelled',
+                    'invalid_schedule' => 'Invalid Schedule',
+                    default            => 'Outside Exam Hours',
+                };
+                $result['message'] = $timeStatus?->explanation ?? 'Scanning is outside the permitted window for this assessment.';
+            } elseif ($result['reason'] === 'late_entry_not_permitted') {
+                $result['display_status'] = 'Late Entry Not Permitted';
+                $result['message'] = 'Regular examination entry has concluded. Late check-in is not permitted. Only departure of already checked-in students is allowed.';
+            } elseif ($result['reason'] === 'invalid_schedule') {
+                $result['display_status'] = 'Invalid Schedule';
+                $result['message'] = $timeStatus?->explanation ?? 'Assessment schedule is incomplete or invalid.';
+            } elseif ($result['reason'] === 'assessment_cancelled') {
+                $result['display_status'] = 'Assessment Cancelled';
+                $result['message'] = 'This assessment has been cancelled. Scanning is closed.';
+            } elseif ($result['reason'] === 'assessment_completed') {
+                $result['display_status'] = 'Assessment Completed';
+                $result['message'] = 'This assessment has been marked as completed. Scanning is closed.';
             }
         }
 
@@ -761,9 +1659,16 @@ class ExaminerWebController extends Controller
         return response()->json($result);
     }
 
-    public function startScanSession(Request $request): JsonResponse
+    public function startScanSession(Request $request): JsonResponse|RedirectResponse
     {
+        $expectsJson = $request->expectsJson() || $request->ajax() || $request->wantsJson();
+        $isFormPost  = $request->has('_token') && ! $expectsJson;
+
         if (! $request->session()->has('examiner_id') || ! Roles::isExaminer($request->session()->get('examiner_role'))) {
+            if ($isFormPost) {
+                return redirect()->route('examiner.login')->with('error', 'Please log in to continue.');
+            }
+
             return response()->json(['success' => false, 'message' => 'Not authenticated.'], 401);
         }
 
@@ -772,31 +1677,54 @@ class ExaminerWebController extends Controller
         $exam = DB::table('timetables')
             ->leftJoin('departments', 'timetables.department_id', '=', 'departments.dept_id')
             ->where('timetables.id', (int) $data['timetable_id'])
-            ->whereDate('exam_date', today())
             ->select('timetables.*', 'departments.dept_name')
             ->first();
 
         if (! $exam) {
-            return response()->json(['success' => false, 'message' => 'Exam not found or not scheduled for today.'], 422);
+            if ($isFormPost) {
+                return redirect()->back()->with('error', 'Assessment not found.');
+            }
+
+            return response()->json(['success' => false, 'message' => 'Assessment not found.'], 404);
+        }
+
+        // Strict time window and operational state enforcement
+        $timeStatus = $this->assessmentTimeService->getStatus($exam);
+        if (! $timeStatus->can_start_session) {
+            if ($isFormPost) {
+                return redirect()->back()->withErrors(['timetable_id' => $timeStatus->explanation])->with('error', $timeStatus->explanation);
+            }
+
+            return response()->json([
+                'success' => false,
+                'message' => $timeStatus->explanation,
+                'state'   => $timeStatus->state,
+            ], 422);
         }
 
         $examinerId = (int) $request->session()->get('examiner_id');
         $hasExaminerId = DB::getSchemaBuilder()->hasColumn('timetables', 'examiner_id');
         if ($hasExaminerId && $exam->examiner_id !== null && (int) $exam->examiner_id !== $examinerId) {
+            if ($isFormPost) {
+                return redirect()->back()->with('error', 'You are not assigned to invigilate this assessment.');
+            }
+
             return response()->json(['success' => false, 'message' => 'You are not assigned to invigilate this assessment.'], 403);
         }
 
         $request->session()->put('examiner_active_timetable_id', (int) $exam->id);
         $request->session()->put('examiner_active_timetable', [
-            'id'              => (int) $exam->id,
-            'course_code'     => $exam->course_code,
-            'course_title'    => $exam->course_title ?? '',
-            'venue'           => $exam->venue ?? '',
-            'dept_name'       => $exam->dept_name ?? '',
-            'level'           => $exam->level ?? '',
-            'start_time'      => $exam->start_time ?? '',
-            'end_time'        => $exam->end_time ?? '',
-            'assessment_type' => $exam->assessment_type ?? 'exam',
+            'id'                  => (int) $exam->id,
+            'course_code'         => $exam->course_code,
+            'course_title'        => $exam->course_title ?? '',
+            'venue'               => $exam->venue ?? '',
+            'dept_name'           => $exam->dept_name ?? '',
+            'level'               => $exam->level ?? '',
+            'start_time'          => $exam->start_time ?? '',
+            'end_time'            => $exam->end_time ?? '',
+            'assessment_type'     => $exam->assessment_type ?? 'exam',
+            'operational_state'   => $timeStatus->state,
+            'scan_classification' => $timeStatus->scan_classification,
         ]);
 
         // Record live session in DB for admin visibility.
@@ -810,9 +1738,16 @@ class ExaminerWebController extends Controller
             ]);
         }
 
+        $scannerUrl = route('examiner.dashboard', ['autostart' => 1]);
+
+        if ($isFormPost) {
+            return redirect()->to($scannerUrl)->with('status', "Scanning session started for {$exam->course_code}.");
+        }
+
         return response()->json([
-            'success' => true,
-            'exam' => [
+            'success'  => true,
+            'redirect' => $scannerUrl,
+            'exam'     => [
                 'id'           => (int) $exam->id,
                 'course_code'  => $exam->course_code,
                 'course_title' => $exam->course_title ?? '',
@@ -820,13 +1755,21 @@ class ExaminerWebController extends Controller
                 'dept_name'    => $exam->dept_name ?? '',
                 'level'        => $exam->level ?? '',
                 'start_time'   => $exam->start_time ?? '',
+                'end_time'     => $exam->end_time ?? '',
             ],
         ]);
     }
 
-    public function stopScanSession(Request $request): JsonResponse
+    public function stopScanSession(Request $request): JsonResponse|RedirectResponse
     {
+        $expectsJson = $request->expectsJson() || $request->ajax() || $request->wantsJson();
+        $isFormPost  = $request->has('_token') && ! $expectsJson;
+
         if (! $request->session()->has('examiner_id') || ! Roles::isExaminer($request->session()->get('examiner_role'))) {
+            if ($isFormPost) {
+                return redirect()->route('examiner.login');
+            }
+
             return response()->json(['success' => false, 'message' => 'Not authenticated.'], 401);
         }
 
@@ -850,6 +1793,10 @@ class ExaminerWebController extends Controller
         }
 
         $request->session()->forget(['examiner_active_timetable_id', 'examiner_active_timetable']);
+
+        if ($isFormPost) {
+            return redirect()->back()->with('status', 'Active scanning session ended.');
+        }
 
         return response()->json(['success' => true]);
     }
@@ -954,6 +1901,18 @@ class ExaminerWebController extends Controller
 
         $examinerId = (int) $request->session()->get('examiner_id');
 
+        // Check if submission recording is permitted for this assessment at this time
+        $exam = DB::table('timetables')->where('id', (int) $data['timetable_id'])->first();
+        if ($exam) {
+            $timeStatus = $this->assessmentTimeService->getStatus($exam);
+            if (! $timeStatus->can_submit) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Submissions are not permitted for this assessment at this time. ' . $timeStatus->explanation,
+                ], 422);
+            }
+        }
+
         if (! Schema::hasTable('attendance_records')) {
             return response()->json(['success' => false, 'message' => 'Attendance tracking is not available.'], 422);
         }
@@ -1023,16 +1982,23 @@ class ExaminerWebController extends Controller
             ->leftJoin('students', 'qr_tokens.student_id', '=', 'students.matric_no')
             ->leftJoin('departments', 'students.department_id', '=', 'departments.dept_id')
             ->leftJoin('examiners', 'verification_logs.examiner_id', '=', 'examiners.examiner_id')
-            ->when(
-                Schema::hasColumn('qr_tokens', 'timetable_id'),
-                fn ($q) => $q->where('qr_tokens.timetable_id', $timetableId),
-                fn ($q) => $q->whereRaw('1 = 0')
-            )
+            ->where(function ($q) use ($timetableId) {
+                if (Schema::hasColumn('verification_logs', 'timetable_id')) {
+                    $q->where('verification_logs.timetable_id', $timetableId)
+                      ->orWhere(function ($sub) use ($timetableId) {
+                          $sub->whereNull('verification_logs.timetable_id')
+                              ->where('qr_tokens.timetable_id', $timetableId);
+                      });
+                } else {
+                    $q->where('qr_tokens.timetable_id', $timetableId);
+                }
+            })
             ->orderBy('verification_logs.timestamp')
             ->select(
                 'verification_logs.log_id',
                 'verification_logs.token_id',
                 'verification_logs.decision',
+                'verification_logs.scan_classification',
                 'verification_logs.timestamp',
                 'qr_tokens.student_id as matric_no',
                 'students.full_name',
@@ -1133,7 +2099,7 @@ class ExaminerWebController extends Controller
             fputcsv($out, ['Already Used', (int) ($counts['DUPLICATE'] ?? 0)]);
             fputcsv($out, []);
 
-            fputcsv($out, ['#', 'Student Name', 'Matric', 'Department', 'Level', 'Scan Timestamp', 'Outcome', 'Entry Status', 'Scanned By']);
+            fputcsv($out, ['#', 'Student Name', 'Matric', 'Department', 'Level', 'Scan Timestamp', 'Outcome', 'Scan Classification', 'Entry Status', 'Scanned By']);
             foreach ($logs as $i => $log) {
                 $outcome = match ($log->decision) {
                     'APPROVED' => 'Approved',
@@ -1159,6 +2125,7 @@ class ExaminerWebController extends Controller
                     $log->level ?? '',
                     $log->timestamp,
                     $outcome,
+                    $log->scan_classification ?? 'N/A',
                     $entryStatus,
                     $log->scan_examiner_name ?? '',
                 ]);
@@ -1328,22 +2295,50 @@ class ExaminerWebController extends Controller
 
     private function scanRows(int $examinerId, int $limit): array
     {
-        return DB::table('verification_logs')
+        $hasTimetableColumn = Schema::hasColumn('verification_logs', 'timetable_id');
+
+        $query = DB::table('verification_logs')
             ->join('qr_tokens', 'verification_logs.token_id', '=', 'qr_tokens.token_id')
             ->leftJoin('students', 'qr_tokens.student_id', '=', 'students.matric_no')
-            ->where('verification_logs.examiner_id', $examinerId)
-            ->select('verification_logs.*', 'students.full_name', 'students.matric_no')
+            ->where('verification_logs.examiner_id', $examinerId);
+
+        if ($hasTimetableColumn) {
+            $query->leftJoin('timetables', function ($join) {
+                $join->on(DB::raw('COALESCE(verification_logs.timetable_id, qr_tokens.timetable_id)'), '=', 'timetables.id');
+            });
+        } elseif (Schema::hasColumn('qr_tokens', 'timetable_id')) {
+            $query->leftJoin('timetables', 'qr_tokens.timetable_id', '=', 'timetables.id');
+        }
+
+        return $query->select(
+                'verification_logs.*',
+                'students.full_name',
+                'students.matric_no',
+                'students.photo_path',
+                'students.profile_photo_path',
+                'timetables.course_code',
+                'timetables.course_title',
+                'timetables.venue',
+                'timetables.id as timetable_id'
+            )
             ->orderByDesc('verification_logs.timestamp')
             ->limit($limit)
             ->get()
             ->map(fn ($row) => [
-                'log_id' => $row->log_id,
-                'time' => Carbon::parse($row->timestamp)->format('d M Y, H:i'),
-                'student' => $row->full_name ?? $this->fallbackStudentLabel($row),
-                'matric_no' => $row->matric_no ?? ($row->qr_tokens_student_id ?? 'No matric on record'),
-                'decision' => $row->decision,
-                'token_ref' => substr($row->token_id, 0, 8).'...'.substr($row->token_id, -4),
-                'detail_url' => route('examiner.scans.show', $row->log_id),
+                'log_id'              => $row->log_id,
+                'time'                => Carbon::parse($row->timestamp)->format('d M Y, H:i'),
+                'student'             => $row->full_name ?? $this->fallbackStudentLabel($row),
+                'matric_no'           => $row->matric_no ?? ($row->qr_tokens_student_id ?? 'No matric on record'),
+                'photo_path'          => $row->photo_path ?? null,
+                'profile_photo_path'  => $row->profile_photo_path ?? null,
+                'decision'            => $row->decision,
+                'scan_classification' => $row->scan_classification ?? null,
+                'token_ref'           => substr($row->token_id, 0, 8).'...'.substr($row->token_id, -4),
+                'detail_url'          => route('examiner.scans.show', $row->log_id),
+                'course_code'         => $row->course_code ?? null,
+                'course_title'        => $row->course_title ?? null,
+                'venue'               => $row->venue ?? null,
+                'assessment_url'      => $row->timetable_id ? route('examiner.assessments.show', $row->timetable_id) : null,
             ])
             ->all();
     }
@@ -1425,7 +2420,7 @@ class ExaminerWebController extends Controller
                 'rejected' => (int) $row->rejected_count,
                 'duplicate' => (int) $row->duplicate_count,
                 'last_scan_time' => $row->last_scan_time ? Carbon::parse($row->last_scan_time)->format('d M Y, H:i') : 'None',
-                'detail_url' => $row->latest_log_id ? route('examiner.scans.show', $row->latest_log_id) : null,
+                'detail_url' => $row->matric_no ? route('examiner.students.show', ['matric' => $row->matric_no]) : null,
             ])
             ->all();
     }
@@ -1610,10 +2605,11 @@ class ExaminerWebController extends Controller
         }
 
         $hasExaminerId = DB::getSchemaBuilder()->hasColumn('timetables', 'examiner_id');
+        $todayInLagos = Carbon::today(AssessmentTimeService::TIMEZONE)->toDateString();
 
         $query = DB::table('timetables')
             ->leftJoin('departments', 'timetables.department_id', '=', 'departments.dept_id')
-            ->whereDate('exam_date', today())
+            ->whereDate('exam_date', $todayInLagos)
             ->select('timetables.*', 'departments.dept_name')
             ->orderBy('start_time');
 
@@ -1621,24 +2617,48 @@ class ExaminerWebController extends Controller
             $query->where('timetables.examiner_id', $examinerId);
         }
 
-        return $query->get();
+        $exams = $query->get();
+
+        foreach ($exams as $exam) {
+            $exam->time_status = $this->assessmentTimeService->getStatus($exam);
+        }
+
+        return $exams;
     }
 
     private function scanCountsByTimetable(array $timetableIds): \Illuminate\Support\Collection
     {
         if (empty($timetableIds)
             || ! Schema::hasTable('verification_logs')
-            || ! Schema::hasTable('qr_tokens')
-            || ! Schema::hasColumn('qr_tokens', 'timetable_id')) {
+            || ! Schema::hasTable('qr_tokens')) {
             return collect();
         }
 
-        return DB::table('verification_logs')
-            ->join('qr_tokens', 'verification_logs.token_id', '=', 'qr_tokens.token_id')
-            ->whereIn('qr_tokens.timetable_id', $timetableIds)
-            ->select('qr_tokens.timetable_id', DB::raw('COUNT(*) as total'))
-            ->groupBy('qr_tokens.timetable_id')
-            ->pluck('total', 'timetable_id');
+        if (Schema::hasColumn('verification_logs', 'timetable_id')) {
+            return DB::table('verification_logs')
+                ->join('qr_tokens', 'verification_logs.token_id', '=', 'qr_tokens.token_id')
+                ->where(function ($q) use ($timetableIds) {
+                    $q->whereIn('verification_logs.timetable_id', $timetableIds)
+                      ->orWhere(function ($sub) use ($timetableIds) {
+                          $sub->whereNull('verification_logs.timetable_id')
+                              ->whereIn('qr_tokens.timetable_id', $timetableIds);
+                      });
+                })
+                ->select(DB::raw('COALESCE(verification_logs.timetable_id, qr_tokens.timetable_id) as timetable_id'), DB::raw('COUNT(*) as total'))
+                ->groupBy(DB::raw('COALESCE(verification_logs.timetable_id, qr_tokens.timetable_id)'))
+                ->pluck('total', 'timetable_id');
+        }
+
+        if (Schema::hasColumn('qr_tokens', 'timetable_id')) {
+            return DB::table('verification_logs')
+                ->join('qr_tokens', 'verification_logs.token_id', '=', 'qr_tokens.token_id')
+                ->whereIn('qr_tokens.timetable_id', $timetableIds)
+                ->select('qr_tokens.timetable_id', DB::raw('COUNT(*) as total'))
+                ->groupBy('qr_tokens.timetable_id')
+                ->pluck('total', 'timetable_id');
+        }
+
+        return collect();
     }
 
     private function settingBoolean(string $key, bool $default): bool

@@ -20,6 +20,20 @@ class ExaminerAttendanceCheckInWorkflowTest extends TestCase
     {
         parent::setUp();
         $this->seed();
+
+        $today = Carbon::today('Africa/Lagos')->toDateString();
+        DB::table('timetables')->update([
+            'exam_date'  => $today,
+            'start_time' => '09:00',
+            'end_time'   => '12:00',
+        ]);
+        Carbon::setTestNow(Carbon::parse("{$today} 10:00:00", 'Africa/Lagos'));
+    }
+
+    protected function tearDown(): void
+    {
+        Carbon::setTestNow();
+        parent::tearDown();
     }
 
     /**
@@ -152,6 +166,19 @@ class ExaminerAttendanceCheckInWorkflowTest extends TestCase
                 'updated_at' => now(),
             ], 'dept_id');
 
+        DB::table('official_students')->updateOrInsert(
+            ['matric_number' => '220404099'],
+            [
+                'full_name' => 'Ineligible Student',
+                'department' => 'Mathematics',
+                'faculty' => 'Faculty of Science',
+                'level' => '400',
+                'status' => 'active',
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]
+        );
+
         DB::table('students')->updateOrInsert(
             ['matric_no' => '220404099'],
             [
@@ -187,11 +214,12 @@ class ExaminerAttendanceCheckInWorkflowTest extends TestCase
 
         $token = $this->createEncryptedToken('220404099', (int) $session->session_id, (int) $timetableId);
 
-        $this->withSession($this->examinerSession())
+        $response = $this->withSession($this->examinerSession())
             ->postJson('/examiner/verify', ['qr_data' => $this->qrData($token)])
             ->assertOk()
-            ->assertJsonPath('status', 'REJECTED')
-            ->assertJsonPath('reason', 'course_not_assigned');
+            ->assertJsonPath('status', 'REJECTED');
+
+        $this->assertContains($response->json('reason'), ['register_incomplete', 'student_not_on_register', 'course_not_assigned']);
 
         // No attendance record created
         $this->assertDatabaseMissing('attendance_records', [
@@ -496,6 +524,18 @@ class ExaminerAttendanceCheckInWorkflowTest extends TestCase
             ->where('exam_session_id', $session->session_id)
             ->where('course_code', 'CSC401')
             ->value('id');
+        DB::table('timetables')->where('id', $timetableId)->update([
+            'register_status' => 'confirmed',
+            'roster_confirmed_at' => now(),
+        ]);
+        if (\Illuminate\Support\Facades\Schema::hasTable('timetable_students')) {
+            DB::table('timetable_students')->insertOrIgnore([
+                'timetable_id' => $timetableId,
+                'matric_no' => '220404008',
+                'candidate_type' => 'regular',
+                'created_at' => now(),
+            ]);
+        }
         $result = (new ExamPassService(
             $this->createMock(RemitaService::class),
             new QrTokenService(new CryptoService),

@@ -57,10 +57,33 @@
     .si-date { font-family:'JetBrains Mono', monospace; font-size:11px; color:var(--ink-4); white-space:nowrap; }
 
     @media (max-width:640px) {
-        .si-row { grid-template-columns: auto minmax(0,1fr); }
+        .si-row {
+            grid-template-columns: auto minmax(0,1fr);
+            padding: 12px 14px;
+            gap: 10px;
+        }
         .si-right {
-            grid-column: 1 / -1; flex-direction:row; justify-content:space-between; align-items:center;
-            padding-top:10px; border-top:1px solid var(--line); width:100%;
+            grid-column: 1 / -1;
+            flex-direction: row;
+            justify-content: space-between;
+            align-items: center;
+            padding-top: 10px;
+            border-top: 1px solid var(--line);
+            width: 100%;
+        }
+        .si-right .admin-action {
+            min-height: 34px;
+            padding: 0 16px;
+            font-size: 12px;
+            font-weight: 700;
+        }
+    }
+    @media (max-width:480px) {
+        .si-filter select { grid-column: span 12 !important; }
+        .si-filter .si-filter-actions > * {
+            flex: 1 1 0;
+            text-align: center;
+            justify-content: center;
         }
     }
 

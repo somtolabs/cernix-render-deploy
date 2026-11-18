@@ -32,10 +32,10 @@
     $firstName = $nameParts[0] ?? ($student->full_name ?? 'Student');
 
     $pendingItems = [];
-    if ($photoRejected)                              $pendingItems[] = 'resubmit identity documents';
+    if ($photoRejected)                                $pendingItems[] = 'resubmit identity documents';
     elseif ($photoStatus === 'pending_admin_approval') $pendingItems[] = 'identity verification is under review';
-    elseif (!$photoApproved)                         $pendingItems[] = 'complete identity verification';
-    if (!$payment)                                   $pendingItems[] = 'session payment not yet verified';
+    elseif (!$photoApproved)                           $pendingItems[] = 'complete identity verification';
+    if (!$payment)                                     $pendingItems[] = 'session payment not yet verified';
 
     if (!empty($pendingItems)) {
         $statusLine    = 'Action needed — ' . implode(', and ', $pendingItems) . '.';
@@ -101,85 +101,125 @@
         ];
     }
 
-    // Map readiness state → stu-dot colour
     $readinessDotClass = fn ($state) => match ($state) {
-        'done'  => '',        // default emerald
+        'done'  => '',
         'doing' => 'amber',
         'bad'   => 'red',
-        default => 'navy',    // 'todo' rendered as calm navy
+        default => 'navy',
     };
-@endphp
 
-@php
-    // Readiness completion — drives the progress summary in the card header.
     $readyCount = collect($readinessSteps)->where('state', 'done')->count();
     $readyTotal = count($readinessSteps);
     $allReady   = $readyCount === $readyTotal;
 @endphp
 
 <style>
-    /* Dashboard-specific composition on top of the shared student design system. */
     .db-status {
-        margin: 14px 0 0; padding: 12px 14px;
-        font-size: 13.5px; line-height: 1.55; color: var(--ink-2);
+        margin: 12px 0 0;
+        padding: 11px 14px;
+        font-size: 13px;
+        line-height: 1.5;
+        color: var(--ink-2);
         border-radius: var(--stu-r-sm);
         background: var(--stu-navy-wash);
         border: 1px solid var(--stu-navy-line);
+        box-sizing: border-box;
     }
     .db-status.is-pending {
-        color: var(--amber); font-weight: 600;
-        background: var(--stu-amber-wash); border-color: var(--stu-amber-line);
+        color: var(--amber);
+        font-weight: 600;
+        background: var(--stu-amber-wash);
+        border-color: var(--stu-amber-line);
     }
 
-    /* Readiness progress meter in the card header */
     .db-progress { display: flex; align-items: center; gap: 9px; }
     .db-progress-track { width: 76px; height: 5px; border-radius: 999px; background: var(--line); overflow: hidden; }
     .db-progress-fill { height: 100%; border-radius: 999px; background: var(--emerald); transition: width .6s cubic-bezier(.22,.9,.3,1); }
     .db-progress-text { font-size: 11px; font-weight: 700; color: var(--ink-3); white-space: nowrap; }
 
-    /* Next-assessment feature card — the one place with deliberate extra weight */
-    .db-next { border-color: var(--stu-navy-line); box-shadow: var(--stu-shadow-2); }
+    .db-next {
+        border-color: var(--stu-navy-line);
+        box-shadow: var(--stu-shadow-2);
+        border-left: 4px solid var(--navy);
+    }
     .db-next-head {
-        display: flex; align-items: center; justify-content: space-between;
-        gap: 10px; flex-wrap: wrap; margin-bottom: 14px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        flex-wrap: wrap;
+        margin-bottom: 12px;
     }
     .db-next-eyebrow {
-        font-size: 10.5px; font-weight: 800; letter-spacing: .12em;
-        text-transform: uppercase; color: var(--ink-4);
+        font-size: 10.5px;
+        font-weight: 800;
+        letter-spacing: .12em;
+        text-transform: uppercase;
+        color: var(--ink-4);
     }
     .db-next-code {
         font-family: 'JetBrains Mono', ui-monospace, monospace;
-        font-size: 13px; font-weight: 500; color: var(--navy);
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--navy);
     }
     .db-next-title {
-        margin: 4px 0 8px; font-size: 19px; font-weight: 800;
-        letter-spacing: -.025em; line-height: 1.2; color: var(--ink);
+        margin: 4px 0 8px;
+        font-size: clamp(16px, 4vw, 19px);
+        font-weight: 800;
+        letter-spacing: -.02em;
+        line-height: 1.25;
+        color: var(--ink);
         overflow-wrap: break-word;
     }
-    .db-next-meta { font-size: 13px; color: var(--ink-3); line-height: 1.55; }
+    .db-next-meta {
+        font-size: 13px;
+        color: var(--ink-3);
+        line-height: 1.55;
+    }
     .db-next-foot {
-        display: flex; align-items: center; justify-content: space-between;
-        gap: 10px; flex-wrap: wrap;
-        margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        flex-wrap: wrap;
+        margin-top: 14px;
+        padding-top: 14px;
+        border-top: 1px solid var(--line);
+    }
+
+    .db-actions-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        align-items: center;
+    }
+    .db-actions-row .btn {
+        min-height: 42px;
+        padding: 0 16px;
+        font-size: 13px;
+        border-radius: 10px;
     }
 
     @media (max-width: 560px) {
-        .stu-actions .btn { flex: 1 1 auto; }
-        .stu-locked { flex: 1 1 auto; }
+        .db-actions-row .btn { flex: 1 1 calc(50% - 8px); }
+        .stu-locked { flex: 1 1 calc(50% - 8px); }
         .stu-locked > .btn { width: 100%; }
-        .db-next-title { font-size: 17px; }
+        .db-next-foot .btn { width: 100%; }
+    }
+    @media (max-width: 360px) {
+        .db-actions-row .btn { flex: 1 1 100%; }
+        .stu-locked { flex: 1 1 100%; }
     }
 </style>
 
-{{-- ── Identity anchor ───────────────────────────────────────────────
-     The student's photo, name and matric number are the emotional centre
-     of the dashboard. Verification state is expressed on the photo itself. --}}
-<section class="stu-identity" aria-label="Your identity">
+{{-- ── 1. Student Identity Hero ─────────────────────────────────────────── --}}
+<section class="stu-identity" aria-label="Student Identity Overview">
     <div class="stu-avatar-wrap">
         <x-student-photo :student="$student" size="profile" class="stu-avatar" />
         @if($photoApproved)
             <span class="stu-avatar-badge {{ $allReady ? 'stu-celebrate' : '' }}" title="Identity verified" aria-label="Identity verified">
-                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 8.5l3 3 6-6"/></svg>
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 8.5l3 3 6-6"/></svg>
             </span>
         @endif
     </div>
@@ -214,27 +254,26 @@
     <div class="cx-notice error">{{ session('exam_pass_error') }}</div>
 @endif
 
-{{-- ── Quick actions ──────────────────────────────────────────────── --}}
+{{-- ── 2. Quick Actions ─────────────────────────────────────────────────── --}}
 <section class="stu-card">
     <div class="stu-card-body tight">
-        <div class="stu-actions">
+        <div class="db-actions-row">
             @if($canAccessQr)
-                <a class="btn btn-primary" href="{{ route('student.timetable') }}">Open My Exams</a>
+                <a class="btn btn-primary" href="{{ route('student.timetable', ['type' => 'exam']) }}">Open My Exams</a>
             @else
                 <span class="stu-locked">
                     <span class="btn btn-primary" aria-disabled="true">Generate QR Pass</span>
                     <span class="stu-locked-tip" role="tooltip">{{ $photoRejected ? 'Resubmit your photos first' : 'Waiting for photo approval' }}</span>
                 </span>
             @endif
-            <a class="btn btn-ghost" href="{{ route('student.timetable') }}">View Timetable</a>
+            <a class="btn btn-ghost" href="{{ route('student.timetable', ['type' => 'test']) }}">Tests ({{ $testsCount ?? 0 }})</a>
+            <a class="btn btn-ghost" href="{{ route('student.timetable', ['type' => 'makeup']) }}">Make-ups ({{ $makeupsCount ?? 0 }})</a>
             <a class="btn btn-ghost" href="{{ route('student.profile') }}">Profile</a>
         </div>
     </div>
 </section>
 
-{{-- ── Assessment readiness ──────────────────────────────────────────
-     Progress is shown as a meter so the student can read completion at a
-     glance without parsing each row. --}}
+{{-- ── 3. Assessment Readiness Tracker ───────────────────────────────────── --}}
 <div class="stu-card" role="list" aria-label="Assessment readiness">
     <div class="stu-card-head">
         <h2>Assessment Readiness</h2>
@@ -267,7 +306,7 @@
     @endforeach
 </div>
 
-{{-- Verification state notice --}}
+{{-- Verification Notices --}}
 @if($photoRejected)
     <div class="cx-notice error">
         <b>Photo verification failed.</b>{{ $student->photo_rejection_reason ? ' ' . $student->photo_rejection_reason : '' }}
@@ -288,23 +327,23 @@
     </div>
 @endif
 
-{{-- ── Next assessment ────────────────────────────────────────────────
-     Given deliberate extra visual weight — this is the single most
-     time-sensitive thing on the page. --}}
+{{-- ── 4. Next Assessment Featured Card ────────────────────────────────── --}}
 @php $soonAssessment = $nextAssessments->first(); @endphp
 @if($soonAssessment)
     @php
-        $isToday   = \Carbon\Carbon::parse($soonAssessment->exam_date)->isToday();
-        $typeLabel = match($soonAssessment->assessment_type ?? 'exam') { 'test' => 'Test', 'makeup' => 'Make-up', default => 'Exam' };
-        $qrEntry   = $coursePasses->firstWhere('id', $soonAssessment->id ?? null);
-        $hasQr     = $qrEntry && $qrEntry->qr_token && in_array($qrEntry->qr_status, ['Generated / Unused', 'Used'], true);
+        $isToday           = \Carbon\Carbon::parse($soonAssessment->exam_date)->isToday();
+        $canonicalSoonType = \App\Services\AssessmentTimeService::normalizeType($soonAssessment->assessment_type ?? null);
+        $typeLabel         = match($canonicalSoonType) { 'test' => 'Test', 'makeup' => 'Make-up', default => 'Exam' };
+        $typeChip          = match($canonicalSoonType) { 'test' => 'amber', 'makeup' => 'red', default => 'navy' };
+        $qrEntry           = $coursePasses->firstWhere('id', $soonAssessment->id ?? null);
+        $hasQr             = $qrEntry && $qrEntry->qr_token && in_array($qrEntry->qr_status, ['Generated / Unused', 'Used'], true);
     @endphp
     <section class="stu-card db-next {{ $canAccessQr && $hasQr ? 'stu-ready' : '' }}">
         <div class="stu-card-body">
             <div class="db-next-head">
                 <span class="db-next-eyebrow">{{ $isToday ? 'Today' : 'Next Assessment' }}</span>
                 <div style="display:flex;gap:6px;flex-wrap:wrap">
-                    <span class="chip {{ $isToday ? 'amber' : 'navy' }} stu-chip-sm">{{ $typeLabel }}</span>
+                    <span class="chip {{ $typeChip }} stu-chip-sm">{{ $typeLabel }}</span>
                     @if($isToday)<span class="chip amber stu-chip-sm">Today</span>@endif
                 </div>
             </div>
@@ -321,7 +360,7 @@
                     <a class="btn btn-primary stu-btn-sm" href="{{ route('student.exam-access-id.course', ['timetable' => $soonAssessment->id]) }}">View QR Pass</a>
                 @elseif($canAccessQr)
                     <span class="chip neutral stu-chip-sm">No Pass Yet</span>
-                    <a class="btn btn-ghost stu-btn-sm" href="{{ route('student.timetable') }}">Open My Exams</a>
+                    <a class="btn btn-ghost stu-btn-sm" href="{{ route('student.timetable', ['type' => $canonicalSoonType]) }}">Open {{ $typeLabel }} Schedule</a>
                 @else
                     <span class="chip neutral stu-chip-sm">Locked</span>
                 @endif
@@ -330,7 +369,7 @@
     </section>
 @endif
 
-{{-- ── Notifications preview ─────────────────────────────────────────── --}}
+{{-- ── 5. Notifications Preview ─────────────────────────────────────────── --}}
 @if(isset($notificationPreview) && $notificationPreview->count())
     <div class="stu-card">
         <div class="stu-card-head">
@@ -352,33 +391,35 @@
     </div>
 @endif
 
-{{-- ── Upcoming assessments by type ──────────────────────────────────── --}}
+{{-- ── 6. Upcoming Assessments Grouped ─────────────────────────────────── --}}
 @php
     $upcomingAll = $timetableEntries
         ->filter(fn($e) => $e->status !== 'cancelled'
             && \Carbon\Carbon::parse($e->exam_date . ' ' . $e->start_time)->greaterThanOrEqualTo(now()->subMinutes(30)));
-    $upcomingExams   = $upcomingAll->where('assessment_type', 'exam')->values();
-    $upcomingTests   = $upcomingAll->where('assessment_type', 'test')->values();
-    $upcomingMakeups = $upcomingAll->where('assessment_type', 'makeup')->values();
+    $upcomingExams   = $upcomingAll->filter(fn($e) => \App\Services\AssessmentTimeService::isExam($e->assessment_type ?? null))->values();
+    $upcomingTests   = $upcomingAll->filter(fn($e) => \App\Services\AssessmentTimeService::isTest($e->assessment_type ?? null))->values();
+    $upcomingMakeups = $upcomingAll->filter(fn($e) => \App\Services\AssessmentTimeService::isMakeup($e->assessment_type ?? null))->values();
     $typeGroups = array_filter([
-        'Upcoming Exams'    => $upcomingExams,
-        'Upcoming Tests'    => $upcomingTests,
-        'Upcoming Make-ups' => $upcomingMakeups,
-    ], fn($g) => $g->isNotEmpty());
+        'Upcoming Regular Examinations' => ['entries' => $upcomingExams, 'type' => 'exam'],
+        'Upcoming In-Semester Tests'    => ['entries' => $upcomingTests, 'type' => 'test'],
+        'Upcoming Make-up Examinations' => ['entries' => $upcomingMakeups, 'type' => 'makeup'],
+    ], fn($g) => $g['entries']->isNotEmpty());
 @endphp
-@foreach($typeGroups as $groupLabel => $groupEntries)
+@foreach($typeGroups as $groupLabel => $group)
     <div class="stu-card">
         <div class="stu-card-head">
             <h2>{{ $groupLabel }}</h2>
-            @if($groupEntries->count() > 3)
-                <a href="{{ route('student.timetable') }}">View all {{ $groupEntries->count() }} &rarr;</a>
+            @if($group['entries']->count() > 3)
+                <a href="{{ route('student.timetable', ['type' => $group['type']]) }}">View all {{ $group['entries']->count() }} &rarr;</a>
             @else
-                <span class="stu-count">{{ $groupEntries->count() }}</span>
+                <span class="stu-count">{{ $group['entries']->count() }}</span>
             @endif
         </div>
-        @foreach($groupEntries->take(4) as $entry)
+        @foreach($group['entries']->take(4) as $entry)
             @php
-                $typeLabel2 = match($entry->assessment_type ?? 'exam') { 'test' => 'Test', 'makeup' => 'Make-up', default => 'Exam' };
+                $entryType  = \App\Services\AssessmentTimeService::normalizeType($entry->assessment_type ?? null);
+                $typeLabel2 = match($entryType) { 'test' => 'Test', 'makeup' => 'Make-up', default => 'Exam' };
+                $typeChip2  = match($entryType) { 'test' => 'amber', 'makeup' => 'red', default => 'navy' };
                 $isToday2   = \Carbon\Carbon::parse($entry->exam_date)->isToday();
             @endphp
             <div class="stu-row is-interactive">
@@ -388,7 +429,7 @@
                     <span>{{ \Carbon\Carbon::parse($entry->exam_date)->format('D, d M Y') }} &middot; {{ substr($entry->start_time, 0, 5) }}{{ $entry->end_time ? ' – ' . substr($entry->end_time, 0, 5) : '' }}@if($entry->venue) &middot; {{ $entry->venue }} @endif</span>
                 </div>
                 <div class="stu-row-meta">
-                    <span class="chip {{ $isToday2 ? 'amber' : 'navy' }} stu-chip-sm">{{ $typeLabel2 }}</span>
+                    <span class="chip {{ $typeChip2 }} stu-chip-sm">{{ $typeLabel2 }}</span>
                     @if($isToday2)<span class="chip amber stu-chip-sm">Today</span>@endif
                 </div>
             </div>
@@ -396,7 +437,7 @@
     </div>
 @endforeach
 
-{{-- ── Course QR access ──────────────────────────────────────────────── --}}
+{{-- ── 7. Course QR Access ──────────────────────────────────────────────── --}}
 <div class="stu-card">
     <div class="stu-card-head">
         <h2>Course QR Access</h2>
@@ -404,8 +445,11 @@
     </div>
     @forelse($coursePasses as $exam)
         @php
+            $passType      = \App\Services\AssessmentTimeService::normalizeType($exam->assessment_type ?? null);
+            $passTypeLabel = match($passType) { 'test' => 'Test', 'makeup' => 'Make-up', default => 'Exam' };
+            $passTypeChip  = match($passType) { 'test' => 'amber', 'makeup' => 'red', default => 'navy' };
             $statusDot = match($exam->qr_status) {
-                'Generated / Unused' => '',       // emerald
+                'Generated / Unused' => '',
                 'Used'               => 'amber',
                 'Unavailable'        => 'red',
                 default              => 'navy',
@@ -424,6 +468,7 @@
                 <span>{{ \Carbon\Carbon::parse($exam->exam_date)->format('D, d M Y') }} &middot; {{ substr($exam->start_time, 0, 5) }}{{ $exam->end_time ? ' – ' . substr($exam->end_time, 0, 5) : '' }}@if($exam->venue) &middot; {{ $exam->venue }} @endif</span>
             </div>
             <div class="stu-row-meta">
+                <span class="chip {{ $passTypeChip }} stu-chip-sm">{{ $passTypeLabel }}</span>
                 @if($statusChip)
                     <span class="chip {{ $statusChip }} stu-chip-sm">{{ $exam->qr_status }}</span>
                 @else
@@ -460,7 +505,7 @@
     @endforelse
 </div>
 
-{{-- ── Access activity ───────────────────────────────────────────────── --}}
+{{-- ── 8. Access Activity (Scans) ────────────────────────────────────────── --}}
 <div class="stu-card">
     <div class="stu-card-head">
         <h2>Access Activity</h2>
@@ -471,7 +516,7 @@
             @php
                 $decision = strtoupper($scan->decision ?? '');
                 $scanDot = match(true) {
-                    $decision === 'APPROVED'  => '',        // emerald
+                    $decision === 'APPROVED'  => '',
                     $decision === 'DUPLICATE' => 'amber',
                     default                   => 'red',
                 };

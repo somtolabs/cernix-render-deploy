@@ -210,9 +210,14 @@ class StudentDashboardController extends Controller
 
     public function timetable(Request $request)
     {
-        $allowedTypes = ['exam', 'test', 'makeup'];
-        $typeFilter   = in_array($request->input('type'), $allowedTypes, true) ? $request->input('type') : '';
-        $activeKey    = match ($typeFilter) {
+        $rawType = $request->input('type');
+        // When type parameter is provided, normalize it. If omitted or empty, default to 'exam'
+        // so the Examinations section displays regular examinations only.
+        $normalizedType = $rawType !== null && $rawType !== ''
+            ? \App\Services\AssessmentTimeService::normalizeType($rawType)
+            : 'exam';
+
+        $activeKey = match ($normalizedType) {
             'test'   => 'tests',
             'makeup' => 'makeup',
             default  => 'exams',
@@ -225,7 +230,7 @@ class StudentDashboardController extends Controller
 
         return view('student.timetable', array_merge($payload, [
             'activePortal'        => $activeKey,
-            'timetableTypeFilter' => $typeFilter,
+            'timetableTypeFilter' => $normalizedType,
         ]));
     }
 
@@ -449,13 +454,24 @@ class StudentDashboardController extends Controller
             'examiners.full_name as examiner_name',
             'examiners.username as examiner_username',
         ];
-        if (Schema::hasColumn('qr_tokens', 'timetable_id')) {
+        $hasTimetableJoin = Schema::hasColumn('qr_tokens', 'timetable_id') && Schema::hasTable('timetables');
+        if ($hasTimetableJoin) {
             $scanColumns[] = 'qr_tokens.timetable_id as token_timetable_id';
+            $scanColumns[] = 'timetables.course_code';
+            $scanColumns[] = 'timetables.course_title';
+            $scanColumns[] = 'timetables.assessment_type';
+            $scanColumns[] = 'timetables.venue as exam_venue';
         }
 
-        $scan = DB::table('verification_logs')
+        $scanQuery = DB::table('verification_logs')
             ->join('qr_tokens', 'verification_logs.token_id', '=', 'qr_tokens.token_id')
-            ->leftJoin('examiners', 'verification_logs.examiner_id', '=', 'examiners.examiner_id')
+            ->leftJoin('examiners', 'verification_logs.examiner_id', '=', 'examiners.examiner_id');
+
+        if ($hasTimetableJoin) {
+            $scanQuery->leftJoin('timetables', 'qr_tokens.timetable_id', '=', 'timetables.id');
+        }
+
+        $scan = $scanQuery
             ->where('verification_logs.log_id', $log)
             ->where('qr_tokens.student_id', $payload['student']->matric_no)
             ->where('qr_tokens.session_id', $payload['student']->session_id)
@@ -595,33 +611,56 @@ class StudentDashboardController extends Controller
         $timetableEntries = collect();
         if (DB::getSchemaBuilder()->hasTable('timetables')) {
             $hasRosterTable = Schema::hasTable('timetable_students');
+
+            $enrolledTimetableIds = [];
+            if ($hasRosterTable) {
+                $enrolledTimetableIds = DB::table('timetable_students')
+                    ->where('matric_no', $student->matric_no)
+                    ->pluck('timetable_id')
+                    ->all();
+            }
+
             $timetableEntries = DB::table('timetables')
                 ->where('exam_session_id', $sessionId)
-                ->where('department_id', $student->department_id)
-                ->where('level', (string) ($student->level ?? ''))
+                ->where('status', '!=', 'cancelled')
+                ->where(function ($q) use ($student, $enrolledTimetableIds) {
+                    if (! empty($enrolledTimetableIds)) {
+                        $q->whereIn('id', $enrolledTimetableIds);
+                    }
+                    $q->orWhere(function ($cohortQuery) use ($student) {
+                        $cohortQuery->where('department_id', $student->department_id)
+                            ->where('level', (string) ($student->level ?? ''))
+                            ->where(function ($sub) {
+                                $sub->where('register_status', '!=', 'confirmed')
+                                    ->orWhereNull('register_status');
+                            });
+                    });
+                })
                 ->orderBy('exam_date')
                 ->orderBy('start_time')
                 ->get()
-                ->filter(function ($exam) use ($student, $hasRosterTable) {
-                    $type = $exam->assessment_type ?? 'exam';
-                    if ($type === 'exam' || !$hasRosterTable) return true;
-                    // For tests/makeups: show if no roster exists OR student is enrolled
-                    $rosterExists = DB::table('timetable_students')
-                        ->where('timetable_id', $exam->id)
-                        ->exists();
-                    if (!$rosterExists) return true;
-                    return DB::table('timetable_students')
-                        ->where('timetable_id', $exam->id)
-                        ->where('matric_no', $student->matric_no)
-                        ->exists();
-                })
                 ->map(function ($exam) {
-                    $exam->display_status = $this->examStatus($exam);
+                    $exam->canonical_type = \App\Services\AssessmentTimeService::normalizeType($exam->assessment_type ?? null);
+
+                    $hasRegisterStatusCol = Schema::hasColumn('timetables', 'register_status');
+                    $isConfirmed = $hasRegisterStatusCol ? ($exam->register_status === 'confirmed') : false;
+
+                    if (! $isConfirmed) {
+                        $exam->display_status = 'Register Incomplete';
+                        $exam->register_incomplete = true;
+                    } else {
+                        $exam->display_status = $this->examStatus($exam);
+                        $exam->register_incomplete = false;
+                    }
 
                     return $exam;
                 })
                 ->values();
         }
+
+        $examEntries = $timetableEntries->filter(fn ($e) => \App\Services\AssessmentTimeService::isExam($e->assessment_type ?? null))->values();
+        $testEntries = $timetableEntries->filter(fn ($e) => \App\Services\AssessmentTimeService::isTest($e->assessment_type ?? null))->values();
+        $makeupEntries = $timetableEntries->filter(fn ($e) => \App\Services\AssessmentTimeService::isMakeup($e->assessment_type ?? null))->values();
 
         $nextExam = $timetableEntries
             ->filter(fn ($exam) => $exam->status !== 'cancelled' && Carbon::parse($exam->exam_date . ' ' . $exam->start_time)->greaterThanOrEqualTo(now()->subMinutes(30)))
@@ -662,6 +701,9 @@ class StudentDashboardController extends Controller
             },
             'timetable' => $timetableEntries->count() ? 'Assigned' : 'Not Assigned',
             'next_exam' => $nextExam?->display_status ?? 'None',
+            'exams_count' => $examEntries->count(),
+            'tests_count' => $testEntries->count(),
+            'makeups_count' => $makeupEntries->count(),
         ];
 
         $scanHistory = collect();
@@ -699,6 +741,12 @@ class StudentDashboardController extends Controller
             'qrSvg' => $qrSvg,
             'timetable' => $timetableEntries,
             'timetableEntries' => $timetableEntries,
+            'examEntries' => $examEntries,
+            'testEntries' => $testEntries,
+            'makeupEntries' => $makeupEntries,
+            'examsCount' => $examEntries->count(),
+            'testsCount' => $testEntries->count(),
+            'makeupsCount' => $makeupEntries->count(),
             'coursePasses' => $coursePasses,
             'nextExam' => $nextExam,
             'passExam' => $passExam,
@@ -729,7 +777,7 @@ class StudentDashboardController extends Controller
     private function examRequiresPayment(object $exam): bool
     {
         // Tests and make-ups never require payment regardless of per-row overrides or global settings
-        $type = $exam->assessment_type ?? 'exam';
+        $type = \App\Services\AssessmentTimeService::normalizeType($exam->assessment_type ?? null);
         if ($type === 'test' || $type === 'makeup') {
             return false;
         }
@@ -835,8 +883,12 @@ class StudentDashboardController extends Controller
             return 'Cancelled';
         }
 
+        if (empty($exam->end_time)) {
+            return 'Schedule Incomplete';
+        }
+
         $start = Carbon::parse($exam->exam_date . ' ' . $exam->start_time);
-        $end = $exam->end_time ? Carbon::parse($exam->exam_date . ' ' . $exam->end_time) : $start->copy()->addHours(3);
+        $end = Carbon::parse($exam->exam_date . ' ' . $exam->end_time);
 
         if (now()->between($start, $end)) {
             return 'Today';
@@ -874,6 +926,19 @@ class StudentDashboardController extends Controller
                 str_contains($message, 'already generated')
                 || str_contains($message, 'already been used')
                 || str_contains($message, 'cannot be generated again')
+            )
+        ) {
+            return $exception->getMessage();
+        }
+
+        if (
+            $exception instanceof RuntimeException
+            && (
+                str_contains($message, 'register')
+                || str_contains($message, 'roster')
+                || str_contains($message, 'incomplete')
+                || str_contains($message, 'official student')
+                || str_contains($message, 'not active on the official')
             )
         ) {
             return $exception->getMessage();

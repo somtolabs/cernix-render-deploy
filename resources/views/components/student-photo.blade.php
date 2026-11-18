@@ -78,6 +78,11 @@
             .cernix-passport-photo--passport { width: 96px; height: 96px; }
             .cernix-passport-photo--scan-result { width: 104px; height: 104px; }
         }
+        @media (max-width: 360px) {
+            .cernix-passport-photo--profile,
+            .cernix-passport-photo--admin-detail,
+            .cernix-passport-photo--passport { width: 72px; height: 72px; font-size: 20px; }
+        }
     </style>
 @endonce
 

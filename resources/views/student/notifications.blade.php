@@ -14,6 +14,10 @@
     .nt-row.is-unread .stu-row-body b { font-weight: 800; }
     .nt-row.is-read .stu-row-body b { color: var(--ink-2); }
     .nt-row.is-read .stu-row-body p { color: var(--ink-3); }
+    .nt-row .stu-row-body p { overflow-wrap: anywhere; word-break: break-word; line-height: 1.55; }
+    @media (max-width: 480px) {
+        .nt-row .stu-row-actions .btn { min-height: 36px; padding: 0 12px; }
+    }
 </style>
 
 <div class="stu-head">

@@ -95,13 +95,15 @@
     .admin-shell { min-height: 100vh; background: var(--bg); overflow-x: hidden; }
 
     .admin-mobile-head {
-        position: sticky; top: 0; z-index: 40; height: 66px;
-        display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 0 16px;
+        position: sticky; top: 0; z-index: 40; height: 64px;
+        display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 0 14px;
         background: rgba(250,250,248,.95); border-bottom: 1px solid var(--line);
         backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+        min-width: 0; max-width: 100%; box-sizing: border-box;
     }
-    .admin-mobile-head-title b { display: block; font-size: 14px; font-weight: 800; }
-    .admin-mobile-head-title span { display: block; font-size: 11px; color: var(--ink-3); margin-top: 1px; }
+    .admin-mobile-head-title { flex: 1; min-width: 0; overflow: hidden; }
+    .admin-mobile-head-title b { display: block; font-size: 13.5px; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .admin-mobile-head-title span { display: block; font-size: 11px; color: var(--ink-3); margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .admin-menu-btn {
         min-height: 38px; padding: 0 13px; border-radius: 10px;
         border: 1px solid var(--line); background: #fff; color: var(--ink);
@@ -194,15 +196,15 @@
     .admin-nav-logout a:hover { color: var(--red); background: rgba(138,91,91,.06); border-color: rgba(138,91,91,.16); }
 
     /* ── Main ─────────────────────────────────────────────────── */
-    .admin-layout { min-height: 100vh; }
-    .admin-main { width: min(1300px, 100%); margin: 0 auto; padding: 24px 16px 64px; }
+    .admin-layout { min-height: 100vh; min-width: 0; }
+    .admin-main { width: min(1300px, 100%); max-width: 100%; min-width: 0; margin: 0 auto; padding: 24px 16px 64px; box-sizing: border-box; }
 
     /* ── Page anatomy ─────────────────────────────────────────── */
-    .admin-page-head { display: flex; justify-content: space-between; gap: 18px; align-items: flex-start; margin-bottom: 22px; flex-wrap: wrap; }
-    .admin-page-head h1 { margin: 0; font-size: clamp(28px, 5vw, 44px); letter-spacing: -.055em; line-height: 1; }
-    .admin-page-head p { margin: 8px 0 0; color: var(--ink-3); line-height: 1.65; max-width: 720px; }
+    .admin-page-head { display: flex; justify-content: space-between; gap: 14px; align-items: flex-start; margin-bottom: 22px; flex-wrap: wrap; }
+    .admin-page-head h1 { margin: 0; font-size: clamp(26px, 5vw, 44px); letter-spacing: -.055em; line-height: 1.05; overflow-wrap: break-word; }
+    .admin-page-head p { margin: 8px 0 0; color: var(--ink-3); line-height: 1.65; max-width: 720px; overflow-wrap: break-word; }
 
-    .admin-section { min-width: 0; animation: adminFade .36s ease both; }
+    .admin-section { min-width: 0; animation: adminFade .36s ease both; box-sizing: border-box; }
     .admin-section + .admin-section { margin-top: 28px; }
     .admin-section-head {
         padding: 0 0 13px; border-bottom: 1px solid var(--line);
@@ -213,11 +215,11 @@
     .admin-section-body { padding: 16px 0 0; }
 
     /* ── Grid & layout helpers ────────────────────────────────── */
-    .admin-grid { display: grid; gap: 16px; }
+    .admin-grid { display: grid; gap: 16px; min-width: 0; }
     .admin-grid.two { grid-template-columns: 1fr; }
 
     /* ── Metric strip (legacy, keep for back-compat) ─────────── */
-    .metric-strip { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); border-block: 1px solid var(--line); background: rgba(235,241,255,.18); animation: adminFade .32s ease both; }
+    .metric-strip { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); border-block: 1px solid var(--line); background: rgba(235,241,255,.18); animation: adminFade .32s ease both; min-width: 0; box-sizing: border-box; }
     .metric-strip .metric-cell { padding: 14px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); min-width: 0; }
     .metric-strip .metric-cell:nth-child(2n) { border-right: 0; }
     .metric-label, .admin-label { display: block; color: var(--ink-4); font-size: 10px; font-weight: 900; letter-spacing: .13em; text-transform: uppercase; }
@@ -225,11 +227,11 @@
     .metric-value { font-size: 20px; font-family: 'JetBrains Mono', ui-monospace, monospace; }
 
     /* ── Contextual stat row (richer alternative to metric-strip) */
-    .stat-row { display: flex; flex-wrap: wrap; gap: 0; border-block: 1px solid var(--line); background: rgba(250,250,248,.7); }
-    .stat-cell { flex: 1 1 130px; padding: 14px 16px; border-right: 1px solid var(--line); min-width: 0; }
+    .stat-row { display: flex; flex-wrap: wrap; gap: 0; border-block: 1px solid var(--line); background: rgba(250,250,248,.7); min-width: 0; box-sizing: border-box; }
+    .stat-cell { flex: 1 1 130px; padding: 14px 16px; border-right: 1px solid var(--line); min-width: 0; box-sizing: border-box; }
     .stat-cell:last-child { border-right: 0; }
     .stat-label { display: block; color: var(--ink-4); font-size: 10px; font-weight: 900; letter-spacing: .13em; text-transform: uppercase; margin-bottom: 5px; }
-    .stat-value { display: block; font-size: 24px; font-weight: 900; font-family: 'JetBrains Mono', monospace; color: var(--ink); line-height: 1; }
+    .stat-value { display: block; font-size: 24px; font-weight: 900; font-family: 'JetBrains Mono', monospace; color: var(--ink); line-height: 1; overflow-wrap: break-word; }
     .stat-value.ok { color: var(--emerald); }
     .stat-value.warn { color: var(--amber); }
     .stat-value.bad { color: var(--red); }
@@ -253,8 +255,8 @@
     .admin-status.neutral { background: rgba(95,112,130,.08);  color: var(--ink-3); }
 
     /* ── Data tables ─────────────────────────────────────────── */
-    .admin-table-wrap { overflow-x: auto; border-block: 1px solid var(--line); background: rgba(255,255,255,.5); }
-    .admin-table { width: 100%; border-collapse: collapse; min-width: 720px; }
+    .admin-table-wrap { width: 100%; max-width: 100%; min-width: 0; overflow-x: auto; -webkit-overflow-scrolling: touch; border-block: 1px solid var(--line); background: rgba(255,255,255,.5); box-sizing: border-box; }
+    .admin-table { width: 100%; border-collapse: collapse; min-width: 600px; }
     .admin-table th, .admin-table td { padding: 11px 14px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: middle; min-width: 0; white-space: normal; overflow-wrap: break-word; word-break: normal; }
     .admin-table th { color: var(--ink-4); font-size: 10px; font-weight: 900; letter-spacing: .13em; text-transform: uppercase; background: rgba(245,245,242,.6); }
     .admin-table tbody tr { transition: background .12s ease; }
@@ -377,6 +379,7 @@
         .stat-row { flex-wrap: nowrap; }
     }
     @media (max-width: 520px) {
+        .admin-main { padding: 16px 12px 48px; }
         .admin-page-head { display: block; }
         .admin-section-head { padding: 0 0 12px; }
         .admin-section-body { padding: 14px 0 0; }

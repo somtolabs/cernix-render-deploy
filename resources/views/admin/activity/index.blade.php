@@ -106,8 +106,25 @@
     }
 
     @media (max-width:600px) {
-        .ac-row { grid-template-columns: 8px 40px minmax(0, 1fr); }
-        .ac-time { grid-column: 1 / -1; padding:8px 0 0; border-top:1px solid var(--line); margin-top:6px; }
+        .ac-row {
+            grid-template-columns: 8px 36px minmax(0, 1fr);
+            padding: 12px 14px;
+            gap: 10px;
+        }
+        .ac-time {
+            grid-column: 1 / -1;
+            padding: 8px 0 0;
+            border-top: 1px solid var(--line);
+            margin-top: 6px;
+        }
+        .ac-actions {
+            width: 100%;
+        }
+        .ac-actions > * {
+            flex: 1 1 0;
+            text-align: center;
+            justify-content: center;
+        }
     }
 
     .ac-empty { padding:32px 18px; text-align:center; color:var(--ink-3); font-size:13px; }

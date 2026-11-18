@@ -4,6 +4,7 @@ namespace App\Providers;
 
 use App\Services\CryptoService;
 use App\Services\ExamPassService;
+use App\Services\MatriculationNumberService;
 use App\Services\MockSISService;
 use App\Services\QrTokenService;
 use App\Services\RegistrationService;
@@ -28,6 +29,7 @@ class AppServiceProvider extends ServiceProvider
             $app->make(MockSISService::class),
         ));
         $this->app->singleton(ExamPassService::class);
+        $this->app->singleton(MatriculationNumberService::class);
 
         // Lazy singleton — resolved at first view render (after DB is seeded), not at boot
         $this->app->singleton('branding', fn () => [

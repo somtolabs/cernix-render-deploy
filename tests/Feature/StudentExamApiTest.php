@@ -65,6 +65,16 @@ class StudentExamApiTest extends TestCase
             'photo_reviewed_at' => now(),
             'updated_at' => now(),
         ]);
+
+        $examId = $this->assignedExamId();
+        if ($examId) {
+            DB::table('timetable_students')->insertOrIgnore([
+                'timetable_id' => $examId,
+                'matric_no' => 'CSC/2021/001',
+                'candidate_type' => 'regular',
+                'created_at' => now(),
+            ]);
+        }
     }
 
     public function test_unauthenticated_request_returns_401(): void

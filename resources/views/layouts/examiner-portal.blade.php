@@ -7,10 +7,10 @@
     .ex-shell { min-height: 100vh; background: var(--bg); color: var(--ink); overflow-x: hidden; }
 
     /* ── Mobile header ── */
-    .ex-mobile-head { position: sticky; top: 0; z-index: 40; height: 60px; display: flex; align-items: center; gap: 12px; padding: 0 16px; background: rgba(255,255,255,.95); border-bottom: 1px solid var(--line); backdrop-filter: blur(16px); }
+    .ex-mobile-head { position: sticky; top: 0; z-index: 40; height: 60px; display: flex; align-items: center; gap: 10px; padding: 0 14px; background: rgba(255,255,255,.95); border-bottom: 1px solid var(--line); backdrop-filter: blur(16px); min-width: 0; max-width: 100%; box-sizing: border-box; }
     .ex-menu-btn { flex: 0 0 auto; min-height: 36px; padding: 0 12px; border: 1px solid var(--line); border-radius: 8px; background: transparent; color: var(--ink); font-size: 12px; font-weight: 800; cursor: pointer; }
-    .ex-mobile-center { flex: 1; min-width: 0; display: flex; justify-content: center; }
-    .ex-mobile-sess-pill { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; font-size: 12px; font-weight: 800; }
+    .ex-mobile-center { flex: 1; min-width: 0; display: flex; justify-content: center; overflow: hidden; }
+    .ex-mobile-sess-pill { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; font-size: 11.5px; font-weight: 800; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
     .ex-mobile-sess-pill.active { background: rgba(85,117,101,.12); color: var(--emerald); }
     .ex-mobile-sess-pill.idle { background: rgba(95,112,130,.07); color: var(--ink-3); font-weight: 600; }
     .ex-mobile-sess-dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; flex: 0 0 auto; }
@@ -73,33 +73,45 @@
     .ex-nav-logout a:hover { background: rgba(138,91,91,.07); color: var(--red); border-color: rgba(138,91,91,.14); }
 
     /* ── Main content area ── */
-    .ex-main { width: min(1180px, 100%); margin: 0 auto; padding: 20px 16px 56px; }
-    .ex-page-head { display: flex; justify-content: space-between; align-items: end; gap: 18px; margin-bottom: 18px; }
-    .ex-title { margin: 0; color: var(--ink); font-size: clamp(25px, 6vw, 38px); line-height: 1.02; letter-spacing: -.035em; font-weight: 900; }
-    .ex-subtitle { margin: 7px 0 0; color: var(--ink-3); font-size: 14px; line-height: 1.6; max-width: 760px; }
-    .ex-panel { min-width: 0; }
-    .ex-section-pad { padding: clamp(15px, 3vw, 22px); }
+    .ex-main { width: min(1180px, 100%); margin: 0 auto; padding: 20px 16px 56px; min-width: 0; box-sizing: border-box; }
+    .ex-page-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 14px; margin-bottom: 18px; flex-wrap: wrap; }
+    .ex-title { margin: 0; color: var(--ink); font-size: clamp(23px, 5.5vw, 36px); line-height: 1.05; letter-spacing: -.035em; font-weight: 900; overflow-wrap: break-word; }
+    .ex-subtitle { margin: 7px 0 0; color: var(--ink-3); font-size: 13.5px; line-height: 1.6; max-width: 760px; overflow-wrap: break-word; }
+    .ex-panel { min-width: 0; box-sizing: border-box; }
+    .ex-section-pad { padding: clamp(14px, 3vw, 22px); }
 
     /* Stat row (preferred over metric-strip) */
-    .stat-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; background: var(--bg-2); }
-    .stat-cell { padding: 16px 18px; border-right: 1px solid var(--line); }
+    .stat-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(130px, 100%), 1fr)); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; background: var(--bg-2); min-width: 0; box-sizing: border-box; }
+    .stat-cell { padding: 14px 16px; border-right: 1px solid var(--line); min-width: 0; box-sizing: border-box; }
     .stat-cell:last-child { border-right: 0; }
     .stat-cell-label { font-size: 10px; text-transform: uppercase; letter-spacing: .09em; font-weight: 900; color: var(--ink-3); }
-    .stat-cell-value { font-size: 26px; font-weight: 900; color: var(--navy); line-height: 1.1; margin-top: 5px; }
-    .stat-cell-sub { font-size: 12px; color: var(--ink-3); margin-top: 3px; }
+    .stat-cell-value { font-size: 24px; font-weight: 900; color: var(--navy); line-height: 1.1; margin-top: 5px; overflow-wrap: break-word; }
+    .stat-cell-sub { font-size: 11.5px; color: var(--ink-3); margin-top: 3px; }
 
     /* Metric strip — kept for backwards compat with unredesigned pages */
-    .metric-strip { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); border-block: 1px solid var(--line); background: rgba(235,241,255,.18); }
+    .metric-strip { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); border-block: 1px solid var(--line); background: rgba(235,241,255,.18); min-width: 0; box-sizing: border-box; }
     .metric-strip > div { padding: 13px 16px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); min-width: 0; }
     .metric-strip span { display: block; color: var(--ink-3); font-size: 11px; text-transform: uppercase; letter-spacing: .08em; font-weight: 900; }
     .metric-strip b { display: block; margin-top: 5px; color: var(--ink); font-size: 22px; line-height: 1.2; overflow-wrap: break-word; }
 
     /* Tables */
-    .ex-table-wrap { overflow-x: auto; border-block: 1px solid var(--line); background: rgba(255,255,255,.45); }
-    .ex-table { width: 100%; border-collapse: collapse; min-width: 760px; }
+    .ex-table-wrap { width: 100%; max-width: 100%; min-width: 0; overflow-x: auto; -webkit-overflow-scrolling: touch; border-block: 1px solid var(--line); background: rgba(255,255,255,.45); box-sizing: border-box; }
+    .ex-table { width: 100%; border-collapse: collapse; min-width: 600px; }
     .ex-table th { color: var(--ink-3); font-size: 11px; text-transform: uppercase; letter-spacing: .08em; text-align: left; padding: 12px 14px; border-bottom: 1px solid var(--line); background: var(--bg); white-space: nowrap; }
-    .ex-table td { padding: 14px; border-bottom: 1px solid var(--line); vertical-align: middle; color: var(--ink); font-size: 14px; }
+    .ex-table td { padding: 14px; border-bottom: 1px solid var(--line); vertical-align: middle; color: var(--ink); font-size: 14px; overflow-wrap: break-word; }
     .ex-table tr:last-child td { border-bottom: 0; }
+
+    @media (max-width: 560px) {
+        .ex-page-head { flex-direction: column; align-items: flex-start; gap: 12px; }
+        .ex-main { padding: 16px 12px 48px; }
+    }
+    @media (max-width: 360px) {
+        .ex-title { font-size: 21px; }
+        .ex-subtitle { font-size: 12.5px; }
+        .stat-row { grid-template-columns: 1fr; }
+        .stat-cell { border-right: 0; border-bottom: 1px solid var(--line); }
+        .stat-cell:last-child { border-bottom: 0; }
+    }
 
     /* List */
     .ex-list { display: grid; gap: 10px; }
@@ -241,6 +253,10 @@
                         <a class="{{ request()->routeIs('examiner.today-exams') ? 'active' : '' }}" href="{{ route('examiner.today-exams') }}">
                             {!! $exNi('<rect x="2.5" y="2.5" width="11" height="12" rx="1.5"/><line x1="5" y1="1.5" x2="5" y2="3.5"/><line x1="11" y1="1.5" x2="11" y2="3.5"/><line x1="2.5" y1="6.5" x2="13.5" y2="6.5"/><line x1="5" y1="9.5" x2="9" y2="9.5"/>') !!}
                             Today's Assessments
+                        </a>
+                        <a class="{{ request()->routeIs('examiner.assessments*') ? 'active' : '' }}" href="{{ route('examiner.assessments') }}">
+                            {!! $exNi('<path d="M2.5 3.5h11a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1h-11a1 1 0 0 1-1-1v-8a1 1 0 0 1 1-1z"/><path d="M2.5 7.5h13"/><path d="M6.5 3.5v10"/>') !!}
+                            Assessments
                         </a>
                         <a class="{{ request()->routeIs('examiner.dashboard') ? 'active' : '' }}" href="{{ route('examiner.dashboard') }}">
                             {!! $exNi('<path d="M1.5 4.5V2.5a1 1 0 0 1 1-1H4.5"/><path d="M11.5 1.5H13.5a1 1 0 0 1 1 1V4.5"/><path d="M14.5 11.5V13.5a1 1 0 0 1-1 1H11.5"/><path d="M4.5 14.5H2.5a1 1 0 0 1-1-1V11.5"/><line x1="1.5" y1="8" x2="14.5" y2="8"/>') !!}

@@ -131,6 +131,41 @@
     .demo-stat { padding:10px 14px; background:var(--bg); }
     .demo-stat span { display:block; font-size:11px; color:var(--ink-3); margin-bottom:2px; }
     .demo-stat b { font-size:16px; font-weight:900; }
+
+    /* ── Responsive Adaptations ─────────────────────────── */
+    .st-shell { min-width:0; width:100%; max-width:100%; }
+    .st-content { min-width:0; width:100%; max-width:100%; }
+    .st-card { min-width:0; width:100%; max-width:100%; }
+
+    @media (max-width:859px) {
+        .st-shell { display:flex; flex-direction:column; gap:16px; }
+        .st-nav {
+            display:flex; flex-wrap:nowrap; overflow-x:auto; gap:6px; padding:4px 2px 10px;
+            -webkit-overflow-scrolling:touch; scrollbar-width:thin;
+            border-bottom:1px solid var(--line);
+        }
+        .st-nav::-webkit-scrollbar { height:4px; }
+        .st-nav::-webkit-scrollbar-thumb { background:var(--line-2); border-radius:4px; }
+        .st-nav-group { display:none; }
+        .st-nav a { flex-shrink:0; white-space:nowrap; padding:7px 12px; background:var(--bg); border:1px solid var(--line); font-size:11px; }
+        .st-content { display:grid; gap:20px; }
+    }
+
+    @media (max-width:560px) {
+        .st-card-head { flex-direction:column; align-items:flex-start; gap:8px; padding:12px 14px; }
+        .st-card-head .st-pill { align-self:flex-start; }
+        .st-row { flex-direction:column; align-items:stretch; gap:10px; padding:12px 14px; }
+        .st-row-control { width:100%; justify-content:space-between; }
+        .st-row-value { text-align:left; }
+        .fee-item { flex-direction:column; align-items:stretch; gap:8px; padding:12px 14px; }
+        .fee-item label { width:100%; }
+        .fee-item .fee-input { width:100%; max-width:100%; }
+        .session-item, .session-edit, .danger-action { padding:12px 14px; }
+        .brand-preview { margin:0 14px 14px; padding:14px; }
+        .demo-grid { grid-template-columns:1fr; }
+        .danger-confirm { width:100%; }
+        .danger-confirm .st-input { width:100%; }
+    }
 </style>
 
 <div class="admin-page-head">

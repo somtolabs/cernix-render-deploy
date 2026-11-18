@@ -20,14 +20,14 @@ class RegistrationService
      */
     public function registerStudent(array $data): array
     {
-        $matricNo = preg_replace('/\s+/', '', strtoupper(trim($data['matric_no']))) ?? '';
+        $matricService = app(MatriculationNumberService::class);
+        $matricNo = $matricService->normalize($data['matric_no'] ?? '');
+
         if (! Schema::hasTable('official_students')) {
             throw new RuntimeException('Student registry is not ready. Please contact the admin or exam officer.');
         }
 
-        $officialStudent = DB::table('official_students')
-            ->where('matric_number', $matricNo)
-            ->first();
+        $officialStudent = $matricService->resolveRegistryStudent($matricNo);
 
         if (! $officialStudent) {
             throw new RuntimeException('your matric number was not found in the official student list. please contact the admin or exam officer.');
@@ -101,28 +101,55 @@ class RegistrationService
 
     private function departmentForOfficialStudent(object $officialStudent): object
     {
-        $department = trim((string) $officialStudent->department);
-        $faculty = trim((string) $officialStudent->faculty);
+        $matricService = app(MatriculationNumberService::class);
 
-        $existing = DB::table('departments')
-            ->whereRaw('LOWER(dept_name) = ?', [strtolower($department)])
-            ->first();
+        // 1. Resolve via explicit faculty_code and department_code if set on officialStudent
+        $facultyCode = $officialStudent->faculty_code ?? null;
+        $deptCode = $officialStudent->department_code ?? null;
 
-        if ($existing) {
-            return $existing;
+        if ($facultyCode && $deptCode) {
+            $mapped = $matricService->resolveInstitutionalMapping((string) $facultyCode, (string) $deptCode);
+            if ($mapped) {
+                return $mapped;
+            }
         }
 
+        // 2. Decode matriculation number if codes not directly on officialStudent
+        $matric = $officialStudent->normalized_matric_number ?? $officialStudent->matric_number ?? '';
+        $parseResult = $matricService->parse($matric, verifyRegistry: false);
+        if ($parseResult->is_institutionally_mapped && $parseResult->department_id) {
+            $dept = DB::table('departments')->where('dept_id', $parseResult->department_id)->first();
+            if ($dept) {
+                return $dept;
+            }
+        }
+
+        // 3. Fallback to existing department lookup by name
+        $department = trim((string) ($officialStudent->department ?? ''));
+        $faculty = trim((string) ($officialStudent->faculty ?? ''));
+
+        if ($department !== '') {
+            $existing = DB::table('departments')
+                ->whereRaw('LOWER(dept_name) = ?', [strtolower($department)])
+                ->first();
+
+            if ($existing) {
+                return $existing;
+            }
+        }
+
+        // 4. Create department record if completely absent
         $insert = [
-            'dept_name' => $department,
-            'faculty' => $faculty,
+            'dept_name' => $department !== '' ? $department : 'General Academic',
+            'faculty'   => $faculty !== '' ? $faculty : 'General',
         ];
 
         if (Schema::hasColumn('departments', 'department_code')) {
-            $insert['department_code'] = null;
+            $insert['department_code'] = $deptCode ?: ($parseResult->department_code ?? null);
         }
 
         if (Schema::hasColumn('departments', 'faculty_code')) {
-            $insert['faculty_code'] = null;
+            $insert['faculty_code'] = $facultyCode ?: ($parseResult->faculty_code ?? null);
         }
 
         $id = DB::table('departments')->insertGetId($insert, 'dept_id');

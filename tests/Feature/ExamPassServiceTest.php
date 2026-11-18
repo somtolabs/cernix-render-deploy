@@ -61,7 +61,7 @@ class ExamPassServiceTest extends TestCase
         ]);
     }
 
-    public function test_exam_must_belong_to_student_department_and_level(): void
+    public function test_exam_requires_student_on_confirmed_register(): void
     {
         [$student, $session] = $this->records();
         $otherDepartment = DB::table('departments')->insertGetId([
@@ -79,12 +79,18 @@ class ExamPassServiceTest extends TestCase
             'end_time' => '12:00',
             'venue' => 'Other Hall',
             'status' => 'scheduled',
+            'register_status' => 'confirmed',
             'created_at' => now(),
             'updated_at' => now(),
         ]);
+        DB::table('timetable_students')->insert([
+            'timetable_id' => $otherExam,
+            'matric_no' => 'OTH/2021/999',
+            'created_at' => now(),
+        ]);
 
         $this->expectException(\RuntimeException::class);
-        $this->expectExceptionMessage('Select a valid assigned course');
+        $this->expectExceptionMessage('You are not registered on the confirmed student register for this assessment.');
 
         (new ExamPassService($this->createMock(RemitaService::class), new QrTokenService(new CryptoService())))
             ->generate($student, $session, $otherExam, 'TEST-PASS-2', 10000);
@@ -150,6 +156,11 @@ class ExamPassServiceTest extends TestCase
             'created_at' => now(),
             'updated_at' => now(),
         ]);
+        DB::table('timetable_students')->insert([
+            'timetable_id' => $exam,
+            'matric_no' => $secondStudent,
+            'created_at' => now(),
+        ]);
         $second = $service->generate($secondStudent, $session, $exam, 'TEST-DEMO', 10000);
 
         $this->assertSame($first['token_id'], $repeat['token_id']);
@@ -181,8 +192,14 @@ class ExamPassServiceTest extends TestCase
             'end_time' => '12:00',
             'venue' => 'CBT Hall B',
             'status' => 'scheduled',
+            'register_status' => 'confirmed',
             'created_at' => now(),
             'updated_at' => now(),
+        ]);
+        DB::table('timetable_students')->insert([
+            'timetable_id' => $secondExam,
+            'matric_no' => $student,
+            'created_at' => now(),
         ]);
 
         $secondPass = $service->generate($student, $session, $secondExam, null, 10000);
@@ -275,9 +292,19 @@ class ExamPassServiceTest extends TestCase
             'end_time' => '12:00',
             'venue' => 'CBT Hall A',
             'status' => 'scheduled',
+            'register_status' => 'confirmed',
             'created_at' => now(),
             'updated_at' => now(),
         ]);
+
+        if (Schema::hasTable('timetable_students')) {
+            DB::table('timetable_students')->insert([
+                'timetable_id' => $exam,
+                'matric_no' => $student,
+                'candidate_type' => 'regular',
+                'created_at' => now(),
+            ]);
+        }
 
         return [$student, $session, $exam];
     }

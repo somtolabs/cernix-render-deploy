@@ -542,6 +542,15 @@ class StudentPortalWebTest extends TestCase
                 'photo_reviewed_by' => 'test-admin',
                 'photo_reviewed_at' => now(),
             ]);
+
+        $examId = DB::table('timetables')->where('course_code', 'CSC401')->value('id');
+        if ($examId) {
+            DB::table('timetable_students')->insertOrIgnore([
+                'timetable_id' => $examId,
+                'matric_no' => '220404008',
+                'created_at' => now(),
+            ]);
+        }
     }
 
     private function generateDemoPass(): void

@@ -73,18 +73,36 @@
 
     /* Per-exam inline stat strip */
     .te-stat-strip {
-        display: flex;
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(90px, 1fr));
         border-bottom: 1px solid var(--line);
         background: rgba(235,241,255,.18);
-        flex-wrap: wrap;
     }
     .te-stat-cell {
-        flex: 1 1 80px;
-        padding: 12px 16px;
+        padding: 10px 14px;
         border-right: 1px solid var(--line);
         min-width: 0;
     }
     .te-stat-cell:last-child { border-right: none; }
+    @media (max-width: 480px) {
+        .te-stat-strip {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+        .te-stat-cell {
+            border-bottom: 1px solid var(--line);
+        }
+        .te-stat-cell:nth-child(2n) {
+            border-right: 0;
+        }
+    }
+    @media (max-width: 340px) {
+        .te-stat-strip {
+            grid-template-columns: 1fr;
+        }
+        .te-stat-cell {
+            border-right: 0;
+        }
+    }
     .te-stat-label {
         display: block;
         font-size: 10px;
@@ -177,6 +195,41 @@
         align-items: center;
         gap: 8px;
         flex-shrink: 0;
+    }
+
+    @media (max-width: 540px) {
+        .te-card-head {
+            flex-direction: column;
+            gap: 12px;
+            padding: 14px 16px;
+        }
+        .te-head-actions {
+            width: 100%;
+        }
+        .te-head-actions > * {
+            flex: 1 1 auto;
+            text-align: center;
+            justify-content: center;
+        }
+        .att-list {
+            padding: 10px 12px 16px;
+            gap: 8px;
+        }
+        .att-row {
+            padding: 12px 14px;
+            gap: 10px;
+        }
+        .att-actions {
+            width: 100%;
+            padding-top: 8px;
+            border-top: 1px solid var(--line);
+        }
+        .att-actions > * {
+            width: 100%;
+            text-align: center;
+            justify-content: center;
+            min-height: 38px;
+        }
     }
     .att-submit-btn {
         min-height: 34px;
@@ -324,7 +377,7 @@
                                 {{ $expected }} student{{ $expected !== 1 ? 's' : '' }} registered
                             </span>
                         @endif
-                        @php $assessTypeLabel = match(strtolower($exam->assessment_type ?? 'exam')) { 'test' => 'Test', 'makeup' => 'Make-up', default => 'Exam' }; @endphp
+                        @php $assessTypeLabel = match(\App\Services\AssessmentTimeService::normalizeType($exam->assessment_type ?? null)) { 'test' => 'Test', 'makeup' => 'Make-up', default => 'Exam' }; @endphp
                         <span class="te-meta-item" style="font-weight:800;color:var(--ink-2)">{{ $assessTypeLabel }}</span>
                     </div>
                 </div>
@@ -332,16 +385,33 @@
                     @if($isActive)
                         <button type="button" class="ex-action secondary js-stop-sess"
                                 style="border-color:var(--emerald);color:var(--emerald)">End Session</button>
-                    @else
+                    @elseif(isset($exam->time_status) && $exam->time_status->can_start_session)
                         <button type="button" class="ex-action js-start-sess"
                                 data-ttid="{{ $exam->id }}"
                                 data-course="{{ $exam->course_code }}">Start Session</button>
+                    @else
+                        <button type="button" class="ex-action secondary" disabled style="opacity:.6;cursor:not-allowed"
+                                title="{{ $exam->time_status?->explanation ?? 'Scanning is not permitted at this time' }}">
+                            {{ $exam->time_status?->badge_label ?? 'Session Unavailable' }}
+                        </button>
                     @endif
                     @php $scanCount = (int) (($scanCountsByTimetable ?? collect())->get($exam->id, 0)); @endphp
                     @if($scanCount > 0)
                         <a class="ex-action secondary" href="{{ route('examiner.assessments.export', ['timetableId' => $exam->id]) }}">Export Report</a>
                     @else
                         <span style="font-size:11px;color:var(--ink-4);font-weight:700">No records yet</span>
+                    @endif
+                    @if(isset($exam->time_status))
+                        <span class="ex-badge" style="font-size:11px;font-weight:700;
+                            @if($exam->time_status->isEarlyScanning()) background:#e0f2fe;color:#0369a1;border:1px solid #bae6fd;
+                            @elseif($exam->time_status->isInProgress()) background:#dcfce7;color:#15803d;border:1px solid #bbf7d0;
+                            @elseif($exam->time_status->isLateScanning()) background:#fef3c7;color:#b45309;border:1px solid #fde68a;
+                            @elseif($exam->time_status->isUpcoming()) background:#f1f5f9;color:#475569;border:1px solid #e2e8f0;
+                            @elseif($exam->time_status->isEnded()) background:#f8fafc;color:#64748b;border:1px solid #cbd5e1;
+                            @elseif($exam->time_status->isInvalidSchedule()) background:#fef2f2;color:#b91c1c;border:1px solid #fecaca;
+                            @else background:#f1f5f9;color:#475569; @endif">
+                            {{ $exam->time_status->badge_label }}
+                        </span>
                     @endif
                     <span class="ex-badge {{ $isActive ? 'active' : '' }}">{{ ucfirst($exam->status ?? 'scheduled') }}</span>
                 </div>
@@ -574,7 +644,7 @@
                 });
                 const json = await resp.json();
                 if (json.success) {
-                    location.reload();
+                    window.location.href = json.redirect || '{{ route('examiner.dashboard', ['autostart' => 1]) }}';
                 } else {
                     btn.disabled = false;
                     btn.textContent = 'Start Session';

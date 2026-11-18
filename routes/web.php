@@ -59,9 +59,22 @@ Route::get('/examiner/student-records', [ExaminerWebController::class, 'studentR
 Route::get('/examiner/audit',      [ExaminerWebController::class, 'audit'])->name('examiner.audit');
 Route::get('/examiner/audit-trail', [ExaminerWebController::class, 'auditTrailPage'])->name('examiner.audit-trail');
 Route::get('/examiner/today-exams', [ExaminerWebController::class, 'todayExamsPage'])->name('examiner.today-exams');
+Route::get('/examiner/assessments', [ExaminerWebController::class, 'assessmentsPage'])->name('examiner.assessments');
+Route::get('/examiner/assessments/{id}', [ExaminerWebController::class, 'showAssessment'])
+    ->whereNumber('id')
+    ->name('examiner.assessments.show');
 Route::get('/examiner/assessments/{timetableId}/export', [ExaminerWebController::class, 'exportAssessmentReport'])
     ->whereNumber('timetableId')
     ->name('examiner.assessments.export');
+Route::post('/examiner/assessments/{id}/assisted-checkin/lookup', [ExaminerWebController::class, 'assistedCheckinLookup'])
+    ->whereNumber('id')
+    ->name('examiner.assessments.assisted-checkin.lookup');
+Route::post('/examiner/assessments/{id}/assisted-checkin', [ExaminerWebController::class, 'assistedCheckinProcess'])
+    ->whereNumber('id')
+    ->name('examiner.assessments.assisted-checkin.process');
+Route::get('/examiner/students/{matric}', [ExaminerWebController::class, 'showStudent'])
+    ->where('matric', '.*')
+    ->name('examiner.students.show');
 Route::get('/examiner/notifications', [ExaminerWebController::class, 'notificationsPage'])->name('examiner.notifications');
 Route::post('/examiner/notifications/{note}/acknowledge', [ExaminerWebController::class, 'acknowledgeNotification'])->name('examiner.notifications.acknowledge');
 Route::get('/examiner/scans/{log}', [ExaminerWebController::class, 'showScan'])->name('examiner.scans.show');
@@ -79,7 +92,15 @@ Route::patch('/admin/notes/{note}/resolve', [AdminWebController::class, 'noteRes
 Route::get('/admin/dashboard', [AdminWebController::class, 'index'])->name('admin.dashboard');
 Route::get('/admin/intelligence', [AdminWebController::class, 'intelligence'])->name('admin.intelligence');
 Route::get('/admin/student-registry', [AdminWebController::class, 'studentRegistry'])->name('admin.student-registry');
+Route::post('/admin/student-registry/manual', [AdminWebController::class, 'studentRegistryManualRegister'])->name('admin.student-registry.manual');
+Route::post('/admin/student-registry/{id}/toggle-status', [AdminWebController::class, 'studentRegistryToggleStatus'])->name('admin.student-registry.toggle-status');
+Route::delete('/admin/student-registry/{id}', [AdminWebController::class, 'studentRegistryDestroy'])->name('admin.student-registry.destroy');
+Route::get('/admin/student-registry/clear-review', [AdminWebController::class, 'studentRegistryClearReview'])->name('admin.student-registry.clear-review');
+Route::post('/admin/student-registry/clear-unlinked', [AdminWebController::class, 'studentRegistryClearUnlinked'])->name('admin.student-registry.clear-unlinked');
+Route::post('/admin/student-registry/full-review-action', [AdminWebController::class, 'studentRegistryFullReviewAction'])->name('admin.student-registry.full-review-action');
 Route::post('/admin/student-registry/import', [AdminWebController::class, 'studentRegistryImport'])->name('admin.student-registry.import');
+Route::post('/admin/student-registry/preview', [AdminWebController::class, 'studentRegistryPreview'])->name('admin.student-registry.preview');
+Route::post('/admin/student-registry/conflicts/resolve', [AdminWebController::class, 'studentRegistryResolveConflict'])->name('admin.student-registry.resolve-conflict');
 Route::get('/admin/student-registry/{import}/rejected-rows', [AdminWebController::class, 'studentRegistryRejectedRows'])->name('admin.student-registry.rejected-rows');
 Route::get('/admin/photo-approvals', [AdminWebController::class, 'photoApprovals'])->name('admin.photo-approvals');
 Route::post('/admin/photo-approvals/approve', [AdminWebController::class, 'photoApprove'])->name('admin.photo-approvals.approve');
@@ -106,7 +127,11 @@ Route::delete('/admin/timetable/{entry}', [AdminWebController::class, 'timetable
 Route::post('/admin/timetable/import', [AdminWebController::class, 'timetableImport'])->name('admin.timetable.import');
 Route::post('/admin/timetable/{entry}/roster', [AdminWebController::class, 'timetableRosterAdd'])->name('admin.timetable.roster.add');
 Route::delete('/admin/timetable/{entry}/roster/{matric}', [AdminWebController::class, 'timetableRosterRemove'])->where('matric', '.*')->name('admin.timetable.roster.remove');
+Route::post('/admin/timetable/{entry}/roster/preview', [AdminWebController::class, 'timetableRosterPreview'])->name('admin.timetable.roster.preview');
 Route::post('/admin/timetable/{entry}/roster/import', [AdminWebController::class, 'timetableRosterImport'])->name('admin.timetable.roster.import');
+Route::post('/admin/timetable/{entry}/roster/confirm', [AdminWebController::class, 'timetableRosterConfirm'])->name('admin.timetable.roster.confirm');
+Route::post('/admin/timetable/{entry}/roster/unconfirm', [AdminWebController::class, 'timetableRosterUnconfirm'])->name('admin.timetable.roster.unconfirm');
+Route::post('/admin/timetable/{entry}/roster/populate-cohort', [AdminWebController::class, 'timetableRosterPopulateCohort'])->name('admin.timetable.roster.populate-cohort');
 Route::get('/admin/scan-logs', [AdminWebController::class, 'scanLogs'])->name('admin.scan-logs');
 Route::get('/admin/scan-logs/{log}', [AdminWebController::class, 'scanLogShow'])->name('admin.scan-logs.show');
 Route::get('/admin/qr-tokens', [AdminWebController::class, 'qrTokens'])->name('admin.qr-tokens');

@@ -59,9 +59,34 @@
     }
 
     @media (max-width:640px) {
-        .py-row { grid-template-columns: 8px auto minmax(0, 1fr); }
-        .py-amount, .py-row > a { grid-column: 1 / -1; padding-top:8px; border-top:1px solid var(--line); }
-        .py-amount { font-size:14px; }
+        .py-row {
+            grid-template-columns: 8px 40px minmax(0, 1fr);
+            padding: 12px 14px;
+            gap: 10px;
+        }
+        .py-amount {
+            grid-column: 1 / -1;
+            padding-top: 10px;
+            border-top: 1px solid var(--line);
+            font-size: 15px;
+        }
+        .py-row > a.admin-action {
+            grid-column: 1 / -1;
+            width: 100%;
+            text-align: center;
+            justify-content: center;
+            min-height: 36px;
+            font-size: 12px;
+            font-weight: 700;
+        }
+        .py-actions {
+            width: 100%;
+        }
+        .py-actions > * {
+            flex: 1 1 0;
+            text-align: center;
+            justify-content: center;
+        }
     }
 
     .py-empty { padding:32px 18px; text-align:center; color:var(--ink-3); font-size:13px; }

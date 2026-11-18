@@ -8,9 +8,9 @@
     .gp-flow        { display: grid; gap: 20px; }
 
     /* ── status strip — built on the shared student surface tokens ── */
-    .gp-strip       { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); border: 1px solid var(--line); border-radius: var(--stu-r-md); overflow: hidden; background: var(--bg-2); box-shadow: var(--stu-shadow-1); }
+    .gp-strip       { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); border: 1px solid var(--line); border-radius: var(--stu-r-md); overflow: hidden; background: var(--bg-2); box-shadow: var(--stu-shadow-1); }
     .gp-strip-cell  { padding: 13px 14px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); min-width: 0; }
-    .gp-strip-cell:nth-child(2n) { border-right: 0; }
+    .gp-strip-cell:last-child { border-right: 0; }
     .gp-strip-label { display: block; color: var(--ink-4); font-size: 9px; font-weight: 900; letter-spacing: .11em; text-transform: uppercase; }
     .gp-strip-value { display: block; margin-top: 5px; font-size: 13px; font-weight: 700; color: var(--ink); overflow-wrap: break-word; word-break: normal; }
 
@@ -85,7 +85,7 @@
     .gp-choice-title  { display: block; margin-top: 2px; font-size: 12px; color: var(--ink-2); line-height: 1.4; overflow-wrap: break-word; }
     .gp-choice-detail { display: block; margin-top: 5px; font-size: 11px; color: var(--ink-3); line-height: 1.45; }
     .gp-choice-badge  {
-        display: inline-flex; width: fit-content; margin-top: 6px;
+        display: inline-flex; width: fit-content; max-width: 100%; margin-top: 6px; overflow-wrap: break-word; word-break: break-word;
         padding: 3px 9px; border-radius: 999px;
         background: rgba(138,117,85,.1); color: var(--amber);
         font-size: 10px; font-weight: 800;
@@ -110,7 +110,7 @@
     @media (min-width: 720px) {
         .gp-strip { grid-template-columns: repeat(5, minmax(0,1fr)); }
         .gp-strip-cell { border-bottom: 0; }
-        .gp-strip-cell:nth-child(2n) { border-right: 1px solid var(--line); }
+        .gp-strip-cell { border-right: 1px solid var(--line); }
         .gp-strip-cell:last-child { border-right: 0; }
         .gp-course-actions { flex-direction: row; align-items: center; }
     }
@@ -229,11 +229,19 @@
                     <span class="gp-field-label">Assigned Course</span>
                     <div class="gp-choice-list">
                         @foreach($coursePasses->where('status', '!=', 'cancelled')->where('qr_status', 'Not Generated') as $exam)
+                            @php
+                                $cType = \App\Services\AssessmentTimeService::normalizeType($exam->assessment_type ?? null);
+                                $cTypeLabel = match($cType) { 'test' => 'Test', 'makeup' => 'Make-up', default => 'Exam' };
+                                $cTypeChip  = match($cType) { 'test' => 'amber', 'makeup' => 'red', default => 'navy' };
+                            @endphp
                             <label class="gp-choice">
                                 <input type="radio" name="timetable_id" value="{{ $exam->id }}"
                                     @checked((string) old('timetable_id', $nextExam?->id) === (string) $exam->id) required>
                                 <div>
-                                    <span class="gp-choice-code">{{ $exam->course_code }}</span>
+                                    <div style="display:flex;align-items:center;gap:6px;margin-bottom:2px">
+                                        <span class="gp-choice-code">{{ $exam->course_code }}</span>
+                                        <span class="chip {{ $cTypeChip }} stu-chip-sm" style="font-size:9px;padding:1px 6px">{{ $cTypeLabel }}</span>
+                                    </div>
                                     <span class="gp-choice-title">{{ $exam->course_title ?: 'Course title not assigned yet' }}</span>
                                     <span class="gp-choice-detail">{{ \Illuminate\Support\Carbon::parse($exam->exam_date)->format('D, d M Y') }} · {{ substr($exam->start_time, 0, 5) }}{{ $exam->end_time ? ' – ' . substr($exam->end_time, 0, 5) : '' }} · {{ $exam->venue ?: 'Hall not assigned yet' }}</span>
                                     <span class="gp-choice-badge">{{ $exam->payment_label ?? 'Payment required' }} · QR not generated</span>
@@ -296,7 +304,7 @@
                             'Unavailable'        => 'red',
                             default              => '',
                         };
-                        $type = $exam->assessment_type ?? 'exam';
+                        $type = \App\Services\AssessmentTimeService::normalizeType($exam->assessment_type ?? null);
                         $typeLabel = match($type) { 'test' => 'Test', 'makeup' => 'Make-up', default => 'Exam' };
                         $typeChip  = match($type) { 'test' => 'amber', 'makeup' => 'red', default => 'navy' };
                     @endphp
