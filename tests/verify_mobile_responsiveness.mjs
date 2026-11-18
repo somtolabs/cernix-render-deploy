@@ -67,9 +67,17 @@ async function run() {
     const examinerPage = await examinerContext.newPage();
     await examinerPage.goto(`${BASE_URL}/examiner/login`);
     await examinerPage.fill('input[name="username"]', 'examiner1');
-    await examinerPage.fill('input[name="password"]', 'examiner123');
-    await examinerPage.click('button[type="submit"]');
-    await examinerPage.waitForURL(url => url.pathname.includes('/examiner/dashboard'));
+    try {
+        await examinerPage.fill('input[name="password"]', 'password123');
+        await examinerPage.click('button[type="submit"]');
+        await examinerPage.waitForURL(url => url.pathname.includes('/examiner/dashboard'), { timeout: 3000 });
+    } catch (_) {
+        await examinerPage.goto(`${BASE_URL}/examiner/login`);
+        await examinerPage.fill('input[name="username"]', 'examiner1');
+        await examinerPage.fill('input[name="password"]', 'examiner123');
+        await examinerPage.click('button[type="submit"]');
+        await examinerPage.waitForURL(url => url.pathname.includes('/examiner/dashboard'), { timeout: 5000 });
+    }
 
     let csc401Id = 1;
     try {

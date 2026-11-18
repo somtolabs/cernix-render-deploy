@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Web;
 
 use App\Http\Controllers\Controller;
 use App\Models\OfficialStudent;
+use App\Services\AttendanceGroupingService;
 use App\Services\AuditService;
 use App\Services\MatriculationNumberService;
 use App\Services\MediaService;
@@ -2393,10 +2394,35 @@ class AdminWebController extends Controller
             return $response;
         }
 
-        $logs = $this->verificationLogQuery($request)->paginate(30)->withQueryString();
+        $viewMode = $request->query('view', 'grouped'); // default to grouped institutional hierarchy
         $examiners = DB::table('examiners')->orderBy('full_name')->get();
+        $departments = Schema::hasTable('departments')
+            ? DB::table('departments')->orderBy('dept_name')->pluck('dept_name')->all()
+            : [];
 
-        return view('admin.scan-logs.index', compact('logs', 'examiners'));
+        $filters = [
+            'q'           => $request->query('q'),
+            'decision'    => $request->query('decision'),
+            'examiner_id' => $request->query('examiner_id'),
+            'date_from'   => $request->query('date_from'),
+            'date_to'     => $request->query('date_to'),
+            'department'  => $request->query('department'),
+            'level'       => $request->query('level'),
+        ];
+
+        $groupingService = app(AttendanceGroupingService::class);
+        $groupedData = $groupingService->getGroupedVerificationLogs($filters);
+
+        $logs = $this->verificationLogQuery($request)->paginate(30)->withQueryString();
+
+        return view('admin.scan-logs.index', compact(
+            'logs',
+            'examiners',
+            'departments',
+            'viewMode',
+            'filters',
+            'groupedData'
+        ));
     }
 
     public function scanLogShow(Request $request, int $log)
@@ -3674,13 +3700,15 @@ class AdminWebController extends Controller
         $query = DB::table('verification_logs')
             ->leftJoin('qr_tokens', 'verification_logs.token_id', '=', 'qr_tokens.token_id')
             ->leftJoin('students', 'qr_tokens.student_id', '=', 'students.matric_no')
+            ->leftJoin('official_students', 'qr_tokens.student_id', '=', 'official_students.matric_number')
             ->leftJoin('departments', 'students.department_id', '=', 'departments.dept_id')
             ->leftJoin('examiners', 'verification_logs.examiner_id', '=', 'examiners.examiner_id')
             ->select(
                 'verification_logs.*',
                 'qr_tokens.student_id as matric_no',
-                'students.full_name as student_name',
-                'departments.dept_name',
+                DB::raw('COALESCE(official_students.full_name, students.full_name) as student_name'),
+                DB::raw('COALESCE(official_students.department, departments.dept_name) as dept_name'),
+                'official_students.level as student_level',
                 'examiners.full_name as examiner_name',
                 'examiners.username as examiner_username'
             )
@@ -3708,7 +3736,8 @@ class AdminWebController extends Controller
         if ($request->filled('q')) {
             $q = '%' . $request->input('q') . '%';
             $query->where(fn ($inner) => $inner
-                ->where('students.full_name', 'like', $q)
+                ->where('official_students.full_name', 'like', $q)
+                ->orWhere('students.full_name', 'like', $q)
                 ->orWhere('qr_tokens.student_id', 'like', $q)
                 ->orWhere('verification_logs.token_id', 'like', $q)
                 ->orWhere('examiners.full_name', 'like', $q));
@@ -4242,7 +4271,6 @@ class AdminWebController extends Controller
                 ?? 0));
 
         $timetables = collect();
-        $attendanceRows = collect();
         $selectedTimetableId = (int) $request->query('timetable_id', 0);
 
         if ($selectedSessionId && Schema::hasTable('timetables')) {
@@ -4255,58 +4283,39 @@ class AdminWebController extends Controller
                 ->get();
         }
 
-        if ($selectedTimetableId && Schema::hasTable('attendance_records')) {
-            $attendanceRows = DB::table('attendance_records')
-                ->join('students', 'attendance_records.matric_no', '=', 'students.matric_no')
-                ->leftJoin('examiners as entry_ex', 'attendance_records.entry_examiner_id', '=', 'entry_ex.examiner_id')
-                ->leftJoin('examiners as exit_ex', 'attendance_records.exit_examiner_id', '=', 'exit_ex.examiner_id')
-                ->where('attendance_records.timetable_id', $selectedTimetableId)
-                ->where('attendance_records.session_id', $selectedSessionId)
-                ->select(
-                    'attendance_records.*',
-                    'students.full_name',
-                    'entry_ex.full_name as entry_examiner_name',
-                    'exit_ex.full_name as exit_examiner_name',
-                )
-                ->orderBy('attendance_records.checked_in_at')
-                ->get();
-        } elseif ($selectedSessionId && Schema::hasTable('attendance_records')) {
-            $attendanceRows = DB::table('attendance_records')
-                ->join('students', 'attendance_records.matric_no', '=', 'students.matric_no')
-                ->leftJoin('timetables', 'attendance_records.timetable_id', '=', 'timetables.id')
-                ->leftJoin('departments', 'timetables.department_id', '=', 'departments.dept_id')
-                ->where('attendance_records.session_id', $selectedSessionId)
-                ->select(
-                    'attendance_records.*',
-                    'students.full_name',
-                    'timetables.course_code',
-                    'timetables.course_title',
-                    'timetables.exam_date',
-                    'timetables.start_time',
-                    'timetables.venue',
-                    'departments.dept_name',
-                )
-                ->orderBy('timetables.exam_date')
-                ->orderBy('attendance_records.checked_in_at')
-                ->get();
-        }
+        $departments = Schema::hasTable('departments')
+            ? DB::table('departments')->orderBy('dept_name')->pluck('dept_name')->all()
+            : [];
 
-        $summary = Schema::hasTable('attendance_records') && $selectedSessionId
-            ? [
-                'checked_in' => DB::table('attendance_records')->where('session_id', $selectedSessionId)->where('status', 'checked_in')->count(),
-                'submitted'  => DB::table('attendance_records')->where('session_id', $selectedSessionId)->where('status', 'submitted')->count(),
-                'flagged'    => DB::table('attendance_records')->where('session_id', $selectedSessionId)->where('status', 'flagged')->count(),
-                'total'      => DB::table('attendance_records')->where('session_id', $selectedSessionId)->count(),
-            ]
-            : ['checked_in' => 0, 'submitted' => 0, 'flagged' => 0, 'total' => 0];
+        $filters = [
+            'department' => $request->query('department'),
+            'level'      => $request->query('level'),
+            'status'     => $request->query('status'),
+            'type'       => $request->query('type'),
+            'q'          => $request->query('q'),
+        ];
+
+        $groupingService = app(AttendanceGroupingService::class);
+        $result = $groupingService->getGroupedAttendance($selectedSessionId, $selectedTimetableId ?: null, $filters);
+
+        $hierarchy             = $result['hierarchy'];
+        $summary               = $result['overall_summary'];
+        $totalStudentsCount    = $result['total_students_count'];
+        $totalDepartmentsCount = $result['total_departments_count'];
+        $selectedTimetable     = $result['timetable'];
 
         return view('admin.attendance.index', compact(
             'sessions',
             'selectedSessionId',
             'timetables',
             'selectedTimetableId',
-            'attendanceRows',
+            'selectedTimetable',
+            'departments',
+            'hierarchy',
             'summary',
+            'totalStudentsCount',
+            'totalDepartmentsCount',
+            'filters'
         ));
     }
 
